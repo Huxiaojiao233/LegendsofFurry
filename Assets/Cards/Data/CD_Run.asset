@@ -14,8 +14,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardId: run_01
   cardName: "\u75BE\u8DD1"
-  description: "\u672C\u56DE\u5408\u63D0\u5347\u79FB\u52A8\u80FD\u529B"
+  description: "\u7ACB\u5373\u79FB\u52A83\u683C"
   artwork: {fileID: 21300000, guid: 7ccea3139d4b1f048b92afd1323463e9, type: 3}
+  rarity: 0
+  sourcePool: "\u57FA\u7840\u724C\u5E93"
+  family: 0
+  costText: 1
   actionPointCost: 1
+  manaCost: 0
+  spendsAllActionPoints: 0
+  spendsAllMana: 0
+  isAttack: 0
+  exhaust: 0
+  temporary: 0
+  curse: 0
+  unplayable: 0
+  targetMode: 0
+  range: 0
   effectType: 3
-  effectValue: 1
+  effectValue: 3

@@ -301,13 +301,10 @@ public sealed class CombatVfx : MonoBehaviour
     private static void ApplyUnlit(GameObject target, Color color)
     {
         Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
-        if (shader == null)
-        {
-            shader = Shader.Find("Unlit/Color");
-        }
-
         Renderer renderer = target.GetComponent<Renderer>();
-        Material material = new Material(shader);
+        Material material = shader != null
+            ? new Material(shader)
+            : new Material(renderer.sharedMaterial);
         if (material.HasProperty("_BaseColor"))
         {
             material.SetColor("_BaseColor", color);

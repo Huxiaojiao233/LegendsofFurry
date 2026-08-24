@@ -13,13 +13,11 @@ MonoBehaviour:
   m_Name: PlayerStartingDeck
   m_EditorClassIdentifier: Assembly-CSharp::DeckData
   cards:
-  - card: {fileID: 11400000, guid: a8011b6b5b4dcbb4fad627bba6a650fa, type: 2}
-    amount: 6
-  - card: {fileID: 11400000, guid: 04beecb2abef667419c5241ff110e060, type: 2}
-    amount: 6
   - card: {fileID: 11400000, guid: 5feff80e96035ff4f945a49cea7b920e, type: 2}
-    amount: 5
+    amount: 3
+  - card: {fileID: 11400000, guid: 04beecb2abef667419c5241ff110e060, type: 2}
+    amount: 3
   - card: {fileID: 11400000, guid: 1618e809aa6ab1649b12cb9d6aaba929, type: 2}
-    amount: 6
-  - card: {fileID: 11400000, guid: 695e912bab117324db3611b8f73fb88b, type: 2}
-    amount: 2
+    amount: 3
+  - card: {fileID: 11400000, guid: a8011b6b5b4dcbb4fad627bba6a650fa, type: 2}
+    amount: 1

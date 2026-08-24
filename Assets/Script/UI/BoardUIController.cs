@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// 战斗界面按钮入口。结束回合按钮仍绑定 MovePlayer，实际交给 BattleFlow。
@@ -38,5 +39,5 @@ public class BoardUIController : MonoBehaviour
         }
 
         battleFlow?.RequestEndPlayerTurn();
-    }
+    }   
 }

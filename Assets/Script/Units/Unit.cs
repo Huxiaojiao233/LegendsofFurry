@@ -33,6 +33,8 @@ public class Unit : MonoBehaviour
     [SerializeField, Min(0)] private int attackDamage = 3;
     [SerializeField, Min(1)] private int moveStepsPerTurn = 2;
 
+    [SerializeField] private string displayName;
+
     [Header("战斗 UI")]
     [SerializeField] private TMP_Text healthText;
     [SerializeField] private TMP_Text armorText;
@@ -43,6 +45,7 @@ public class Unit : MonoBehaviour
     private bool isSelected;
     private bool isPlaced;
     private float hitPunch;
+    private CombatantState combatState;
 
     public Vector2Int Position { get; private set; }
     public BoardGenerator Board => board;
@@ -55,6 +58,8 @@ public class Unit : MonoBehaviour
     public int MoveStepsPerTurn => moveStepsPerTurn;
     public bool IsAlive => currentHealth > 0;
     public bool IsPlayer => faction == UnitFaction.Player;
+    public string DisplayName => string.IsNullOrEmpty(displayName) ? gameObject.name : displayName;
+    public CombatantState State => combatState != null ? combatState : combatState = GetComponent<CombatantState>() ?? gameObject.AddComponent<CombatantState>();
 
     public event Action<Unit> Died;
     public event Action<Unit> StatsChanged;
@@ -64,6 +69,7 @@ public class Unit : MonoBehaviour
         normalScale = transform.localScale;
         currentHealth = maxHealth;
         armor = Mathf.Max(0, armor);
+        combatState = GetComponent<CombatantState>() ?? gameObject.AddComponent<CombatantState>();
         UpdateCombatUI();
         WorldHealthBar.Ensure(this);
     }
@@ -96,6 +102,23 @@ public class Unit : MonoBehaviour
     public void SetBoard(BoardGenerator value)
     {
         board = value;
+    }
+
+    public void ConfigureCombatant(string shownName, int healthMaximum, int damage, int movement)
+    {
+        displayName = shownName;
+        maxHealth = Mathf.Max(1, healthMaximum);
+        currentHealth = maxHealth;
+        attackDamage = Mathf.Max(0, damage);
+        moveStepsPerTurn = Mathf.Max(1, movement);
+        armor = 0;
+        NotifyStatsChanged();
+    }
+
+    public void Revive(int health)
+    {
+        currentHealth = Mathf.Clamp(health, 1, maxHealth);
+        NotifyStatsChanged();
     }
 
     public void BindCombatUI(TMP_Text health, TMP_Text armorLabel)
@@ -178,19 +201,41 @@ public class Unit : MonoBehaviour
             return;
         }
 
-        armor += amount;
+        int reduced = Mathf.Max(0, amount - State.Get(CombatStatus.Broken));
+        armor += reduced;
         NotifyStatsChanged();
     }
 
     /// <summary>承受伤害。护甲会优先吸收伤害，返回实际损失的生命值。</summary>
     public int TakeDamage(int amount)
     {
+        return TakeTypedDamage(amount, DamageType.Normal);
+    }
+
+    public int TakeTypedDamage(int amount, DamageType damageType, Unit source = null)
+    {
         if (amount <= 0 || !IsAlive)
         {
             return 0;
         }
 
-        int absorbed = Mathf.Min(armor, amount);
+        if (damageType == DamageType.Normal)
+        {
+            if (State.Has(CombatStatus.NormalImmunity)) return 0;
+            if (State.Has(CombatStatus.DodgeNextNormal))
+            {
+                State.Reduce(CombatStatus.DodgeNextNormal);
+                return 0;
+            }
+            if (State.NormalDamageAvoidChance > 0f && UnityEngine.Random.value < State.NormalDamageAvoidChance)
+                return 0;
+        }
+
+        if (State.Has(CombatStatus.Vulnerable))
+            amount = Mathf.FloorToInt(amount * 1.5f);
+
+        bool bypassArmor = damageType == DamageType.Dark || damageType == DamageType.Poison || damageType == DamageType.True;
+        int absorbed = bypassArmor ? 0 : Mathf.Min(armor, amount);
         armor -= absorbed;
         int healthDamage = amount - absorbed;
         currentHealth = Mathf.Max(0, currentHealth - healthDamage);
@@ -202,6 +247,14 @@ public class Unit : MonoBehaviour
             transform.position,
             amount,
             healthDamage > 0 ? new Color(1f, 0.45f, 0.35f) : new Color(0.7f, 0.85f, 1f));
+
+        if (!IsAlive && State.ReviveAvailable)
+        {
+            State.ReviveAvailable = false;
+            currentHealth = Mathf.Min(5, maxHealth);
+            NotifyStatsChanged();
+            return healthDamage;
+        }
 
         if (!IsAlive)
         {

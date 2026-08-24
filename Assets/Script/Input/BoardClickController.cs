@@ -26,6 +26,7 @@ public class BoardClickController : MonoBehaviour
     [SerializeField, Min(0)] private int maxActionPoints = 3;
     [SerializeField] private int currentActionPoints;
     [SerializeField] private int nextMoveDiscount;
+    private int effectiveMaximumActionPoints;
 
     [Header("UI")]
     [SerializeField] private TMP_Text actionPointText;
@@ -50,13 +51,17 @@ public class BoardClickController : MonoBehaviour
     private readonly Dictionary<BoardCell, int> movableCells =
         new Dictionary<BoardCell, int>();
     private readonly List<BoardCell> attackCells = new List<BoardCell>();
+    private bool isFreeMoveMode;
+    private int freeMoveSteps;
+    private System.Action freeMoveCompleted;
 
     private TMP_Text moveCostTooltip;
     private RectTransform tooltipRect;
 
-    public int MaxActionPoints => maxActionPoints;
+    public int MaxActionPoints => effectiveMaximumActionPoints;
     public int CurrentActionPoints => currentActionPoints;
     public int NextMoveDiscount => nextMoveDiscount;
+    public bool IsResolvingFreeMove => isFreeMoveMode;
     public event Action<int, int> ActionPointsChanged;
 
     private void Awake()
@@ -67,6 +72,7 @@ public class BoardClickController : MonoBehaviour
         }
 
         currentActionPoints = maxActionPoints;
+        effectiveMaximumActionPoints = maxActionPoints;
         BindActionPointUI();
         ResolveHandCardSystem();
         CreateMoveCostTooltip();
@@ -78,6 +84,19 @@ public class BoardClickController : MonoBehaviour
         if (!BattleFlow.CanPlayerAct || Mouse.current == null || mainCamera == null)
         {
             HideMoveCostTooltip();
+            return;
+        }
+
+        if (isFreeMoveMode)
+        {
+            HideMoveCostTooltip();
+            if (Mouse.current.rightButton.wasPressedThisFrame)
+            {
+                CompleteFreeMove();
+                return;
+            }
+            if (Mouse.current.leftButton.wasPressedThisFrame)
+                HandleFreeMoveClick();
             return;
         }
 
@@ -109,7 +128,11 @@ public class BoardClickController : MonoBehaviour
     public void ResetActionPoints()
     {
         nextMoveDiscount = 0;
-        SetActionPoints(maxActionPoints);
+        Unit player = GameObject.Find("Player")?.GetComponent<Unit>();
+        effectiveMaximumActionPoints = player == null
+            ? maxActionPoints
+            : player.State.EffectiveActionPointMaximum(maxActionPoints);
+        SetActionPoints(effectiveMaximumActionPoints);
 
         if (selectedUnit != null)
         {
@@ -127,6 +150,37 @@ public class BoardClickController : MonoBehaviour
 
         SetActionPoints(currentActionPoints - amount);
         return true;
+    }
+
+    public void GainActionPoints(int amount)
+    {
+        if (amount > 0) SetActionPoints(currentActionPoints + amount);
+    }
+
+    public void IncreaseMaximumActionPoints(int amount)
+    {
+        if (amount <= 0) return;
+        maxActionPoints += amount;
+        effectiveMaximumActionPoints += amount;
+        SetActionPoints(currentActionPoints + amount);
+    }
+
+    public void BeginFreeMove(Unit unit, int steps, System.Action onComplete = null)
+    {
+        if (unit == null || steps <= 0)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
+        ClearSelection();
+        isFreeMoveMode = true;
+        freeMoveSteps = steps;
+        freeMoveCompleted = onComplete;
+        selectedUnit = unit;
+        selectedUnit.SetSelected(true);
+        ShowFreeMoveRange(unit, steps);
+        Debug.Log($"请选择{steps}格内的免费移动位置；右键可以跳过。", this);
     }
 
     public void GrantNextMoveDiscount(int amount)
@@ -181,11 +235,10 @@ public class BoardClickController : MonoBehaviour
                     continue;
                 }
 
-                bool hasEnemy = board.TryGetOccupant(x, z, out Unit occupant) &&
-                    occupant != null &&
-                    occupant.IsAlive &&
-                    occupant.Faction == UnitFaction.Enemy;
-                cell.SetMoveHighlight(true, hasEnemy ? attackTargetColor : attackRangeColor);
+                int manhattan = Mathf.Abs(x - origin.x) + Mathf.Abs(z - origin.y);
+                if (manhattan > radius) continue;
+                bool hasTarget = board.TryGetOccupant(x, z, out Unit occupant) && occupant != null;
+                cell.SetMoveHighlight(true, hasTarget ? attackTargetColor : attackRangeColor);
                 attackCells.Add(cell);
             }
         }
@@ -236,7 +289,10 @@ public class BoardClickController : MonoBehaviour
         }
 
         Unit clickedUnit = hit.collider.GetComponentInParent<Unit>();
-        if (handCardSystem.TryConfirmTarget(clickedUnit))
+        BoardCell clickedCell = hit.collider.GetComponentInParent<BoardCell>();
+        if (clickedCell == null && clickedUnit != null && clickedUnit.Board != null)
+            clickedUnit.Board.TryGetCell(clickedUnit.Position.x, clickedUnit.Position.y, out clickedCell);
+        if (handCardSystem.TryConfirmTarget(clickedUnit, clickedCell))
         {
             return;
         }
@@ -327,7 +383,8 @@ public class BoardClickController : MonoBehaviour
     private void ShowMoveRange(Unit unit)
     {
         ClearAttackRange();
-        int searchBudget = currentActionPoints + nextMoveDiscount;
+        int coldSurcharge = unit.State.Get(CombatStatus.Cold);
+        int searchBudget = currentActionPoints + nextMoveDiscount - coldSurcharge;
         if (searchBudget <= 0)
         {
             return;
@@ -364,7 +421,7 @@ public class BoardClickController : MonoBehaviour
                 int nextStepDistance = currentCost + 1;
                 costs[next] = nextStepDistance;
                 frontier.Enqueue(next);
-                int payableCost = Mathf.Max(0, nextStepDistance - nextMoveDiscount);
+                int payableCost = Mathf.Max(0, nextStepDistance + coldSurcharge - nextMoveDiscount);
                 movableCells[cell] = payableCost;
 
                 float fade = maxActionPoints <= 1
@@ -374,6 +431,56 @@ public class BoardClickController : MonoBehaviour
                 cell.SetMoveHighlight(true, color);
             }
         }
+    }
+
+    private void ShowFreeMoveRange(Unit unit, int steps)
+    {
+        ClearMoveRange();
+        BoardGenerator board = unit.Board;
+        Queue<Vector2Int> frontier = new Queue<Vector2Int>();
+        Dictionary<Vector2Int, int> costs = new Dictionary<Vector2Int, int>();
+        frontier.Enqueue(unit.Position);
+        costs[unit.Position] = 0;
+        while (frontier.Count > 0)
+        {
+            Vector2Int current = frontier.Dequeue();
+            int distance = costs[current];
+            if (distance >= steps) continue;
+            foreach (Vector2Int direction in FourDirections)
+            {
+                Vector2Int next = current + direction;
+                if (costs.ContainsKey(next) || !board.TryGetCell(next.x, next.y, out BoardCell cell) || board.IsOccupied(next.x, next.y, unit)) continue;
+                costs[next] = distance + 1;
+                frontier.Enqueue(next);
+                movableCells[cell] = 0;
+                cell.SetMoveHighlight(true, lowCostColor);
+            }
+        }
+    }
+
+    private void HandleFreeMoveClick()
+    {
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
+        if (!TryRaycastPointer(out RaycastHit hit)) return;
+        BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
+        if (cell == null || !movableCells.ContainsKey(cell) || selectedUnit == null) return;
+        if (!selectedUnit.MoveToAnimated(cell.Coordinate.x, cell.Coordinate.y)) return;
+        CompleteFreeMove();
+    }
+
+    private void CompleteFreeMove()
+    {
+        isFreeMoveMode = false;
+        freeMoveSteps = 0;
+        if (selectedUnit != null)
+        {
+            selectedUnit.SetSelected(false);
+            selectedUnit = null;
+        }
+        ClearMoveRange();
+        System.Action callback = freeMoveCompleted;
+        freeMoveCompleted = null;
+        callback?.Invoke();
     }
 
     private void ClearMoveRange()
@@ -506,22 +613,23 @@ public class BoardClickController : MonoBehaviour
 
     private void SetActionPoints(int value)
     {
-        currentActionPoints = Mathf.Clamp(value, 0, maxActionPoints);
+        currentActionPoints = Mathf.Clamp(value, 0, effectiveMaximumActionPoints);
         UpdateActionPointUI();
-        ActionPointsChanged?.Invoke(currentActionPoints, maxActionPoints);
+        ActionPointsChanged?.Invoke(currentActionPoints, effectiveMaximumActionPoints);
     }
 
     private void UpdateActionPointUI()
     {
         if (actionPointText != null)
         {
-            actionPointText.text = $"{currentActionPoints}/{maxActionPoints}";
+            actionPointText.text = $"{currentActionPoints}/{effectiveMaximumActionPoints}";
         }
     }
 
     private void OnValidate()
     {
         maxActionPoints = Mathf.Max(0, maxActionPoints);
+        effectiveMaximumActionPoints = Mathf.Max(0, effectiveMaximumActionPoints == 0 ? maxActionPoints : effectiveMaximumActionPoints);
         currentActionPoints = Mathf.Clamp(currentActionPoints, 0, maxActionPoints);
     }
 

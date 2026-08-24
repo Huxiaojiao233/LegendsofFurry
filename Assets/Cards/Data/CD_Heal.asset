@@ -16,6 +16,20 @@ MonoBehaviour:
   cardName: "\u7597\u6108"
   description: "\u6062\u590D2\u70B9\u751F\u547D\u503C\t"
   artwork: {fileID: 21300000, guid: 08ac089c8c21951458517cd801a21d50, type: 3}
+  rarity: 0
+  sourcePool: "\u57FA\u7840\u724C\u5E93"
+  family: 0
+  costText: 1
   actionPointCost: 1
+  manaCost: 0
+  spendsAllActionPoints: 0
+  spendsAllMana: 0
+  isAttack: 0
+  exhaust: 0
+  temporary: 0
+  curse: 0
+  unplayable: 0
+  targetMode: 0
+  range: 0
   effectType: 0
   effectValue: 2

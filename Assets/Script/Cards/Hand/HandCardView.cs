@@ -1,4 +1,5 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -20,21 +21,118 @@ public class HandCardView : MonoBehaviour,
     private bool isPlaying;
     private bool isAwaitingTarget;
     private CardData cardData;
+    private CardInstance cardInstance;
 
     public Sprite Sprite => cardImage.sprite;
     public CardData Data => cardData;
+    public CardInstance Instance => cardInstance;
     public bool IsAwaitingTarget => isAwaitingTarget;
 
     public void Initialize(HandCardSystem hand, CardData data)
     {
+        Initialize(hand, new CardInstance(data));
+    }
+
+    public void Initialize(HandCardSystem hand, CardInstance instance)
+    {
         owner = hand;
-        cardData = data;
+        cardInstance = instance;
+        cardData = instance.Data;
 
         rectTransform = (RectTransform)transform;
         cardImage = GetComponent<Image>();
-        cardImage.sprite = data.artwork;
-        cardImage.preserveAspect = true;
+        cardImage.sprite = cardData.artwork;
+        cardImage.preserveAspect = false;
+        cardImage.color = cardData.artwork != null ? Color.white : RarityColor(cardData.rarity);
+
+        if (cardData.artwork == null)
+        {
+            BuildPlaceholderFace();
+        }
+        else
+        {
+            Transform existing = transform.Find("RuntimeCardText");
+            if (existing != null) Destroy(existing.gameObject);
+        }
     }
+
+    private void BuildPlaceholderFace()
+    {
+        Transform existing = transform.Find("RuntimeCardText");
+        if (existing != null) Destroy(existing.gameObject);
+
+        GameObject root = new GameObject("RuntimeCardText", typeof(RectTransform));
+        root.transform.SetParent(transform, false);
+        RectTransform rootRect = (RectTransform)root.transform;
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.offsetMin = new Vector2(10f, 10f);
+        rootRect.offsetMax = new Vector2(-10f, -10f);
+
+        TMP_Text title = CreateText("Name", root.transform, 24f, FontStyles.Bold);
+        SetRect(title.rectTransform, new Vector2(0f, 0.72f), Vector2.one);
+        title.text = cardData.cardName;
+        title.alignment = TextAlignmentOptions.Center;
+
+        TMP_Text cost = CreateText("Cost", root.transform, 26f, FontStyles.Bold);
+        cost.rectTransform.anchorMin = cost.rectTransform.anchorMax = new Vector2(0f, 1f);
+        cost.rectTransform.pivot = new Vector2(0f, 1f);
+        cost.rectTransform.anchoredPosition = new Vector2(4f, -4f);
+        cost.rectTransform.sizeDelta = new Vector2(54f, 42f);
+        cost.text = cardData.costText;
+
+        TMP_Text rarity = CreateText("Rarity", root.transform, 16f, FontStyles.Bold);
+        rarity.rectTransform.anchorMin = rarity.rectTransform.anchorMax = new Vector2(1f, 1f);
+        rarity.rectTransform.pivot = new Vector2(1f, 1f);
+        rarity.rectTransform.anchoredPosition = new Vector2(-4f, -6f);
+        rarity.rectTransform.sizeDelta = new Vector2(56f, 32f);
+        rarity.text = RarityName(cardData.rarity);
+        rarity.alignment = TextAlignmentOptions.Right;
+
+        TMP_Text rules = CreateText("Rules", root.transform, 16f, FontStyles.Normal);
+        SetRect(rules.rectTransform, Vector2.zero, new Vector2(1f, 0.72f));
+        rules.text = cardData.description;
+        rules.alignment = TextAlignmentOptions.TopLeft;
+        rules.textWrappingMode = TextWrappingModes.Normal;
+        rules.overflowMode = TextOverflowModes.Ellipsis;
+    }
+
+    private static TMP_Text CreateText(string name, Transform parent, float size, FontStyles style)
+    {
+        GameObject obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        obj.transform.SetParent(parent, false);
+        TMP_Text text = obj.GetComponent<TMP_Text>();
+        text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/SourceHanSansSC-Regular SDF") ?? TMP_Settings.defaultFontAsset;
+        text.fontSize = size;
+        text.fontStyle = style;
+        text.color = Color.white;
+        text.raycastTarget = false;
+        return text;
+    }
+
+    private static void SetRect(RectTransform rect, Vector2 min, Vector2 max)
+    {
+        rect.anchorMin = min;
+        rect.anchorMax = max;
+        rect.offsetMin = new Vector2(6f, 6f);
+        rect.offsetMax = new Vector2(-6f, -6f);
+    }
+
+    private static Color RarityColor(CardRarity rarity) => rarity switch
+    {
+        CardRarity.Gray => new Color(0.28f, 0.3f, 0.34f, 1f),
+        CardRarity.Blue => new Color(0.12f, 0.31f, 0.55f, 1f),
+        CardRarity.Purple => new Color(0.38f, 0.17f, 0.52f, 1f),
+        CardRarity.Gold => new Color(0.65f, 0.48f, 0.08f, 1f),
+        CardRarity.Red => new Color(0.55f, 0.12f, 0.14f, 1f),
+        _ => Color.gray
+    };
+
+    private static string RarityName(CardRarity rarity) => rarity switch
+    {
+        CardRarity.Gray => "灰", CardRarity.Blue => "蓝", CardRarity.Purple => "紫",
+        CardRarity.Gold => "金", CardRarity.Red => "红", _ => rarity.ToString()
+    };
 
     public void SetLayoutPosition(Vector2 position, bool immediate = false)
     {
