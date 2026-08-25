@@ -63,6 +63,8 @@ public class Unit : MonoBehaviour
 
     public event Action<Unit> Died;
     public event Action<Unit> StatsChanged;
+    public event Action<DamageRequest> BeforeDamage;
+    public event Action<DamageResolution> AfterDamage;
 
     private void Awake()
     {
@@ -112,6 +114,14 @@ public class Unit : MonoBehaviour
         attackDamage = Mathf.Max(0, damage);
         moveStepsPerTurn = Mathf.Max(1, movement);
         armor = 0;
+        NotifyStatsChanged();
+    }
+
+    /// <summary>从职业内容配置更新生命上限，并把当前生命恢复到新上限。</summary>
+    public void ConfigureMaximumHealth(int healthMaximum)
+    {
+        maxHealth = Mathf.Max(1, healthMaximum);
+        currentHealth = maxHealth;
         NotifyStatsChanged();
     }
 
@@ -212,23 +222,60 @@ public class Unit : MonoBehaviour
         return TakeTypedDamage(amount, DamageType.Normal);
     }
 
-    public int TakeTypedDamage(int amount, DamageType damageType, Unit source = null)
+    /// <summary>
+    /// 按伤害类型结算免疫、护甲、易损、复活和死亡，并可在自动测试中关闭纯表现协程。
+    /// </summary>
+    /// <param name="amount">进入单位伤害管线的非负数值。</param>
+    /// <param name="damageType">决定免疫和是否穿透护甲的伤害类型。</param>
+    /// <param name="source">可选伤害来源单位。</param>
+    /// <param name="showPresentation">是否播放受击反馈和伤害数字；规则结果不受影响。</param>
+    /// <returns>实际损失的生命值。</returns>
+    public int TakeTypedDamage(int amount, DamageType damageType, Unit source = null, bool showPresentation = true)
     {
-        if (amount <= 0 || !IsAlive)
+        return ResolveDamage(new DamageRequest(source, this, amount, damageType, showPresentation)).HealthDamage;
+    }
+
+    /// <summary>依次执行伤害前事件、免疫/易损、护甲、生命、复活、死亡和伤害后事件。</summary>
+    /// <param name="request">允许监听器在实际应用前修改的伤害请求。</param>
+    /// <returns>本次结算的结构化结果。</returns>
+    public DamageResolution ResolveDamage(DamageRequest request)
+    {
+        DamageResolution resolution = new DamageResolution { Request = request };
+        if (request == null || request.Target != this || request.Amount <= 0 || !IsAlive)
         {
-            return 0;
+            return resolution;
         }
+        BeforeDamage?.Invoke(request);
+        if (request.Cancelled || request.Amount <= 0)
+        {
+            AfterDamage?.Invoke(resolution);
+            return resolution;
+        }
+
+        int amount = request.Amount;
+        DamageType damageType = request.DamageType;
 
         if (damageType == DamageType.Normal)
         {
-            if (State.Has(CombatStatus.NormalImmunity)) return 0;
+            if (State.Has(CombatStatus.NormalImmunity))
+            {
+                resolution.WasDodgedOrImmune = true;
+                AfterDamage?.Invoke(resolution);
+                return resolution;
+            }
             if (State.Has(CombatStatus.DodgeNextNormal))
             {
                 State.Reduce(CombatStatus.DodgeNextNormal);
-                return 0;
+                resolution.WasDodgedOrImmune = true;
+                AfterDamage?.Invoke(resolution);
+                return resolution;
             }
             if (State.NormalDamageAvoidChance > 0f && UnityEngine.Random.value < State.NormalDamageAvoidChance)
-                return 0;
+            {
+                resolution.WasDodgedOrImmune = true;
+                AfterDamage?.Invoke(resolution);
+                return resolution;
+            }
         }
 
         if (State.Has(CombatStatus.Vulnerable))
@@ -236,32 +283,43 @@ public class Unit : MonoBehaviour
 
         bool bypassArmor = damageType == DamageType.Dark || damageType == DamageType.Poison || damageType == DamageType.True;
         int absorbed = bypassArmor ? 0 : Mathf.Min(armor, amount);
+        resolution.FinalDamage = amount;
+        resolution.AbsorbedByArmor = absorbed;
         armor -= absorbed;
         int healthDamage = amount - absorbed;
+        int actualHealthDamage = Mathf.Min(currentHealth, healthDamage);
+        resolution.HealthDamage = actualHealthDamage;
         currentHealth = Mathf.Max(0, currentHealth - healthDamage);
         NotifyStatsChanged();
-        PlayHitReaction(healthDamage > 0
-            ? new Color(1f, 0.35f, 0.28f)
-            : new Color(0.75f, 0.85f, 1f));
-        CombatVfx.PlayDamageNumber(
-            transform.position,
-            amount,
-            healthDamage > 0 ? new Color(1f, 0.45f, 0.35f) : new Color(0.7f, 0.85f, 1f));
+        if (request.ShowPresentation)
+        {
+            PlayHitReaction(healthDamage > 0
+                ? new Color(1f, 0.35f, 0.28f)
+                : new Color(0.75f, 0.85f, 1f));
+            CombatVfx.PlayDamageNumber(
+                transform.position,
+                amount,
+                healthDamage > 0 ? new Color(1f, 0.45f, 0.35f) : new Color(0.7f, 0.85f, 1f));
+        }
 
         if (!IsAlive && State.ReviveAvailable)
         {
             State.ReviveAvailable = false;
             currentHealth = Mathf.Min(5, maxHealth);
             NotifyStatsChanged();
-            return healthDamage;
+            resolution.Revived = true;
+            AfterDamage?.Invoke(resolution);
+            return resolution;
         }
 
         if (!IsAlive)
         {
+            resolution.Killed = true;
             Died?.Invoke(this);
         }
 
-        return healthDamage;
+        AfterDamage?.Invoke(resolution);
+        return resolution;
     }
 
     public void PlayHitReaction(Color flashColor)

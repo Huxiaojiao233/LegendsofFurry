@@ -2,17 +2,18 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class HandCardSystem : MonoBehaviour
+public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTargetQueryService
 {
-    private const int HandLimit = 10;
+    private const int DefaultHandLimit = 10;
 
     [Header("卡牌资源")]
     [SerializeField] private HandCardView cardViewPrefab;
-    [SerializeField] private DeckData startingDeck;
     [SerializeField] private CardEffectResolver cardEffectResolver;
     [SerializeField, Min(0)] private int startingHandSize = 5;
     [SerializeField] private float cardWidth = 200f;
@@ -43,12 +44,18 @@ public class HandCardSystem : MonoBehaviour
     private int pendingMandatoryDraws;
     private bool priestSacrificeMode;
     private bool forcedPresentationScheduled;
+    private Action forcedQueueCompleted;
+    private Action<Unit> pendingUnitSelection;
+    private Func<Unit, bool> pendingUnitValidator;
+    private int EffectiveHandLimit => ContentRuntime.IsLoaded
+        ? Mathf.Max(1, ContentRuntime.Registry.GameSettings.HandLimit)
+        : DefaultHandLimit;
 
     public int DrawPileCount => drawPile.Count;
     public int DiscardPileCount => discardPile.Count;
     public int ExhaustPileCount => exhaustPile.Count;
     public int HandCount => hand.Count;
-    public bool IsTargeting => targetingCard != null;
+    public bool IsTargeting => targetingCard != null || pendingUnitSelection != null;
     public bool HasBlockingChoice => modal != null || forcedCard != null;
     public event Action<CardData> CardPlayed;
 
@@ -65,7 +72,10 @@ public class HandCardSystem : MonoBehaviour
         yield return null;
         BuildStartingDeck();
         Shuffle(drawPile);
-        DrawCards(startingHandSize, true);
+        int initialDraw = ContentRuntime.IsLoaded
+            ? ContentRuntime.Registry.GameSettings.StartingHandSize
+            : startingHandSize;
+        DrawCards(initialDraw, true);
         UpdateDeckDisplay();
     }
 
@@ -74,7 +84,7 @@ public class HandCardSystem : MonoBehaviour
         int remaining = Mathf.Max(0, count);
         while (remaining > 0)
         {
-            if (hand.Count >= HandLimit)
+            if (hand.Count >= EffectiveHandLimit)
             {
                 if (mandatory)
                 {
@@ -89,9 +99,190 @@ public class HandCardSystem : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 为行为图目标选择器返回当前场景单位快照；注册表负责稳定排序和范围筛选。
+    /// </summary>
+    /// <returns>当前已加载的全部 Unit 组件快照。</returns>
+    public IReadOnlyList<Unit> GetUnits()
+    {
+        return FindObjectsByType<Unit>().Where(unit => unit != null).ToArray();
+    }
+
+    /// <summary>
+    /// 为行为图目标选择器返回指定牌区的卡牌实例快照，不暴露内部可变列表。
+    /// </summary>
+    /// <param name="zoneKey">hand、draw、discard 或 exhaust。</param>
+    /// <returns>指定牌区的独立只读快照；未知 key 返回空数组。</returns>
+    public IReadOnlyList<CardInstance> GetCards(string zoneKey)
+    {
+        return zoneKey switch
+        {
+            "hand" => hand.Where(view => view != null && view.Instance != null)
+                .Select(view => view.Instance).ToArray(),
+            "draw" => drawPile.ToArray(),
+            "discard" => discardPile.ToArray(),
+            "exhaust" => exhaustPile.ToArray(),
+            _ => Array.Empty<CardInstance>()
+        };
+    }
+
+    /// <summary>
+    /// 按发布注册表查询卡牌并创建独立实例，确定性选择按卡牌 ID 排序后的第一项。
+    /// </summary>
+    /// <param name="query">受控卡牌查询。</param>
+    /// <param name="count">生成数量。</param>
+    /// <param name="destinationZone">目标牌区。</param>
+    /// <returns>查询、数量和目标牌区有效且全部加入时返回 true。</returns>
+    public bool GenerateCards(ContentCardQuery query, int count, string destinationZone)
+    {
+        if (query == null || count < 0 || !ContentRuntime.IsLoaded) return false;
+        CardDefinition definition = ContentRuntime.Registry.Cards
+            .Where(card => MatchesQuery(card, query))
+            .OrderBy(card => card.CardId, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (definition == null) return false;
+        for (int index = 0; index < count; index++)
+        {
+            if (!AddInstanceToZone(new CardInstance(definition), destinationZone)) return false;
+        }
+        UpdateDeckDisplay();
+        return true;
+    }
+
+    /// <summary>
+    /// 在两个牌区之间移动查询匹配的卡牌，手牌视图会通过现有动画入口进入目标区。
+    /// </summary>
+    /// <param name="query">受控卡牌查询。</param>
+    /// <param name="count">最多移动数量；零表示全部。</param>
+    /// <param name="sourceZone">来源牌区。</param>
+    /// <param name="destinationZone">目标牌区。</param>
+    /// <returns>实际移动数量。</returns>
+    public int MoveCards(ContentCardQuery query, int count, string sourceZone, string destinationZone)
+    {
+        if (query == null || count < 0 || sourceZone == destinationZone) return 0;
+        int limit = count == 0 ? int.MaxValue : count;
+        int moved = 0;
+        if (sourceZone == "hand")
+        {
+            List<HandCardView> views = hand.Where(view => view != null && MatchesQuery(view.Instance, query))
+                .Take(limit).ToList();
+            List<CardInstance> destination = ResolveMutableZone(destinationZone);
+            if (destination == null) return 0;
+            foreach (HandCardView view in views)
+            {
+                MoveViewToZone(view, destination, false);
+                moved++;
+            }
+        }
+        else
+        {
+            List<CardInstance> source = ResolveMutableZone(sourceZone);
+            if (source == null) return 0;
+            foreach (CardInstance instance in source.Where(card => MatchesQuery(card, query)).Take(limit).ToList())
+            {
+                if (!AddInstanceToZone(instance, destinationZone)) break;
+                source.Remove(instance);
+                moved++;
+            }
+        }
+        UpdateDeckDisplay();
+        return moved;
+    }
+
+    /// <summary>
+    /// 从单一或全部牌区移除查询匹配的卡牌实例。
+    /// </summary>
+    /// <param name="query">受控卡牌查询。</param>
+    /// <param name="zone">目标牌区或 all。</param>
+    /// <returns>实际移除数量。</returns>
+    public int RemoveCards(ContentCardQuery query, string zone)
+    {
+        if (query == null) return 0;
+        int removed = 0;
+        IEnumerable<string> zones = zone == "all"
+            ? new[] { "hand", "draw", "discard", "exhaust" }
+            : new[] { zone };
+        foreach (string currentZone in zones)
+        {
+            if (currentZone == "hand")
+            {
+                foreach (HandCardView view in hand.Where(item => item != null && MatchesQuery(item.Instance, query)).ToList())
+                {
+                    hand.Remove(view);
+                    Destroy(view.gameObject);
+                    removed++;
+                }
+                continue;
+            }
+            List<CardInstance> cards = ResolveMutableZone(currentZone);
+            if (cards == null) continue;
+            removed += cards.RemoveAll(card => MatchesQuery(card, query));
+        }
+        LayoutHand();
+        UpdateDeckDisplay();
+        return removed;
+    }
+
+    /// <summary>使用现有模态界面查看牌顶并选择弃置。</summary>
+    public void RevealTopCardsAndChooseDiscard(int count, Action onComplete)
+    {
+        ShowTopCardsForDiscard(count, onComplete);
+    }
+
+    /// <summary>使用现有强制出牌队列免费打出牌顶卡。</summary>
+    public void PlayTopCardsForFree(int count, Action onComplete)
+    {
+        QueueFreeTopCards(count, onComplete);
+    }
+
+    /// <summary>把实例加入指定牌区；加入手牌时遵守手牌上限并创建视图。</summary>
+    private bool AddInstanceToZone(CardInstance instance, string zone)
+    {
+        if (instance == null) return false;
+        if (zone == "hand")
+        {
+            if (hand.Count >= EffectiveHandLimit) return false;
+            AddCardView(instance);
+            return true;
+        }
+        List<CardInstance> destination = ResolveMutableZone(zone);
+        if (destination == null) return false;
+        destination.Add(instance);
+        return true;
+    }
+
+    /// <summary>把稳定牌区 key 映射到内部可变列表；手牌由视图列表单独处理。</summary>
+    private List<CardInstance> ResolveMutableZone(string zone)
+    {
+        return zone switch
+        {
+            "draw" => drawPile,
+            "discard" => discardPile,
+            "exhaust" => exhaustPile,
+            _ => null
+        };
+    }
+
+    /// <summary>判断数据库卡牌定义是否满足查询的全部非空字段。</summary>
+    private static bool MatchesQuery(CardDefinition card, ContentCardQuery query)
+    {
+        return card != null &&
+               (string.IsNullOrWhiteSpace(query.cardId) || card.CardId == query.cardId) &&
+               (string.IsNullOrWhiteSpace(query.poolId) || card.Pools.Any(pool => pool.PoolId == query.poolId)) &&
+               (string.IsNullOrWhiteSpace(query.familyId) || card.FamilyId == query.familyId) &&
+               (string.IsNullOrWhiteSpace(query.rarityId) || card.RarityId == query.rarityId) &&
+               (string.IsNullOrWhiteSpace(query.tag) || card.Tags.Contains(query.tag));
+    }
+
+    /// <summary>判断运行时实例的数据库定义是否满足查询。</summary>
+    private static bool MatchesQuery(CardInstance instance, ContentCardQuery query)
+    {
+        return instance?.Definition != null && MatchesQuery(instance.Definition, query);
+    }
+
     public bool DrawCard()
     {
-        if (hand.Count >= HandLimit) return false;
+        if (hand.Count >= EffectiveHandLimit) return false;
         return DrawOne();
     }
 
@@ -125,8 +316,18 @@ public class HandCardSystem : MonoBehaviour
         else TryCommitCard(view, null, null, null);
     }
 
+    /// <summary>确认棋盘点击目标；成功后执行卡牌或独立选择回调并立即退出选择界面。</summary>
     public bool TryConfirmTarget(Unit target, BoardCell cell)
     {
+        if (pendingUnitSelection != null)
+        {
+            if (target == null || pendingUnitValidator != null && !pendingUnitValidator(target)) return false;
+            Action<Unit> completed = pendingUnitSelection;
+            ClearPendingUnitSelection();
+            completed(target);
+            return true;
+        }
+
         if (targetingCard == null) return false;
         CardData data = targetingCard.Data;
         Vector2Int? direction = null;
@@ -145,8 +346,10 @@ public class HandCardSystem : MonoBehaviour
         return true;
     }
 
+    /// <summary>取消卡牌或独立棋子选择，并清除卡牌待命状态及全部攻击范围高亮。</summary>
     public void CancelTargeting()
     {
+        ClearPendingUnitSelection();
         if (targetingCard == null)
         {
             boardClickController?.ClearAttackRange();
@@ -166,49 +369,27 @@ public class HandCardSystem : MonoBehaviour
         LayoutHand();
     }
 
+    /// <summary>
+    /// 执行数据库定义的手牌回合结束触发器，并按通用诅咒/消耗字段移动全部手牌。
+    /// </summary>
     public void EndTurnDiscardAll()
     {
         CancelTargeting();
         List<HandCardView> snapshot = new List<HandCardView>(hand);
         foreach (HandCardView view in snapshot)
         {
-            string id = view.Data.cardId;
-            if (id == "crystal_shatter") player.TakeTypedDamage(2, DamageType.Normal);
-            if (id == "cross_possessed") player.State.Add(CombatStatus.Corruption, 3);
-            if (id == "cloak_broken") player.State.Add(CombatStatus.Vulnerable, 1, 2);
-            bool exhaustCurse = id == "crystal_shatter" || id == "cross_possessed" || id == "cloak_broken";
-            MoveViewToZone(view, exhaustCurse ? exhaustPile : discardPile, false);
+            ExecuteContentTrigger(view.Instance, "on_turn_end_in_hand");
+            bool exhaustAtTurnEnd = view.Instance.Definition.Curse && view.Instance.Definition.ExhaustOnPlay;
+            MoveViewToZone(view, exhaustAtTurnEnd ? exhaustPile : discardPile, false);
         }
         LayoutHand();
         UpdateDeckDisplay();
     }
 
-    public void ResolveIdentify(string equipmentPool)
+    /// <summary>把牌顶卡加入强制免费出牌队列，并在队列耗尽时通知行为图恢复。</summary>
+    public void QueueFreeTopCards(int count, Action onComplete = null)
     {
-        List<CardData> pool = CardCatalog.GetPool(equipmentPool);
-        List<CardData> normal = pool.Where(c => c.rarity != CardRarity.Red).ToList();
-        List<CardRarity> rarities = normal.Select(c => c.rarity).Distinct().ToList();
-        CardRarity rarity = StartingDeckBuilder.RollNormalRarity(rarities);
-        List<CardData> candidates = normal.Where(c => c.rarity == rarity).ToList();
-        AddCreatedCard(new CardInstance(candidates[UnityEngine.Random.Range(0, candidates.Count)]), true);
-
-        List<CardData> curses = pool.Where(c => c.rarity == CardRarity.Red).ToList();
-        if (curses.Count > 0 && UnityEngine.Random.value < 0.20f)
-            AddCreatedCard(new CardInstance(curses[UnityEngine.Random.Range(0, curses.Count)]), true);
-    }
-
-    public void RemoveFamily(CardFamily family)
-    {
-        MoveMatching(drawPile, exhaustPile, card => card.Data.family == family);
-        MoveMatching(discardPile, exhaustPile, card => card.Data.family == family);
-        foreach (HandCardView view in hand.Where(v => v.Data.family == family).ToList())
-            MoveViewToZone(view, exhaustPile, false);
-        LayoutHand();
-        UpdateDeckDisplay();
-    }
-
-    public void QueueFreeTopCards(int count)
-    {
+        int queued = 0;
         for (int i = 0; i < count; i++)
         {
             CardInstance next = TakeTopCard();
@@ -216,15 +397,31 @@ public class HandCardSystem : MonoBehaviour
             next.FreePlay = true;
             next.ForcedPlay = true;
             forcedQueue.Enqueue(next);
+            queued++;
         }
+        if (queued == 0)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+        forcedQueueCompleted += onComplete;
         if (!forcedPresentationScheduled) StartCoroutine(PresentForcedNextFrame());
     }
 
-    public void ShowTopCardsForDiscard(int count)
+    /// <summary>打开牌顶弃置选择界面，并在玩家确认或没有可选牌时通知行为图恢复。</summary>
+    public void ShowTopCardsForDiscard(int count, Action onComplete = null)
     {
-        if (modal != null) return;
+        if (modal != null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
         List<CardInstance> cards = drawPile.Take(Mathf.Max(0, count)).ToList();
-        if (cards.Count == 0) return;
+        if (cards.Count == 0)
+        {
+            onComplete?.Invoke();
+            return;
+        }
         HashSet<CardInstance> selected = new HashSet<CardInstance>();
         modal = CreateModal("预演：选择要置入弃牌堆的牌");
         Transform content = modal.transform.Find("Panel/Content");
@@ -234,7 +431,9 @@ public class HandCardSystem : MonoBehaviour
             button.onClick.AddListener(() =>
             {
                 if (!selected.Add(card)) selected.Remove(card);
-                button.GetComponent<Image>().color = selected.Contains(card) ? new Color(0.65f, 0.28f, 0.25f) : new Color(0.22f, 0.25f, 0.32f);
+                button.GetComponent<Image>().color = selected.Contains(card)
+                    ? new Color(1f, 0.72f, 0.72f, 1f)
+                    : new Color(0.9f, 0.9f, 0.9f, 1f);
             });
         }
         Button confirm = CreateButton(content, "确认");
@@ -244,12 +443,14 @@ public class HandCardSystem : MonoBehaviour
                 if (drawPile.Remove(card)) discardPile.Add(card);
             CloseModal();
             UpdateDeckDisplay();
+            onComplete?.Invoke();
         });
     }
 
     public void BeginPriestSacrifice()
     {
-        if (GameSession.SelectedClass != HeroClass.Priest || player.State.PriestHealUsedThisTurn || hand.Count == 0) return;
+        if (!ContentClassPassiveRuntime.GetSelectedTraitBool("card_sacrifice_heal") ||
+            player.State.PriestHealUsedThisTurn || hand.Count == 0) return;
         priestSacrificeMode = true;
         Debug.Log("请选择一张手牌消耗，用于牧师治疗。", this);
     }
@@ -277,33 +478,36 @@ public class HandCardSystem : MonoBehaviour
         targetingCard?.transform.SetAsLastSibling();
     }
 
+    /// <summary>
+    /// 只使用已发布数据库中的职业配方构建初始牌库；内容无效时立即停止战斗初始化。
+    /// </summary>
     private void BuildStartingDeck()
     {
         foreach (HandCardView view in hand.ToList()) if (view != null) Destroy(view.gameObject);
         hand.Clear(); totalDeck.Clear(); drawPile.Clear(); discardPile.Clear(); exhaustPile.Clear();
 
-        if (startingDeck == null)
+        if (!ContentRuntime.IsLoaded)
         {
-            Debug.LogError("战斗场景未配置基础牌库 PlayerStartingDeck，无法生成完整初始牌库。", this);
-        }
-        else
-        {
-            foreach (CardData card in startingDeck.CreateDrawPile())
-                totalDeck.Add(new CardInstance(card));
+            throw new InvalidOperationException($"没有可用的数据库内容包，无法构建牌库：{ContentRuntime.LoadError}");
         }
 
-        totalDeck.AddRange(StartingDeckBuilder.Build(ClassCatalog.Get(GameSession.SelectedClass)));
+        string selectedClassId = GameSession.SelectedClass.ToString().ToLowerInvariant();
+        if (!ContentRuntime.Registry.TryGetClassProfile(selectedClassId, out ClassProfileDefinition profile) || profile.DeckRecipe.Count == 0)
+        {
+            throw new InvalidOperationException($"数据库未提供职业 {selectedClassId} 的有效初始牌库配方。");
+        }
+        totalDeck.AddRange(StartingDeckBuilder.Build(profile, ContentRuntime.Registry));
         drawPile.AddRange(totalDeck);
-        Debug.Log($"{ClassCatalog.Get(GameSession.SelectedClass).DisplayName}初始牌库生成完毕：{drawPile.Count}张。", this);
+        Debug.Log($"{profile.DisplayName}初始牌库生成完毕：{drawPile.Count}张。", this);
     }
 
     private bool DrawOne()
     {
         CardInstance instance = TakeTopCard();
         if (instance == null) return false;
-        if (instance.Data.cardId == "crystal_backlash")
+        if (instance.Definition != null && ContentCardEffectExecutor.CanExecuteTrigger(instance.Definition, "on_draw"))
         {
-            player.TakeTypedDamage(5, DamageType.Dark);
+            ExecuteContentTrigger(instance, "on_draw");
             exhaustPile.Add(instance);
             UpdateDeckDisplay();
             return true;
@@ -324,7 +528,7 @@ public class HandCardSystem : MonoBehaviour
 
     private void AddCreatedCard(CardInstance instance, bool mandatory)
     {
-        if (hand.Count >= HandLimit)
+        if (hand.Count >= EffectiveHandLimit)
         {
             if (mandatory)
             {
@@ -348,12 +552,29 @@ public class HandCardSystem : MonoBehaviour
         rect.sizeDelta = new Vector2(cardWidth, cardHeight);
         view.Initialize(this, instance);
         hand.Add(view);
+        ExecuteContentTrigger(instance, "on_added_to_hand");
         LayoutHand(true);
         view.PlayDrawAnimation();
         UpdateDeckDisplay();
         return view;
     }
 
+    /// <summary>为手牌生命周期事件创建无目标执行上下文并运行数据库触发器。</summary>
+    /// <param name="instance">发生生命周期事件的卡牌实例。</param>
+    /// <param name="triggerKey">需要执行的触发器 key。</param>
+    /// <returns>存在且成功执行数据库行为时返回 true。</returns>
+    private bool ExecuteContentTrigger(CardInstance instance, string triggerKey)
+    {
+        if (instance?.Definition == null || !ContentCardEffectExecutor.CanExecuteTrigger(instance.Definition, triggerKey))
+            return false;
+        CardPlayResult result = new CardPlayResult();
+        ContentCardExecutionContext context = new ContentCardExecutionContext(
+            instance, player, player, null, null, this, boardClickController, result,
+            true, targetQueryService: this);
+        return ContentCardEffectExecutor.TryExecuteTrigger(context, triggerKey);
+    }
+
+    /// <summary>交由通用效果解析器结算卡牌；成功时扣除手牌并清理目标选择界面。</summary>
     private bool TryCommitCard(HandCardView view, Unit target, BoardCell cell, Vector2Int? direction)
     {
         int previousIndex = hand.IndexOf(view);
@@ -366,10 +587,16 @@ public class HandCardSystem : MonoBehaviour
             return false;
         }
 
+        if (targetingCard == view)
+        {
+            targetingCard = null;
+            view.SetAwaitingTarget(false);
+            boardClickController?.ClearAttackRange();
+        }
+
         bool wasForced = view == forcedCard;
         List<CardInstance> zone = view.Data.exhaust ? exhaustPile : discardPile;
         MoveViewToZone(view, zone, true);
-        if (result.RemoveFamily != CardFamily.None) RemoveFamily(result.RemoveFamily);
         if (wasForced) forcedCard = null;
         CardPlayed?.Invoke(view.Data);
 
@@ -378,7 +605,11 @@ public class HandCardSystem : MonoBehaviour
             if (wasForced) PresentNextForcedCard();
             if (result.EndTurn) BattleFlow.Instance?.RequestEndPlayerTurn();
         };
-        if (result.FreeMoveSteps > 0) boardClickController.BeginFreeMove(player, result.FreeMoveSteps, continuation);
+        if (result.FreeMoveSteps > 0) boardClickController.BeginFreeMove(player, result.FreeMoveSteps, () =>
+        {
+            result.ExecutionContext?.CompletePendingInteraction();
+            continuation();
+        });
         else continuation();
         return true;
     }
@@ -388,7 +619,8 @@ public class HandCardSystem : MonoBehaviour
         targetingCard = view;
         view.SetAwaitingTarget(true);
         boardClickController.ClearSelection();
-        int range = view.Data.range + (view.Data.family == CardFamily.Bow && GameSession.SelectedClass == HeroClass.Ranger ? 1 : 0);
+        int range = view.Data.range + (view.Data.family == CardFamily.Bow
+            ? ContentClassPassiveRuntime.GetSelectedTraitInt("bow_range_bonus") : 0);
         boardClickController.ShowAttackRange(player, Mathf.Max(1, range));
         LayoutHand();
         ShowCardDetails(view);
@@ -396,7 +628,14 @@ public class HandCardSystem : MonoBehaviour
 
     private void PresentNextForcedCard()
     {
-        if (forcedCard != null || forcedQueue.Count == 0) return;
+        if (forcedCard != null) return;
+        if (forcedQueue.Count == 0)
+        {
+            Action completed = forcedQueueCompleted;
+            forcedQueueCompleted = null;
+            completed?.Invoke();
+            return;
+        }
         CardInstance instance = forcedQueue.Dequeue();
         if (instance.Data.curse)
         {
@@ -446,20 +685,35 @@ public class HandCardSystem : MonoBehaviour
         }
     }
 
+    /// <summary>消耗所选手牌并进入棋盘治疗目标选择，不再创建单位名称列表。</summary>
     private void SacrificeForPriestHeal(HandCardView view)
     {
         priestSacrificeMode = false;
         MoveViewToZone(view, exhaustPile, true);
         player.State.PriestHealUsedThisTurn = true;
-        modal = CreateModal("选择距离2内的治疗目标");
-        Transform content = modal.transform.Find("Panel/Content");
-        foreach (Unit unit in FindObjectsByType<Unit>())
-        {
-            int distance = Mathf.Abs(unit.Position.x - player.Position.x) + Mathf.Abs(unit.Position.y - player.Position.y);
-            if (!unit.IsAlive || distance > 2) continue;
-            Button button = CreateButton(content, unit.DisplayName);
-            button.onClick.AddListener(() => { unit.Heal(5); CloseModal(); });
-        }
+        BeginBoardUnitSelection(
+            unit => unit.IsAlive && Mathf.Abs(unit.Position.x - player.Position.x) +
+                Mathf.Abs(unit.Position.y - player.Position.y) <= 2,
+            unit => unit.Heal(5), 2);
+    }
+
+    /// <summary>在棋盘上进入统一棋子选择模式，成功点击后自动清理所有范围高亮。</summary>
+    private void BeginBoardUnitSelection(Func<Unit, bool> validator, Action<Unit> completed, int range)
+    {
+        CancelTargeting();
+        pendingUnitValidator = validator;
+        pendingUnitSelection = completed;
+        boardClickController?.ClearSelection();
+        boardClickController?.ShowAttackRange(player, Mathf.Max(0, range));
+        Debug.Log("请直接点击棋盘上的目标棋子；右键可以取消。", this);
+    }
+
+    /// <summary>退出独立棋子选择模式并隐藏棋盘范围，回调会在清理后由确认方法执行。</summary>
+    private void ClearPendingUnitSelection()
+    {
+        pendingUnitSelection = null;
+        pendingUnitValidator = null;
+        boardClickController?.ClearAttackRange();
     }
 
     private void MoveViewToZone(HandCardView view, List<CardInstance> zone, bool animate)
@@ -522,6 +776,7 @@ public class HandCardSystem : MonoBehaviour
         ResolveResolver();
     }
 
+    /// <summary>绑定 BattleInterface 卡背与数量文本，并恢复卡背按钮的可点击状态。</summary>
     private void BindDeckPile()
     {
         GameObject cardControl = GameObject.Find("C_CardControl");
@@ -531,7 +786,39 @@ public class HandCardSystem : MonoBehaviour
         deckPileImage ??= pile?.GetComponent<Image>();
         deckPileButton ??= pile?.GetComponent<Button>();
         deckCountText ??= number?.GetComponent<TMP_Text>();
-        if (deckPileButton != null) deckPileButton.interactable = false;
+        if (deckPileButton != null)
+        {
+            deckPileButton.interactable = true;
+            deckPileButton.onClick.RemoveListener(ShowDrawPile);
+            deckPileButton.onClick.AddListener(ShowDrawPile);
+        }
+    }
+
+    /// <summary>点击卡背后以只读弹窗按牌顶顺序显示当前牌堆内容。</summary>
+    private void ShowDrawPile()
+    {
+        if (modal != null) return;
+        modal = CreateModal($"牌堆（{drawPile.Count}张，最上方为牌顶）");
+        Transform content = modal.transform.Find("Panel/Content");
+        string cardLines = drawPile.Count == 0
+            ? "牌堆为空"
+            : string.Join("\n", drawPile.Select((card, index) =>
+                $"{index + 1}. {card.Data.cardName}　[{card.Data.costText}]"));
+        CreateListLabel(content, cardLines, drawPile.Count);
+        Button close = CreateButton(content, "关闭");
+        close.onClick.AddListener(CloseModal);
+    }
+
+    /// <summary>创建牌堆弹窗中的多行只读卡牌清单，并根据条目数分配可读高度。</summary>
+    private TMP_Text CreateListLabel(Transform parent, string value, int itemCount)
+    {
+        TMP_Text label = CreateText("CardList", parent, 18f);
+        label.gameObject.AddComponent<LayoutElement>().preferredHeight = Mathf.Clamp(itemCount * 27f + 24f, 80f, 390f);
+        label.text = value;
+        label.alignment = TextAlignmentOptions.TopLeft;
+        label.textWrappingMode = TextWrappingModes.Normal;
+        label.overflowMode = TextOverflowModes.Ellipsis;
+        return label;
     }
 
     private void UpdateDeckDisplay()
@@ -539,6 +826,7 @@ public class HandCardSystem : MonoBehaviour
         if (deckCountText != null) deckCountText.text = drawPile.Count.ToString();
     }
 
+    /// <summary>创建白底深色文字的卡牌详情浮窗，保证规则说明在不同场景亮度下清晰可读。</summary>
     private void CreateDetailPanel()
     {
         Canvas canvas = FindScreenCanvas();
@@ -550,7 +838,7 @@ public class HandCardSystem : MonoBehaviour
         rect.pivot = new Vector2(1f, 0.5f);
         rect.anchoredPosition = new Vector2(-24f, 0f);
         rect.sizeDelta = new Vector2(360f, 230f);
-        detailPanel.GetComponent<Image>().color = new Color(0.05f, 0.06f, 0.09f, 0.94f);
+        detailPanel.GetComponent<Image>().color = Color.white;
         detailTitle = CreateText("Title", detailPanel.transform, 26f);
         detailDescription = CreateText("Description", detailPanel.transform, 20f);
         SetRect(detailTitle.rectTransform, new Vector2(0f, 0.72f), Vector2.one, new Vector2(14f, 0f), new Vector2(-14f, -8f));
@@ -559,6 +847,7 @@ public class HandCardSystem : MonoBehaviour
         detailPanel.SetActive(false);
     }
 
+    /// <summary>创建带半透明遮罩的白色内容弹窗，并配置深色标题与垂直内容区域。</summary>
     private GameObject CreateModal(string title)
     {
         Canvas canvas = FindScreenCanvas();
@@ -571,7 +860,7 @@ public class HandCardSystem : MonoBehaviour
         RectTransform panelRect = (RectTransform)panel.transform;
         panelRect.anchorMin = panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.sizeDelta = new Vector2(560f, 560f);
-        panel.GetComponent<Image>().color = new Color(0.1f, 0.12f, 0.18f, 0.98f);
+        panel.GetComponent<Image>().color = Color.white;
         TMP_Text heading = CreateText("Heading", panel.transform, 28f);
         SetRect(heading.rectTransform, new Vector2(0f, 0.88f), Vector2.one, new Vector2(18f, 0f), new Vector2(-18f, -10f));
         heading.text = title;
@@ -585,11 +874,12 @@ public class HandCardSystem : MonoBehaviour
         return root;
     }
 
+    /// <summary>创建白色弹窗内的浅灰按钮和居中深色文字。</summary>
     private Button CreateButton(Transform parent, string label)
     {
         GameObject obj = new GameObject("Choice", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(LayoutElement));
         obj.transform.SetParent(parent, false);
-        obj.GetComponent<Image>().color = new Color(0.22f, 0.25f, 0.32f);
+        obj.GetComponent<Image>().color = new Color(0.9f, 0.9f, 0.9f, 1f);
         obj.GetComponent<LayoutElement>().preferredHeight = 52f;
         TMP_Text text = CreateText("Label", obj.transform, 20f);
         SetRect(text.rectTransform, Vector2.zero, Vector2.one, new Vector2(10f, 4f), new Vector2(-10f, -4f));
@@ -603,13 +893,14 @@ public class HandCardSystem : MonoBehaviour
         modal = null;
     }
 
+    /// <summary>创建弹窗使用的深色 TextMeshPro 文字并应用统一中文字体。</summary>
     private static TMP_Text CreateText(string name, Transform parent, float size)
     {
         GameObject obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         obj.transform.SetParent(parent, false);
         TMP_Text text = obj.GetComponent<TMP_Text>();
         text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/SourceHanSansSC-Regular SDF") ?? TMP_Settings.defaultFontAsset;
-        text.fontSize = size; text.color = Color.white; text.raycastTarget = false;
+        text.fontSize = size; text.color = new Color(0.08f, 0.08f, 0.1f, 1f); text.raycastTarget = false;
         return text;
     }
 

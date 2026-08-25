@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 单张手牌的视图与输入组件。
-/// 负责显示 CardData、悬浮放大、点击打出以及相关过渡动画。
+/// 负责显示数据库卡牌的运行时投影、悬浮放大、点击打出以及相关过渡动画。
 /// </summary>
 [RequireComponent(typeof(Image))]
 public class HandCardView : MonoBehaviour,
@@ -28,11 +28,11 @@ public class HandCardView : MonoBehaviour,
     public CardInstance Instance => cardInstance;
     public bool IsAwaitingTarget => isAwaitingTarget;
 
-    public void Initialize(HandCardSystem hand, CardData data)
-    {
-        Initialize(hand, new CardInstance(data));
-    }
-
+    /// <summary>
+    /// 绑定数据库卡牌实例并刷新卡图、占位卡面和交互状态。
+    /// </summary>
+    /// <param name="hand">拥有该视图的手牌系统。</param>
+    /// <param name="instance">持有权威 CardDefinition 的运行时实例。</param>
     public void Initialize(HandCardSystem hand, CardInstance instance)
     {
         owner = hand;
@@ -56,10 +56,17 @@ public class HandCardView : MonoBehaviour,
         }
     }
 
+    /// <summary>为没有卡图的数据库卡牌创建文字卡面与高对比度外边框。</summary>
     private void BuildPlaceholderFace()
     {
         Transform existing = transform.Find("RuntimeCardText");
         if (existing != null) Destroy(existing.gameObject);
+
+        Outline border = GetComponent<Outline>() ?? gameObject.AddComponent<Outline>();
+        border.enabled = true;
+        border.effectColor = new Color(0.96f, 0.88f, 0.62f, 1f);
+        border.effectDistance = new Vector2(3f, -3f);
+        border.useGraphicAlpha = false;
 
         GameObject root = new GameObject("RuntimeCardText", typeof(RectTransform));
         root.transform.SetParent(transform, false);

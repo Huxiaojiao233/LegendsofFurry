@@ -1,3 +1,7 @@
+using System;
+using System.Linq;
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -16,6 +20,9 @@ public class ClassSelectionController : MonoBehaviour
         BuildInterface();
     }
 
+    /// <summary>
+    /// 从数据库职业列表构建选择界面；内容未加载时阻止玩家进入无数据战斗。
+    /// </summary>
     private void BuildInterface()
     {
         GameObject canvasObject = new GameObject("ClassSelectCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -53,21 +60,40 @@ public class ClassSelectionController : MonoBehaviour
         layout.spacing = 18f; layout.padding = new RectOffset(10, 10, 10, 10);
         layout.childControlWidth = true; layout.childControlHeight = true; layout.childForceExpandWidth = true; layout.childForceExpandHeight = true;
 
-        foreach (HeroClassProfile profile in ClassCatalog.All) CreateClassButton(row.transform, profile);
+        if (!ContentRuntime.IsLoaded)
+        {
+            throw new InvalidOperationException($"职业选择无法读取数据库内容包：{ContentRuntime.LoadError}");
+        }
+        foreach (ClassProfileDefinition profile in ContentRuntime.Registry.ClassProfiles
+                     .Where(item => item.Enabled).OrderBy(item => item.SortOrder))
+        {
+            if (!Enum.TryParse(profile.ClassId, true, out HeroClass heroClass))
+            {
+                Debug.LogWarning($"跳过未知职业 ID：{profile.ClassId}", this);
+                continue;
+            }
+            CreateClassButton(row.transform, profile, heroClass);
+        }
     }
 
-    private void CreateClassButton(Transform parent, HeroClassProfile profile)
+    /// <summary>
+    /// 使用数据库职业名称、描述和排序结果创建一个职业选择按钮。
+    /// </summary>
+    /// <param name="parent">按钮所在的横向布局。</param>
+    /// <param name="profile">数据库职业定义。</param>
+    /// <param name="heroClass">与场景会话兼容的职业枚举。</param>
+    private void CreateClassButton(Transform parent, ClassProfileDefinition profile, HeroClass heroClass)
     {
         GameObject obj = new GameObject(profile.DisplayName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         obj.transform.SetParent(parent, false);
         Image image = obj.GetComponent<Image>();
-        image.color = ClassColor(profile.Class);
+        image.color = ClassColor(heroClass);
         Button button = obj.GetComponent<Button>();
         ColorBlock colors = button.colors;
         colors.highlightedColor = Color.Lerp(image.color, Color.white, 0.18f);
         colors.pressedColor = Color.Lerp(image.color, Color.black, 0.2f);
         button.colors = colors;
-        button.onClick.AddListener(() => Select(profile.Class));
+        button.onClick.AddListener(() => Select(heroClass));
 
         TMP_Text name = CreateText("Name", obj.transform, 34f, FontStyles.Bold);
         name.rectTransform.anchorMin = new Vector2(0.06f, 0.68f); name.rectTransform.anchorMax = new Vector2(0.94f, 0.94f);

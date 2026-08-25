@@ -165,6 +165,14 @@ public class BoardClickController : MonoBehaviour
         SetActionPoints(currentActionPoints + amount);
     }
 
+    /// <summary>使用内容配置设置基础行动点上限，并同步当前与有效上限。</summary>
+    public void ConfigureBaseActionPoints(int amount)
+    {
+        maxActionPoints = Mathf.Max(0, amount);
+        effectiveMaximumActionPoints = maxActionPoints;
+        SetActionPoints(maxActionPoints);
+    }
+
     public void BeginFreeMove(Unit unit, int steps, System.Action onComplete = null)
     {
         if (unit == null || steps <= 0)
@@ -268,6 +276,7 @@ public class BoardClickController : MonoBehaviour
         }
     }
 
+    /// <summary>把鼠标点击统一转换为棋盘单位与格子目标；无效目标保留选择状态供重新点击。</summary>
     private void HandleTargetingClick()
     {
         ResolveHandCardSystem();
@@ -297,7 +306,7 @@ public class BoardClickController : MonoBehaviour
             return;
         }
 
-        handCardSystem.CancelTargeting();
+        Debug.Log("该棋子不符合当前目标条件，请重新选择；右键可取消。", this);
     }
 
     private void HandleClick()

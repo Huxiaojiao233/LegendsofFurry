@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using LegendsOfFurry.Content.Runtime;
+using LegendsOfFurry.Content.Contracts;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -22,8 +24,10 @@ public class BattleFlow : MonoBehaviour
     private bool isBusy;
     private GameObject resultOverlay;
     private int round = 1;
+    private ClassProfileDefinition activeClassProfile;
 
     public BattlePhase Phase => phase;
+    public int RoundNumber => round;
     public static BattleFlow Instance { get; private set; }
     public static bool CanPlayerAct => Instance == null || (Instance.phase == BattlePhase.PlayerTurn && !Instance.isBusy);
 
@@ -36,6 +40,7 @@ public class BattleFlow : MonoBehaviour
     {
         Instance = this;
         ResolveReferences();
+        ApplyContentConfiguration();
     }
 
     private IEnumerator Start()
@@ -46,7 +51,7 @@ public class BattleFlow : MonoBehaviour
         bool frozen = BeginPlayerTurnState(false);
         SetEndRoundInteractable(true);
         if (frozen) StartCoroutine(SkipFrozenTurn());
-        else TriggerAssassinFreeMove();
+        else BeginPassiveFreeMove(ApplyClassPassive("on_unit_turn_start"));
     }
 
     private void OnDestroy()
@@ -71,7 +76,7 @@ public class BattleFlow : MonoBehaviour
         boardClickController?.ClearSelection();
         handCardSystem?.EndTurnDiscardAll();
         player?.State.EndTurn(player);
-        if (GameSession.SelectedClass == HeroClass.Warrior && player != null && player.IsAlive) player.AddArmor(3);
+        ApplyClassPassive("on_unit_turn_end");
         if (phase == BattlePhase.GameOver || player == null || !player.IsAlive) yield break;
 
         phase = BattlePhase.EnemyTurn;
@@ -84,24 +89,15 @@ public class BattleFlow : MonoBehaviour
         isBusy = false;
         SetEndRoundInteractable(true);
         if (frozen) StartCoroutine(SkipFrozenTurn());
-        else TriggerAssassinFreeMove();
+        else BeginPassiveFreeMove(ApplyClassPassive("on_unit_turn_start"));
     }
 
     private bool BeginPlayerTurnState(bool drawCards)
     {
         if (player == null) return false;
         player.State.BeginTurn(player);
-        switch (GameSession.SelectedClass)
-        {
-            case HeroClass.Warrior: player.State.Add(CombatStatus.Sharp); break;
-            case HeroClass.Mage: player.State.TryGainMana(1); break;
-            case HeroClass.Assassin: player.State.Add(CombatStatus.Quick); break;
-        }
         boardClickController?.ResetActionPoints();
         if (drawCards) handCardSystem?.DrawCards(cardsDrawnPerRound, true);
-
-        TMP_Text roundText = GameObject.Find("T_Round")?.GetComponent<TMP_Text>();
-        if (roundText != null) roundText.text = $"第{round}回合";
 
         return player.State.ConsumeFrozenForTurn();
     }
@@ -113,10 +109,32 @@ public class BattleFlow : MonoBehaviour
         RequestEndPlayerTurn();
     }
 
-    private void TriggerAssassinFreeMove()
+    /// <summary>应用内容包中的职业与基础战斗参数；内容不可用时保留场景默认值。</summary>
+    private void ApplyContentConfiguration()
     {
-        if (GameSession.SelectedClass == HeroClass.Assassin && player != null && player.IsAlive)
-            boardClickController?.BeginFreeMove(player, 1);
+        if (!ContentRuntime.IsLoaded) return;
+        string classId = GameSession.SelectedClass.ToString().ToLowerInvariant();
+        ContentRuntime.Registry.TryGetClassProfile(classId, out activeClassProfile);
+        cardsDrawnPerRound = Mathf.Max(0, ContentRuntime.Registry.GameSettings.DrawPerTurn);
+        boardClickController?.ConfigureBaseActionPoints(ContentRuntime.Registry.GameSettings.BaseActionPoints);
+        if (activeClassProfile != null && player != null)
+        {
+            player.ConfigureMaximumHealth(activeClassProfile.InitialHealth);
+            player.State.ConfigureMana(activeClassProfile.InitialMana, activeClassProfile.MaximumMana);
+        }
+    }
+
+    /// <summary>执行当前职业指定生命周期的数据库被动行为。</summary>
+    private CardPlayResult ApplyClassPassive(string triggerKey)
+    {
+        return ContentClassPassiveRuntime.Execute(activeClassProfile, triggerKey, player, boardClickController);
+    }
+
+    /// <summary>若职业被动请求免费移动，则进入统一移动交互。</summary>
+    private void BeginPassiveFreeMove(CardPlayResult result)
+    {
+        if (result != null && result.FreeMoveSteps > 0 && player != null && player.IsAlive)
+            boardClickController?.BeginFreeMove(player, result.FreeMoveSteps);
     }
 
     private IEnumerator EnemyTurnRoutine()
@@ -169,6 +187,7 @@ public class BattleFlow : MonoBehaviour
         ShowResult(unit != null && unit.Faction == UnitFaction.Enemy);
     }
 
+    /// <summary>创建白底深色文字的战斗结果弹窗，并提供重新战斗与返回按钮。</summary>
     private void ShowResult(bool playerWon)
     {
         if (resultOverlay != null) return;
@@ -178,7 +197,7 @@ public class BattleFlow : MonoBehaviour
         resultOverlay.transform.SetParent(overlayCanvas.transform, false);
         RectTransform root = (RectTransform)resultOverlay.transform;
         root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
-        resultOverlay.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.78f);
+        resultOverlay.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.98f);
         TMP_Text title = CreateText("ResultTitle", resultOverlay.transform, 60f);
         title.rectTransform.anchorMin = title.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
         title.rectTransform.sizeDelta = new Vector2(700f, 100f);
@@ -191,13 +210,14 @@ public class BattleFlow : MonoBehaviour
         classes.onClick.AddListener(() => SceneManager.LoadScene("S_ClassSelect"));
     }
 
+    /// <summary>创建战斗结果弹窗中的浅灰按钮和深色居中文字。</summary>
     private Button CreateButton(string label, Vector2 position)
     {
         GameObject obj = new GameObject(label, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         obj.transform.SetParent(resultOverlay.transform, false);
         RectTransform rect = (RectTransform)obj.transform;
         rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(230f, 58f); rect.anchoredPosition = position;
-        obj.GetComponent<Image>().color = new Color(0.18f, 0.24f, 0.34f, 1f);
+        obj.GetComponent<Image>().color = new Color(0.88f, 0.88f, 0.9f, 1f);
         TMP_Text text = CreateText("Label", obj.transform, 24f);
         text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one; text.rectTransform.offsetMin = text.rectTransform.offsetMax = Vector2.zero;
         text.text = label; text.alignment = TextAlignmentOptions.Center;
@@ -219,13 +239,14 @@ public class BattleFlow : MonoBehaviour
     private void Unsubscribe(Unit unit) { if (unit != null) unit.Died -= HandleUnitDied; }
     private static bool IsAdjacent(Vector2Int a, Vector2Int b) => Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y) == 1;
 
+    /// <summary>创建战斗结果弹窗使用的深色 TextMeshPro 文字。</summary>
     private static TMP_Text CreateText(string name, Transform parent, float size)
     {
         GameObject obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         obj.transform.SetParent(parent, false);
         TMP_Text text = obj.GetComponent<TMP_Text>();
         text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/SourceHanSansSC-Regular SDF") ?? TMP_Settings.defaultFontAsset;
-        text.fontSize = size; text.color = Color.white; text.raycastTarget = false;
+        text.fontSize = size; text.color = new Color(0.08f, 0.08f, 0.1f, 1f); text.raycastTarget = false;
         return text;
     }
 

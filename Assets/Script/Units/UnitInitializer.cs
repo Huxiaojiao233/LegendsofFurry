@@ -20,6 +20,7 @@ public class UnitInitializer : MonoBehaviour
     [SerializeField] private TMP_Text enemyHealthText;
     [SerializeField] private TMP_Text enemyArmorText;
 
+    /// <summary>解析引用、绑定生命与护甲专用文本，并把双方单位放入棋盘。</summary>
     private void Start()
     {
         ResolveReferences();
@@ -28,6 +29,7 @@ public class UnitInitializer : MonoBehaviour
         PlaceUnit(enemy, UnitFaction.Enemy, enemyPreferredCell);
     }
 
+    /// <summary>补齐场景未序列化的棋盘和双方单位引用。</summary>
     private void ResolveReferences()
     {
         if (board == null)
@@ -48,6 +50,7 @@ public class UnitInitializer : MonoBehaviour
         }
     }
 
+    /// <summary>把生命、护甲绑定到各自专用文本，绝不占用角色属性文本。</summary>
     private void BindCombatUI()
     {
         if (playerHealthText == null)
@@ -57,7 +60,7 @@ public class UnitInitializer : MonoBehaviour
 
         if (playerArmorText == null)
         {
-            playerArmorText = FindText("T_Self_Attr");
+            playerArmorText = FindText("T_Self_Armor");
         }
 
         if (enemyHealthText == null)
@@ -67,13 +70,14 @@ public class UnitInitializer : MonoBehaviour
 
         if (enemyArmorText == null)
         {
-            enemyArmorText = FindText("T_Enemy_Attr");
+            enemyArmorText = FindText("T_Enemy_Armor");
         }
 
         player?.BindCombatUI(playerHealthText, playerArmorText);
         enemy?.BindCombatUI(enemyHealthText, enemyArmorText);
     }
 
+    /// <summary>设置单位阵营与棋盘，并将其放到偏好坐标附近的最近空格。</summary>
     private void PlaceUnit(Unit unit, UnitFaction faction, Vector2Int preferred)
     {
         if (unit == null || board == null)
@@ -93,6 +97,7 @@ public class UnitInitializer : MonoBehaviour
         unit.MoveTo(cell.x, cell.y);
     }
 
+    /// <summary>按场景对象名称查找 TextMeshPro 文本；未找到时返回 null。</summary>
     private static TMP_Text FindText(string objectName)
     {
         GameObject found = GameObject.Find(objectName);

@@ -1,22 +1,17 @@
+using System.Collections.Generic;
 using UnityEngine;
-
-public enum CardEffectType
-{
-    Heal,
-    GainBlock,
-    PhysicalDamage,
-    Move,
-    FireDamage,
-    Custom
-}
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 
 public enum CardRarity { Gray, Blue, Purple, Gold, Red }
 public enum CardTargetMode { Self, Unit, Direction, AreaCell }
 public enum CardFamily { None, Sword, Shield, Bow, Staff, Scepter, Dagger, Equipment }
 public enum DamageType { Normal, Fire, Ice, Grass, Lightning, Rock, Wind, Water, Light, Dark, Poison, True }
 
-[CreateAssetMenu(fileName = "NewCard", menuName = "Legends Of Furry/Card Data")]
-public class CardData : ScriptableObject
+/// <summary>
+/// 供 Unity 卡面与输入系统读取的纯运行时投影；权威内容始终来自数据库 CardDefinition。
+/// </summary>
+public sealed class CardData
 {
     [Header("基础信息")]
     public string cardId;
@@ -43,34 +38,33 @@ public class CardData : ScriptableObject
     public CardTargetMode targetMode = CardTargetMode.Self;
     [Min(0)] public int range;
 
-    // 旧版字段保留，避免项目中已有资产和简单效果处理器失效。
-    [Header("旧版兼容")]
-    public CardEffectType effectType = CardEffectType.Custom;
-    public int effectValue;
-    [Min(0)] public int attackRangeSize;
-
     public bool RequiresTarget => targetMode != CardTargetMode.Self;
 
-    public int GetAttackRangeRadius()
-    {
-        if (range > 0) return range;
-        return attackRangeSize <= 0 ? 0 : Mathf.Max(0, (attackRangeSize - 1) / 2);
-    }
-
-    public bool IsWithinAttackRange(Vector2Int origin, Vector2Int target)
-    {
-        int distance = Mathf.Abs(origin.x - target.x) + Mathf.Abs(origin.y - target.y);
-        return distance <= GetAttackRangeRadius();
-    }
-
+    /// <summary>
+    /// 从数据库字段创建一份只在本次运行中使用的卡面投影。
+    /// </summary>
+    /// <param name="id">稳定卡牌 ID。</param>
+    /// <param name="displayName">卡面显示名称。</param>
+    /// <param name="pool">首个卡池的显示标识。</param>
+    /// <param name="cardFamily">卡牌家族。</param>
+    /// <param name="cardRarity">卡牌稀有度。</param>
+    /// <param name="cost">派生后的费用文本。</param>
+    /// <param name="cardRange">目标距离。</param>
+    /// <param name="mode">目标选择模式。</param>
+    /// <param name="attack">是否为攻击牌。</param>
+    /// <param name="rulesText">卡牌规则描述。</param>
+    /// <param name="isExhaust">打出后是否消耗。</param>
+    /// <param name="isTemporary">是否为临时牌。</param>
+    /// <param name="isCurse">是否为诅咒牌。</param>
+    /// <param name="cannotPlay">是否禁止主动打出。</param>
+    /// <returns>不参与 Unity 资产序列化的卡面数据。</returns>
     public static CardData Runtime(
         string id, string displayName, string pool, CardFamily cardFamily,
         CardRarity cardRarity, string cost, int cardRange, CardTargetMode mode,
         bool attack, string rulesText, bool isExhaust = false,
         bool isTemporary = false, bool isCurse = false, bool cannotPlay = false)
     {
-        CardData card = CreateInstance<CardData>();
-        card.hideFlags = HideFlags.DontSave;
+        CardData card = new CardData();
         card.cardId = id;
         card.cardName = displayName;
         card.sourcePool = pool;
@@ -85,11 +79,14 @@ public class CardData : ScriptableObject
         card.temporary = isTemporary;
         card.curse = isCurse;
         card.unplayable = cannotPlay;
-        card.effectType = CardEffectType.Custom;
         ParseCost(card);
         return card;
     }
 
+    /// <summary>
+    /// 将数据库结构化费用派生出的显示文本同步为现有界面读取的费用字段。
+    /// </summary>
+    /// <param name="card">需要补齐费用字段的运行时卡面。</param>
     private static void ParseCost(CardData card)
     {
         card.actionPointCost = 0;
@@ -117,10 +114,61 @@ public class CardData : ScriptableObject
 
 public sealed class CardInstance
 {
+    private readonly Dictionary<string, int> runtimeValues = new Dictionary<string, int>();
+
     public CardData Data { get; }
-    public int PersistentDamageBonus { get; set; }
+    public CardDefinition Definition { get; }
     public bool FreePlay { get; set; }
     public bool ForcedPlay { get; set; }
 
-    public CardInstance(CardData data) { Data = data; }
+    /// <summary>
+    /// 从数据库发布定义创建卡牌实例，并生成只用于 Unity 卡面显示的运行时投影。
+    /// </summary>
+    /// <param name="definition">运行时加载的共享卡牌定义。</param>
+    public CardInstance(CardDefinition definition)
+    {
+        Definition = definition;
+        Data = RuntimeCardAdapter.CreateView(definition);
+    }
+
+    /// <summary>
+    /// 读取当前卡牌实例上的整数运行时值；尚未写入的 key 返回零。
+    /// </summary>
+    /// <param name="key">稳定的运行时值 key。</param>
+    /// <returns>当前整数值，或不存在时的零。</returns>
+    public int GetRuntimeValue(string key)
+    {
+        return !string.IsNullOrWhiteSpace(key) && runtimeValues.TryGetValue(key, out int value) ? value : 0;
+    }
+
+    /// <summary>
+    /// 设置当前卡牌实例上的整数运行时值，供永久伤害成长等通用效果保存状态。
+    /// </summary>
+    /// <param name="key">稳定的运行时值 key。</param>
+    /// <param name="value">需要保存的新值。</param>
+    public void SetRuntimeValue(string key, int value)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+        runtimeValues[key] = value;
+    }
+
+    /// <summary>
+    /// 原子地增减当前卡牌实例上的整数运行时值并返回修改后的结果。
+    /// </summary>
+    /// <param name="key">稳定的运行时值 key。</param>
+    /// <param name="delta">本次增量，可为负数。</param>
+    /// <returns>修改后的整数值；key 无效时返回零。</returns>
+    public int ModifyRuntimeValue(string key, int delta)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return 0;
+        }
+        int value = GetRuntimeValue(key) + delta;
+        runtimeValues[key] = value;
+        return value;
+    }
 }

@@ -1,4 +1,5 @@
-using System.Collections.Generic;
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 using UnityEngine;
 
 public sealed class CardPlayResult
@@ -6,7 +7,7 @@ public sealed class CardPlayResult
     public bool Success;
     public bool EndTurn;
     public int FreeMoveSteps;
-    public CardFamily RemoveFamily = CardFamily.None;
+    public ContentCardExecutionContext ExecutionContext { get; internal set; }
 }
 
 public class CardEffectResolver : MonoBehaviour
@@ -16,6 +17,12 @@ public class CardEffectResolver : MonoBehaviour
     [SerializeField] private Unit player;
     [SerializeField] private Unit enemy;
 
+    /// <summary>
+    /// 绑定战斗场景中的行动点控制器和双方单位，并补齐可选手牌系统引用。
+    /// </summary>
+    /// <param name="actionPoints">行动点控制器。</param>
+    /// <param name="playerUnit">出牌方单位。</param>
+    /// <param name="enemyUnit">当前敌方单位。</param>
     public void Bind(BoardClickController actionPoints, Unit playerUnit, Unit enemyUnit)
     {
         actionPointController = actionPoints;
@@ -24,21 +31,35 @@ public class CardEffectResolver : MonoBehaviour
         handCardSystem ??= FindAnyObjectByType<HandCardSystem>();
     }
 
+    /// <summary>
+    /// 在不改变资源的前提下检查卡牌禁用、攻击限制以及固定或 X 费用是否可支付。
+    /// </summary>
+    /// <param name="instance">需要预检的卡牌实例。</param>
+    /// <returns>当前状态允许支付并打出时返回 true。</returns>
     public bool CanAfford(CardInstance instance)
     {
         ResolveReferences();
-        if (instance?.Data == null || actionPointController == null || player == null) return false;
+        if (instance?.Definition == null || instance.Data == null || actionPointController == null || player == null) return false;
         CardData card = instance.Data;
         if (card.unplayable) return false;
         if (card.isAttack && player.State.Has(CombatStatus.CannotAttack)) return false;
-        if (instance.FreePlay) return true;
-        int actionCost = card.spendsAllActionPoints ? actionPointController.CurrentActionPoints : card.actionPointCost;
-        if (card.spendsAllActionPoints && actionCost <= 0) return false;
-        if (actionPointController.CurrentActionPoints < actionCost) return false;
-        int manaCost = card.spendsAllMana ? player.State.Mana : card.manaCost;
-        return player.State.Mana >= manaCost;
+        return ContentCardPlayRules.TryCalculateCost(
+            instance.Definition,
+            actionPointController.CurrentActionPoints,
+            player.State.Mana,
+            instance.FreePlay,
+            out _,
+            out _);
     }
 
+    /// <summary>
+    /// 校验费用和目标、原子扣除资源，并优先使用数据库行为执行器结算已迁移卡牌。
+    /// </summary>
+    /// <param name="instance">即将打出的卡牌实例。</param>
+    /// <param name="target">玩家选择的可选单位。</param>
+    /// <param name="targetCell">玩家选择的可选地块。</param>
+    /// <param name="direction">玩家选择的可选正交方向。</param>
+    /// <returns>是否成功及后续移动、结束回合等控制结果。</returns>
     public CardPlayResult TryPlay(CardInstance instance, Unit target = null,
         BoardCell targetCell = null, Vector2Int? direction = null)
     {
@@ -46,227 +67,101 @@ public class CardEffectResolver : MonoBehaviour
         ResolveReferences();
         if (!CanAfford(instance)) return result;
 
-        CardData card = instance.Data;
-        if (!ValidateTarget(card, target, targetCell, direction)) return result;
+        if (!ValidateTarget(instance.Definition, target, targetCell, direction)) return result;
+        if (!ContentCardEffectExecutor.CanExecuteOnPlay(instance.Definition)) return result;
 
         int xAction = actionPointController.CurrentActionPoints;
         int xMana = player.State.Mana;
+        int spentAction = 0;
+        int spentMana = 0;
         if (!instance.FreePlay)
         {
-            int actionCost = card.spendsAllActionPoints ? xAction : card.actionPointCost;
-            int manaCost = card.spendsAllMana ? xMana : card.manaCost;
+            if (!ContentCardPlayRules.TryCalculateCost(
+                    instance.Definition, xAction, xMana, false, out int actionCost, out int manaCost))
+            {
+                return result;
+            }
+            spentAction = actionCost;
+            spentMana = manaCost;
             if (!actionPointController.TrySpendActionPoints(actionCost) || !player.State.TrySpendMana(manaCost))
                 return result;
         }
 
-        result.Success = ResolveCard(instance, target, targetCell, direction, xAction, xMana, result);
+        ContentCardExecutionContext context = new ContentCardExecutionContext(
+            instance,
+            player,
+            target,
+            targetCell,
+            direction,
+            handCardSystem,
+            actionPointController,
+            result,
+            true,
+            xAction,
+            xMana,
+            spentAction,
+            spentMana,
+            targetQueryService: handCardSystem);
+        result.ExecutionContext = context;
+        result.Success = ContentCardEffectExecutor.TryExecuteOnPlay(context);
         return result;
     }
-
-    // 旧接口兼容旧代码/资产。
-    public bool TryPlay(CardData card, Unit target = null)
+    /// <summary>
+    /// 按数据库目标规则验证选择模式、距离、阵营、存活状态、自身许可和视线要求。
+    /// </summary>
+    /// <param name="card">数据库发布的权威卡牌定义。</param>
+    /// <param name="target">玩家选择的可选单位。</param>
+    /// <param name="cell">玩家选择的可选地块。</param>
+    /// <param name="direction">玩家选择的可选正交方向。</param>
+    /// <returns>选择满足全部结构化目标约束时返回 true。</returns>
+    private bool ValidateTarget(CardDefinition card, Unit target, BoardCell cell, Vector2Int? direction)
     {
-        return TryPlay(new CardInstance(card), target).Success;
-    }
-
-    private bool ResolveCard(CardInstance card, Unit target, BoardCell cell,
-        Vector2Int? direction, int xAction, int xMana, CardPlayResult result)
-    {
-        string id = card.Data.cardId;
-        switch (id)
+        CardTargetRule rule = card.Target;
+        if (rule.SelectionMode != "none" && rule.SelectionMode != "self" &&
+            rule.SelectionMode != "direction" && (player == null || player.Board == null))
         {
-            case "hit_01": Damage(card, target, 4, DamageType.Normal); break;
-            case "block_01": player.AddArmor(3); break;
-            case "run_01": result.FreeMoveSteps = 3; break;
-            case "heal_01": player.Heal(2); break;
-
-            case "sword_slash": DamageDirection(card, direction.Value, 5, false); break;
-            case "sword_thrust":
-                bool armored = target.Armor > 0;
-                Damage(card, target, 4, DamageType.Normal, false);
-                if (armored) Damage(card, target, 2, DamageType.Normal, false, 1, false);
-                FinishAttackModifiers(card); break;
-            case "sword_flurry":
-                if (xAction > 0) Damage(card, target, 2, DamageType.Normal, true, xAction);
-                else FinishAttackModifiers(card);
-                break;
-            case "sword_pommel": Damage(card, target, 3, DamageType.Normal); KnockBack(target); break;
-            case "sword_charge": player.State.Add(CombatStatus.SwordCharge, 4); result.EndTurn = true; break;
-            case "sword_guard": Damage(card, target, 4, DamageType.Normal); player.AddArmor(3); break;
-            case "sword_desperate_throw": Damage(card, target, 10, DamageType.Normal); result.RemoveFamily = CardFamily.Sword; break;
-
-            case "shield_protect": player.AddArmor(5); break;
-            case "shield_polish": player.State.Add(CombatStatus.BlockRetention); break;
-            case "shield_bash": Damage(card, target, 2, DamageType.Normal); player.AddArmor(5); break;
-            case "shield_raise": player.State.Add(CombatStatus.RaiseShieldPending); break;
-            case "shield_throw": target.State.Add(CombatStatus.NormalImmunity); result.RemoveFamily = CardFamily.Shield; break;
-
-            case "bow_shot": Damage(card, target, 4, DamageType.Normal); break;
-            case "bow_elbow": Damage(card, target, 3, DamageType.Normal); handCardSystem.DrawCards(1, true); break;
-            case "bow_roll": Damage(card, target, 4, DamageType.Normal); result.FreeMoveSteps = 1; break;
-            case "bow_charge_snipe":
-                Damage(card, target, 6 + card.PersistentDamageBonus, DamageType.Normal);
-                if (target == player) card.PersistentDamageBonus += 4;
-                break;
-            case "bow_scatter":
-                Damage(card, target, 4, DamageType.Normal); break;
-            case "bow_rain":
-                foreach (Unit unit in UnitsInArea(cell.Coordinate, 1)) Damage(card, unit, 3, DamageType.True, false);
-                FinishAttackModifiers(card); break;
-            case "bow_piercing": DamageDirection(card, direction.Value, 10, true); break;
-
-            case "staff_fireball": Damage(card, target, 6, DamageType.Fire); break;
-            case "staff_ice": Damage(card, target, 3, DamageType.Ice); if (!target.State.Has(CombatStatus.Warming)) target.State.Add(CombatStatus.Cold); break;
-            case "staff_lightning":
-                Damage(card, target, 4, DamageType.Lightning, false);
-                foreach (Unit unit in UnitsInManhattanRange(target.Position, 1))
-                    if (unit != target) Damage(card, unit, 2, DamageType.Lightning, false, 1, false);
-                FinishAttackModifiers(card); break;
-            case "staff_swing": Damage(card, target, 4, DamageType.Normal); break;
-            case "staff_meditate": player.State.TryGainMana(2); player.State.Add(CombatStatus.CannotAttack, 1, 1); break;
-            case "staff_arcane": Damage(card, target, 5, DamageType.True); break;
-            case "staff_storm": Damage(card, target, 3 * xMana, DamageType.Normal); player.State.ScheduleManaExhaustion(3); break;
-
-            case "scepter_elbow": Damage(card, target, 4, DamageType.Normal); break;
-            case "scepter_tap": Damage(card, target, 2, DamageType.Normal); target.State.Add(CombatStatus.Haze, 1, 1); break;
-            case "scepter_shine": Damage(card, target, 3, DamageType.Light); target.State.ClearNegative(); break;
-            case "scepter_heal": target.Heal(5); break;
-            case "scepter_dispel": target.State.ClearAll(); break;
-            case "scepter_light_shield": target.AddArmor(10); break;
-            case "scepter_inner_fire": target.State.Add(CombatStatus.HeartFire, 1, 2); break;
-
-            case "dagger_combo": Damage(card, target, 2, DamageType.Normal, true, 2); break;
-            case "dagger_thrust": Damage(card, target, 3, DamageType.True); break;
-            case "dagger_cut": Damage(card, target, 1, DamageType.Normal); target.State.Add(CombatStatus.Broken); break;
-            case "dagger_assassinate": Damage(card, target, 4, DamageType.Normal); result.FreeMoveSteps = 2; break;
-            case "dagger_throat":
-                Damage(card, target, 5, DamageType.True);
-                if (!target.IsAlive) actionPointController.GainActionPoints(2);
-                break;
-            case "dagger_throw": Damage(card, target, 4, DamageType.Normal); target.State.Add(CombatStatus.Poison, 3); break;
-            case "dagger_wrist": Damage(card, target, 4, DamageType.True); target.State.Add(CombatStatus.Exhaustion, 1, 3); break;
-
-            case "emerald_glimmer": handCardSystem.DrawCards(1, true); break;
-            case "emerald_flash": handCardSystem.DrawCards(1, true); actionPointController.GainActionPoints(1); break;
-            case "emerald_notice": player.State.Add(CombatStatus.DodgeNextNormal); actionPointController.GainActionPoints(1); break;
-            case "emerald_brilliant": player.State.Add(CombatStatus.NormalImmunity); actionPointController.GainActionPoints(2); break;
-            case "crystal_preview": if (target == player) handCardSystem.ShowTopCardsForDiscard(3); break;
-            case "crystal_divination": if (target == player) handCardSystem.QueueFreeTopCards(1); break;
-            case "crystal_inference": handCardSystem.QueueFreeTopCards(2); break;
-            case "crystal_channel": Debug.Log("【通灵】属性牌库暂时跳过，效果不结算。", this); break;
-            case "cross_glimmer": target.State.Add(CombatStatus.Regeneration, 3); break;
-            case "cross_flash": target.State.ClearNegative(); target.State.Add(CombatStatus.Regeneration, 3); break;
-            case "cross_brilliant": if (!target.IsAlive) target.Revive(5); break;
-            case "cloak_worn": result.FreeMoveSteps = 1; break;
-            case "cloak_clear": handCardSystem.DrawCards(1, true); result.FreeMoveSteps = 1; break;
-            case "cloak_cover": handCardSystem.DrawCards(1, true); actionPointController.GainActionPoints(1); break;
-            case "cloak_hide": actionPointController.IncreaseMaximumActionPoints(1); break;
-            default:
-                if (id.StartsWith("identify_")) handCardSystem.ResolveIdentify(card.Data.sourcePool);
-                else if (id == "crystal_shatter") { }
-                else return false;
-                break;
+            return false;
         }
-        return true;
-    }
-
-    private bool ValidateTarget(CardData card, Unit target, BoardCell cell, Vector2Int? direction)
-    {
-        if (card.targetMode == CardTargetMode.Self) return true;
-        if (player == null || player.Board == null) return false;
-        int effectiveRange = card.range + (card.family == CardFamily.Bow && GameSession.SelectedClass == HeroClass.Ranger ? 1 : 0);
-
-        if (card.targetMode == CardTargetMode.Direction) return direction.HasValue && direction.Value != Vector2Int.zero;
-        Vector2Int targetPosition = target != null ? target.Position : cell != null ? cell.Coordinate : new Vector2Int(int.MinValue, int.MinValue);
-        int distance = Mathf.Abs(player.Position.x - targetPosition.x) + Mathf.Abs(player.Position.y - targetPosition.y);
-        if (distance > effectiveRange) return false;
-        if (card.targetMode == CardTargetMode.Unit)
+        Vector2Int targetPosition = target != null ? target.Position : cell != null ? cell.Coordinate : default;
+        int effectiveRange = rule.Range + (card.FamilyId == "bow"
+            ? ContentClassPassiveRuntime.GetSelectedTraitInt("bow_range_bonus") : 0);
+        bool hasBoardTarget = target != null || cell != null;
+        ContentCardTargetSelection selection = new ContentCardTargetSelection
         {
-            if (target == null) return false;
-            if (!target.IsAlive && card.cardId != "cross_brilliant") return false;
-            if (!HasLineOfSight(player, target) && card.family != CardFamily.Sword && card.family != CardFamily.Dagger && card.family != CardFamily.Shield) return false;
-        }
-        if (card.targetMode == CardTargetMode.AreaCell)
-            return cell != null && HasLineOfSightToCell(player, cell.Coordinate);
-        return true;
-    }
-
-    private void Damage(CardInstance card, Unit target, int baseDamage, DamageType type,
-        bool finishModifiers = true, int hitCount = 1, bool allowQuick = true)
-    {
-        if (target == null) return;
-        int quickExtra = allowQuick && player.State.Has(CombatStatus.Quick) && card.Data.isAttack ? 1 : 0;
-        int totalHits = Mathf.Max(1, hitCount) + quickExtra;
-        int swordCharge = card.Data.family == CardFamily.Sword ? player.State.Get(CombatStatus.SwordCharge) : 0;
-        for (int i = 0; i < totalHits; i++)
+            HasUnit = target != null,
+            HasCell = cell != null,
+            HasDirection = direction.HasValue,
+            DirectionX = direction?.x ?? 0,
+            DirectionY = direction?.y ?? 0,
+            Distance = hasBoardTarget && player != null
+                ? Mathf.Abs(player.Position.x - targetPosition.x) + Mathf.Abs(player.Position.y - targetPosition.y)
+                : -1,
+            TargetIsSelf = target == player,
+            TargetHasSameFaction = target != null && player != null && target.Faction == player.Faction,
+            TargetIsAlive = target != null && target.IsAlive,
+            HasLineOfSight = !rule.RequiresLineOfSight ||
+                             (target != null && HasLineOfSight(player, target)) ||
+                             (cell != null && HasLineOfSightToCell(player, cell.Coordinate))
+        };
+        CardTargetRule effectiveRule = new CardTargetRule
         {
-            int amount = baseDamage;
-            if (player.State.Has(CombatStatus.Sharp)) amount += 1;
-            if (i == 0 && swordCharge > 0) amount += swordCharge;
-            amount = Mathf.Max(0, amount - player.State.Get(CombatStatus.Haze));
-            if (player.State.Has(CombatStatus.HeartFire)) amount = Mathf.FloorToInt(amount * 1.1f);
-            target.TakeTypedDamage(amount, type, player);
-        }
-        if (finishModifiers) FinishAttackModifiers(card);
+            SelectionMode = rule.SelectionMode,
+            Range = effectiveRange,
+            TeamFilter = rule.TeamFilter,
+            LifeStateFilter = rule.LifeStateFilter,
+            RequiresLineOfSight = rule.RequiresLineOfSight,
+            AllowSelf = rule.AllowSelf
+        };
+        CardDefinition effectiveCard = new CardDefinition { Target = effectiveRule };
+        return ContentCardPlayRules.ValidateTarget(effectiveCard, selection);
     }
 
-    private void FinishAttackModifiers(CardInstance card)
-    {
-        if (!card.Data.isAttack) return;
-        if (player.State.Has(CombatStatus.Sharp)) player.State.Reduce(CombatStatus.Sharp);
-        if (player.State.Has(CombatStatus.Quick)) player.State.Reduce(CombatStatus.Quick);
-        if (card.Data.family == CardFamily.Sword && player.State.Has(CombatStatus.SwordCharge)) player.State.Remove(CombatStatus.SwordCharge);
-    }
-
-    private void DamageDirection(CardInstance card, Vector2Int direction, int damage, bool pierces)
-    {
-        BoardGenerator board = player.Board;
-        Vector2Int perpendicular = new Vector2Int(-direction.y, direction.x);
-        if (!pierces)
-        {
-            foreach (Vector2Int coordinate in new[] { player.Position + direction, player.Position + direction + perpendicular, player.Position + direction - perpendicular })
-                if (board.TryGetOccupant(coordinate.x, coordinate.y, out Unit unit)) Damage(card, unit, damage, DamageType.Normal, false);
-            FinishAttackModifiers(card);
-            return;
-        }
-
-        Vector2Int current = player.Position + direction;
-        while (board.TryGetCell(current.x, current.y, out _))
-        {
-            if (board.TryGetOccupant(current.x, current.y, out Unit unit)) Damage(card, unit, damage, DamageType.Normal, false);
-            current += direction;
-        }
-        FinishAttackModifiers(card);
-    }
-
-    private void KnockBack(Unit target)
-    {
-        Vector2Int delta = target.Position - player.Position;
-        Vector2Int direction = Mathf.Abs(delta.x) >= Mathf.Abs(delta.y)
-            ? new Vector2Int(delta.x == 0 ? 0 : (int)Mathf.Sign(delta.x), 0)
-            : new Vector2Int(0, delta.y == 0 ? 0 : (int)Mathf.Sign(delta.y));
-        Vector2Int destination = target.Position + direction;
-        if (target.Board.TryGetCell(destination.x, destination.y, out _) && !target.Board.IsOccupied(destination.x, destination.y, target))
-            target.MoveToAnimated(destination.x, destination.y);
-    }
-
-    private IEnumerable<Unit> UnitsInArea(Vector2Int center, int radius)
-    {
-        foreach (Unit unit in FindObjectsByType<Unit>())
-            if (unit.IsAlive && Mathf.Max(Mathf.Abs(unit.Position.x - center.x), Mathf.Abs(unit.Position.y - center.y)) <= radius) yield return unit;
-    }
-
-    private IEnumerable<Unit> UnitsInManhattanRange(Vector2Int center, int range, int maximum = int.MaxValue)
-    {
-        int count = 0;
-        foreach (Unit unit in FindObjectsByType<Unit>())
-        {
-            if (!unit.IsAlive || Mathf.Abs(unit.Position.x - center.x) + Mathf.Abs(unit.Position.y - center.y) > range) continue;
-            yield return unit;
-            if (++count >= maximum) yield break;
-        }
-    }
-
+    /// <summary>
+    /// 检查两个单位之间的离散射线是否被棋盘边界或中间占用单位阻挡。
+    /// </summary>
+    /// <param name="from">视线来源单位。</param>
+    /// <param name="to">视线目标单位。</param>
+    /// <returns>中间采样格全部有效且未占用时返回 true。</returns>
     private bool HasLineOfSight(Unit from, Unit to)
     {
         Vector2Int delta = to.Position - from.Position;
@@ -280,6 +175,12 @@ public class CardEffectResolver : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// 检查单位到目标地块的离散射线是否被棋盘边界或中间占用单位阻挡。
+    /// </summary>
+    /// <param name="from">视线来源单位。</param>
+    /// <param name="destination">目标地块坐标。</param>
+    /// <returns>中间采样格全部有效且未占用时返回 true。</returns>
     private bool HasLineOfSightToCell(Unit from, Vector2Int destination)
     {
         Vector2Int delta = destination - from.Position;
@@ -293,6 +194,9 @@ public class CardEffectResolver : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// 在序列化引用缺失时按场景约定补齐行动点、手牌和双方单位对象。
+    /// </summary>
     private void ResolveReferences()
     {
         actionPointController ??= FindAnyObjectByType<BoardClickController>();

@@ -1,9 +1,12 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 
 public static class RuntimeSceneBootstrap
 {
+    /// <summary>在首个场景加载前登记统一场景初始化回调。</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Install()
     {
@@ -11,17 +14,20 @@ public static class RuntimeSceneBootstrap
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
+    /// <summary>每次场景加载完成后补齐该场景需要的运行时入口组件。</summary>
     private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         EnsureScene(scene.name);
     }
 
+    /// <summary>兼容直接从当前场景进入播放时的首次初始化。</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureInitialScene()
     {
         EnsureScene(SceneManager.GetActiveScene().name);
     }
 
+    /// <summary>按场景名称创建且只创建一个职业选择或战斗初始化器。</summary>
     private static void EnsureScene(string sceneName)
     {
         if (sceneName == "S_ClassSelect" && Object.FindAnyObjectByType<ClassSelectionController>() == null)
@@ -34,6 +40,7 @@ public static class RuntimeSceneBootstrap
 [DefaultExecutionOrder(-900)]
 public class BattleBootstrap : MonoBehaviour
 {
+    /// <summary>初始化双方战斗数据、BattleInterface、卡牌解析器和棋盘摄像机控制。</summary>
     private void Awake()
     {
         Unit player = GameObject.Find("Player")?.GetComponent<Unit>();
@@ -48,9 +55,13 @@ public class BattleBootstrap : MonoBehaviour
         enemy.ConfigureCombatant("太糕", 100, 3, 2);
         player.State.ClearAll();
         enemy.State.ClearAll();
-        player.State.NormalDamageAvoidChance = GameSession.SelectedClass == HeroClass.Ranger ? 0.10f : 0f;
-        player.State.ReviveAvailable = GameSession.SelectedClass == HeroClass.Priest;
-        player.State.ConfigureMana(GameSession.SelectedClass == HeroClass.Mage ? 3 : 0, 10);
+        if (ContentClassPassiveRuntime.TryGetSelectedProfile(out ClassProfileDefinition profile))
+        {
+            player.ConfigureMaximumHealth(profile.InitialHealth);
+            player.State.NormalDamageAvoidChance = profile.GetTraitFloat("normal_damage_avoid_chance");
+            player.State.ReviveAvailable = profile.GetTraitBool("revive_available");
+            player.State.ConfigureMana(profile.InitialMana, profile.MaximumMana);
+        }
 
         BattleFlow flow = FindAnyObjectByType<BattleFlow>();
         flow?.ConfigureCardsPerTurn(5);
@@ -64,6 +75,10 @@ public class BattleBootstrap : MonoBehaviour
         if (canvas != null && canvas.GetComponent<BattleRuntimeHud>() == null)
             canvas.gameObject.AddComponent<BattleRuntimeHud>();
 
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null && mainCamera.GetComponent<BoardCameraController>() == null)
+            mainCamera.gameObject.AddComponent<BoardCameraController>();
+
         CardEffectResolver resolver = FindAnyObjectByType<CardEffectResolver>();
         if (resolver == null)
         {
@@ -73,6 +88,7 @@ public class BattleBootstrap : MonoBehaviour
         resolver.Bind(FindAnyObjectByType<BoardClickController>(), player, enemy);
     }
 
+    /// <summary>按名称更新场景文本；节点不存在时保持兼容并跳过。</summary>
     private static void SetText(string name, string value)
     {
         TMP_Text text = GameObject.Find(name)?.GetComponent<TMP_Text>();

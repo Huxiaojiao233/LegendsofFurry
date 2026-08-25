@@ -5,13 +5,14 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 
 [InitializeOnLoad]
 public static class LegendsOfFurryProjectSetup
 {
     private const string ClassScene = "Assets/Scenes/S_ClassSelect.unity";
     private const string BattleScene = "Assets/Scenes/S_Battle.unity";
-    private const string StartingDeckAsset = "Assets/Cards/Decks/PlayerStartingDeck.asset";
 
     static LegendsOfFurryProjectSetup()
     {
@@ -48,28 +49,17 @@ public static class LegendsOfFurryProjectSetup
         if (differs) EditorBuildSettings.scenes = expected;
     }
 
+    /// <summary>
+    /// 验证数据库内容和两个正式场景均可加载，供自动验收与人工菜单复用。
+    /// </summary>
     public static void ValidateProject()
     {
         EnsureScenes();
-        if (CardCatalog.All.Count != 61)
-            throw new System.InvalidOperationException($"卡牌数量应为61，实际为{CardCatalog.All.Count}。");
-        if (ClassCatalog.Get(HeroClass.Warrior) == null || ClassCatalog.Get(HeroClass.Priest) == null)
-            throw new System.InvalidOperationException("职业目录不完整。");
-
-        DeckData baseDeck = AssetDatabase.LoadAssetAtPath<DeckData>(StartingDeckAsset);
-        if (baseDeck == null)
-            throw new System.InvalidOperationException("未找到基础牌库 PlayerStartingDeck。");
-        CardData[] baseCards = baseDeck.CreateDrawPile().ToArray();
-        if (baseCards.Length != 10 ||
-            baseCards.Count(card => card.cardId == "hit_01") != 3 ||
-            baseCards.Count(card => card.cardId == "block_01") != 3 ||
-            baseCards.Count(card => card.cardId == "run_01") != 3 ||
-            baseCards.Count(card => card.cardId == "heal_01") != 1)
-            throw new System.InvalidOperationException("基础牌库应为3爪击、3格挡、3疾走、1疗愈。");
+        ContentPackage package = ContentBuildValidator.ValidatePublishedContent();
 
         EditorSceneManager.OpenScene(ClassScene, OpenSceneMode.Single);
         EditorSceneManager.OpenScene(BattleScene, OpenSceneMode.Single);
-        Debug.Log("LEGENDS_OF_FURRY_VALIDATION_OK: 5 classes, 61 equipment cards, 10 base cards, class-select and battle scenes loaded.");
+        Debug.Log($"LEGENDS_OF_FURRY_VALIDATION_OK: {package.ClassProfiles.Count} classes, {package.Cards.Count} database cards, class-select and battle scenes loaded.");
     }
 }
 #endif

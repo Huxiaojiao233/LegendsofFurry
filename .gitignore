@@ -2,6 +2,7 @@
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
+[Bb]in/
 [Bb]uild/
 [Bb]uilds/
 [Ll]ogs/
@@ -31,7 +32,10 @@ sysinfo.txt
 *.stackdump
 *.tmp
 *.bak
+*.db-shm
+*.db-wal
 *.swp
+ContentSource/Backups/
 .DS_Store
 Thumbs.db
 
