@@ -6,12 +6,11 @@ using LegendsOfFurry.Content.Contracts;
 
 namespace LegendsOfFurry.Content.Runtime
 {
-/// <summary>Deterministically composes a base snapshot with dependency-ordered external content layers.</summary>
+/// <summary>按依赖顺序把外部内容层确定性叠到基础快照上。</summary>
 public static class ContentPackageComposer
 {
     /// <summary>
-    /// Merges layers by load order. Stable-ID collisions are rejected unless the incoming pack explicitly declares
-    /// the exact kind and ID in its override list.
+    /// 按加载顺序合并各层。稳定 ID 冲突会被拒绝，除非后加载包在覆盖列表里明确声明了相同类型和 ID。
     /// </summary>
     public static ContentPackage Compose(ContentPackage basePackage, IEnumerable<ContentPackDefinition> packs)
     {
@@ -38,7 +37,7 @@ public static class ContentPackageComposer
         return result;
     }
 
-    /// <summary>Returns a dependency-safe deterministic order, using load order and ID only among ready packs.</summary>
+    /// <summary>返回依赖安全的确定性顺序；就绪包之间只按加载顺序和 ID 排序。</summary>
     public static IReadOnlyList<ContentPackDefinition> OrderPacks(IEnumerable<ContentPackDefinition> packs)
     {
         List<ContentPackDefinition> remaining = (packs ?? Array.Empty<ContentPackDefinition>()).ToList();

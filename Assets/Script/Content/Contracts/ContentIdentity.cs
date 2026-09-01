@@ -5,33 +5,33 @@ namespace LegendsOfFurry.Content.Contracts
 {
 
 /// <summary>
-/// Exposes the stable identity of a definition without imposing a shared serialized property name.
-/// Methods are used deliberately so JSON serializers do not add synthetic identity fields to schema v1.
+/// 暴露定义的稳定身份，但不强制共用同一个序列化属性名。
+/// 故意用方法而不是字段，避免 JSON 序列化器给 schema v1 额外写出身份字段。
 /// </summary>
 public interface IContentDefinition
 {
-    /// <summary>Returns the stable content kind used by registries and behavior ownership.</summary>
+    /// <summary>返回注册表和行为归属使用的稳定内容类型。</summary>
     string GetDefinitionKind();
 
-    /// <summary>Returns the stable, package-authored definition ID.</summary>
+    /// <summary>返回内容包编写的稳定定义 ID。</summary>
     string GetDefinitionId();
 }
 
 /// <summary>
-/// Connects a mutable runtime instance to the immutable definition that created it.
+/// 把可变运行时实例连接到创建它的不可变定义。
 /// </summary>
-/// <typeparam name="TDefinition">The definition type that owns the instance's static data.</typeparam>
+/// <typeparam name="TDefinition">拥有该实例静态数据的定义类型。</typeparam>
 public interface IContentInstance<out TDefinition> where TDefinition : IContentDefinition
 {
-    /// <summary>Gets the unique runtime identity of this instance.</summary>
+    /// <summary>获取本次运行时实例的唯一身份。</summary>
     string InstanceId { get; }
 
-    /// <summary>Gets the shared definition referenced by this instance.</summary>
+    /// <summary>获取该实例引用的共享定义。</summary>
     TDefinition Definition { get; }
 }
 
 /// <summary>
-/// Defines the stable ID grammar shared by the editor, publisher, runtime loader, and registries.
+/// 定义编辑器、发布器、运行时加载器和注册表共用的稳定 ID 语法。
 /// </summary>
 public static class ContentId
 {
@@ -39,10 +39,10 @@ public static class ContentId
         "must start with a lowercase letter and contain only lowercase letters, digits, '.', '_' or '-'";
 
     /// <summary>
-    /// Checks a candidate without allocating or depending on the current culture.
+    /// 检查候选 ID，不分配额外字符串，也不依赖当前区域设置。
     /// </summary>
-    /// <param name="value">The external or authored ID to validate.</param>
-    /// <returns>True when the value follows the schema v1 stable ID grammar.</returns>
+    /// <param name="value">需要校验的外部或策划编写 ID。</param>
+    /// <returns>符合 schema v1 稳定 ID 语法时返回 true。</returns>
     public static bool IsValid(string? value)
     {
         if (string.IsNullOrEmpty(value) || value[0] < 'a' || value[0] > 'z')
@@ -66,12 +66,12 @@ public static class ContentId
     }
 
     /// <summary>
-    /// Returns a validated ID or throws at the boundary where invalid external content enters runtime code.
+    /// 返回通过校验的 ID；无效外部内容进入运行时边界时立即抛出。
     /// </summary>
-    /// <param name="value">The candidate stable ID.</param>
-    /// <param name="parameterName">The parameter or field name included in the exception.</param>
-    /// <returns>The original ID after validation.</returns>
-    /// <exception cref="ArgumentException">Thrown when the candidate does not follow the shared grammar.</exception>
+    /// <param name="value">候选稳定 ID。</param>
+    /// <param name="parameterName">写入异常信息的参数或字段名。</param>
+    /// <returns>校验后的原始 ID。</returns>
+    /// <exception cref="ArgumentException">候选值不符合共用语法时抛出。</exception>
     public static string Require(string? value, string parameterName)
     {
         if (!IsValid(value))
@@ -83,7 +83,7 @@ public static class ContentId
     }
 }
 
-/// <summary>Stable definition and behavior-owner kinds used across package and runtime layers.</summary>
+/// <summary>内容包与运行时共用的定义类型和行为归属类型。</summary>
 public static class ContentDefinitionKinds
 {
     public const string Card = "card";
@@ -96,17 +96,17 @@ public static class ContentDefinitionKinds
     public const string Character = "character";
     public const string Equipment = "equipment";
 
-    /// <summary>Returns whether the key names a definition collection understood by package composition.</summary>
+    /// <summary>判断该 key 是否对应内容包合成所识别的定义集合。</summary>
     public static bool IsKnown(string kind) => kind == Card || kind == Status || kind == Class ||
         kind == Deck || kind == CardPool || kind == Rarity || kind == Asset ||
         kind == Character || kind == Equipment;
 
     /// <summary>
-    /// Checks whether a definition kind may own a behavior graph in the target architecture.
-    /// Character and equipment are reserved now so later schema phases do not invent new ownership semantics.
+    /// 判断该定义类型是否可以拥有行为图。
+    /// 角色和装备现在就预留，避免后续 schema 阶段另造一套归属语义。
     /// </summary>
-    /// <param name="kind">The authored owner kind.</param>
-    /// <returns>True for card, status, class, character, or equipment.</returns>
+    /// <param name="kind">策划编写的归属类型。</param>
+    /// <returns>卡牌、状态、职业、角色或装备时返回 true。</returns>
     public static bool CanOwnBehavior(string? kind)
     {
         return kind == Card || kind == Status || kind == Class ||
@@ -114,7 +114,7 @@ public static class ContentDefinitionKinds
     }
 }
 
-/// <summary>Stable external keys for the card zones supported by schema v1 effects.</summary>
+/// <summary>schema v1 效果支持的牌区稳定外部 key。</summary>
 public static class ContentCardZoneKeys
 {
     public const string Hand = "hand";
@@ -123,24 +123,24 @@ public static class ContentCardZoneKeys
     public const string Exhaust = "exhaust";
     public const string All = "all";
 
-    /// <summary>Checks whether a key names one concrete mutable card zone.</summary>
-    /// <param name="key">The authored zone key.</param>
-    /// <returns>True for hand, draw, discard, or exhaust.</returns>
+    /// <summary>判断该 key 是否对应一个具体可写牌区。</summary>
+    /// <param name="key">策划编写的牌区 key。</param>
+    /// <returns>hand、draw、discard 或 exhaust 时返回 true。</returns>
     public static bool IsConcrete(string? key)
     {
         return key == Hand || key == Draw || key == Discard || key == Exhaust;
     }
 
-    /// <summary>Checks whether a key names one concrete zone or the all-zones query.</summary>
-    /// <param name="key">The authored zone key.</param>
-    /// <returns>True for a concrete zone or all.</returns>
+    /// <summary>判断该 key 是具体牌区还是全部牌区查询。</summary>
+    /// <param name="key">策划编写的牌区 key。</param>
+    /// <returns>具体牌区或 all 时返回 true。</returns>
     public static bool IsConcreteOrAll(string? key)
     {
         return IsConcrete(key) || key == All;
     }
 }
 
-/// <summary>Stable equipment slots understood by the current battle HUD.</summary>
+/// <summary>当前战斗 HUD 识别的稳定装备槽位。</summary>
 public static class ContentEquipmentSlotKeys
 {
     public const string Weapon = "weapon";

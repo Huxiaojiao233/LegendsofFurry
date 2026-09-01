@@ -517,7 +517,7 @@ internal sealed class GameSettingsDefinitionDto
     };
 }
 
-/// <summary>Unity JSON DTO for a data-driven combatant.</summary>
+/// <summary>发布 JSON 中的数据驱动战斗单位。</summary>
 [Serializable]
 internal sealed class CharacterDefinitionDto
 {
@@ -551,7 +551,7 @@ internal sealed class CharacterDefinitionDto
     }
 }
 
-/// <summary>Unity JSON DTO for an equippable content item.</summary>
+/// <summary>发布 JSON 中的一件可装备内容。</summary>
 [Serializable]
 internal sealed class EquipmentDefinitionDto
 {
@@ -613,7 +613,7 @@ internal sealed class ContentCatalogPartRefDto
     public string sha256;
 }
 
-/// <summary>Physical external pack manifest stored beside its hash-protected catalog.</summary>
+/// <summary>与受哈希保护的 catalog 放在同一目录的实体外部包清单。</summary>
 [Serializable]
 internal sealed class ContentPackManifestDto
 {
@@ -629,7 +629,7 @@ internal sealed class ContentPackManifestDto
     public string catalogSha256;
 }
 
-/// <summary>Unity field DTO for optional semantic-version bounds on one pack dependency.</summary>
+/// <summary>某个包依赖的可选语义化版本上下界。</summary>
 [Serializable]
 internal sealed class ContentPackDependencyDefinitionDto
 {
@@ -645,7 +645,7 @@ internal sealed class ContentPackDependencyDefinitionDto
     };
 }
 
-/// <summary>Unity field DTO for one explicit definition replacement permission.</summary>
+/// <summary>针对某一类型和稳定 ID 的显式替换许可。</summary>
 [Serializable]
 internal sealed class ContentOverrideDefinitionDto
 {

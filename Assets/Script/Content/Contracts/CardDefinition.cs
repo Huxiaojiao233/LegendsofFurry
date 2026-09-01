@@ -28,10 +28,10 @@ public sealed class CardDefinition : IContentDefinition
     public List<CardPoolMembership> Pools { get; set; } = new List<CardPoolMembership>();
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
 
-    /// <summary>Returns the registry and behavior-owner kind for cards.</summary>
+    /// <summary>返回卡牌在注册表和行为归属中的类型。</summary>
     public string GetDefinitionKind() => ContentDefinitionKinds.Card;
 
-    /// <summary>Returns the stable card ID authored by the content package.</summary>
+    /// <summary>返回内容包编写的稳定卡牌 ID。</summary>
     public string GetDefinitionId() => CardId;
 }
 

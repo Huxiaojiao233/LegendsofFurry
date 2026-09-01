@@ -8,7 +8,7 @@ using LegendsOfFurry.Content.Contracts;
 
 namespace LegendsOfFurry.Content.Runtime
 {
-/// <summary>Result of composing the built-in snapshot with zero or more physical expansion packs.</summary>
+/// <summary>把内置快照与零个或多个实体扩展包合成后的结果。</summary>
 public sealed class ContentLoadResult
 {
     private readonly Dictionary<string, string> externalAssetPaths;
@@ -32,12 +32,12 @@ public sealed class ContentLoadResult
     public IReadOnlyList<ContentLoadDiagnostic> Diagnostics { get; }
     public string Fingerprint { get; }
 
-    /// <summary>Returns a validated absolute file path for an asset supplied by an external pack.</summary>
+    /// <summary>返回外部包提供资源的、已经校验过的绝对文件路径。</summary>
     public bool TryGetExternalAssetPath(string assetKey, out string path) =>
         externalAssetPaths.TryGetValue(assetKey ?? string.Empty, out path);
 }
 
-/// <summary>One physical pack search root and whether invalid content must abort startup.</summary>
+/// <summary>一个实体包搜索根目录，以及无效内容是否必须中止启动。</summary>
 public sealed class ContentPackRoot
 {
     public ContentPackRoot(string directory, bool required)
@@ -50,7 +50,7 @@ public sealed class ContentPackRoot
     public bool Required { get; }
 }
 
-/// <summary>Structured pack discovery or compatibility information suitable for logs and diagnostics UI.</summary>
+/// <summary>结构化的包发现或兼容性信息，适合写入日志和诊断界面。</summary>
 public sealed class ContentLoadDiagnostic
 {
     public ContentLoadDiagnostic(string severity, string packId, string path, string message)
@@ -67,7 +67,7 @@ public sealed class ContentLoadDiagnostic
     public string Message { get; }
 }
 
-/// <summary>Read-only diagnostics for one physical expansion pack included in the composed registry.</summary>
+/// <summary>已纳入合成注册表的某个实体扩展包的只读诊断信息。</summary>
 public sealed class ContentPackLoadInfo
 {
     internal ContentPackLoadInfo(ContentPackDefinition definition, string directory, bool required, string catalogHash)
@@ -84,20 +84,20 @@ public sealed class ContentPackLoadInfo
     public string CatalogHash { get; }
 }
 
-/// <summary>Discovers immediate pack directories, validates their manifests and assets, then composes them.</summary>
+/// <summary>发现直接子目录中的内容包，校验清单和资源，再把它们合成。</summary>
 public static class ContentPackLoader
 {
     public const int SupportedPackFormatVersion = 1;
     public const string ManifestFileName = "pack.json";
 
-    /// <summary>Loads a base published content root plus every pack found under the supplied roots.</summary>
+    /// <summary>加载一份已发布的基础内容根目录，以及各搜索根下发现的全部扩展包。</summary>
     public static ContentLoadResult Load(string baseContentRoot, IEnumerable<string> packRoots)
     {
         return Load(baseContentRoot, (packRoots ?? Array.Empty<string>())
             .Select(path => new ContentPackRoot(path, true)), Array.Empty<string>());
     }
 
-    /// <summary>Loads required and optional roots, skipping disabled or invalid optional packs with diagnostics.</summary>
+    /// <summary>加载必需和可选根目录；停用或无效的可选包会跳过并写入诊断。</summary>
     public static ContentLoadResult Load(
         string baseContentRoot,
         IEnumerable<ContentPackRoot> packRoots,
@@ -145,7 +145,7 @@ public static class ContentPackLoader
             ComputeFingerprint(basePackage, accepted));
     }
 
-    /// <summary>Reads the optional user setting that lists stable pack IDs to disable.</summary>
+    /// <summary>读取可选用户配置中需要停用的稳定包 ID 列表。</summary>
     public static IReadOnlyCollection<string> ReadDisabledPackIds(string settingsPath)
     {
         if (string.IsNullOrWhiteSpace(settingsPath) || !File.Exists(settingsPath)) return Array.Empty<string>();

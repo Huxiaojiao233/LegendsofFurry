@@ -6,7 +6,7 @@ using LegendsOfFurry.Content.Contracts;
 
 namespace LegendsOfFurry.Content.Runtime
 {
-/// <summary>Stable engine query keys that authored status, class, character, and equipment graphs may modify.</summary>
+/// <summary>状态、职业、角色和装备行为图可以修正的稳定引擎查询 key。</summary>
 public static class ContentRuleQueryKeys
 {
     public const string OutgoingAttackDamage = "query_outgoing_attack_damage";
@@ -30,7 +30,7 @@ public static class ContentRuleQueryKeys
     });
 }
 
-/// <summary>Mutable scalar/cancellation request passed through authored modifier and interceptor graphs.</summary>
+/// <summary>经过策划修正图和拦截图传递的可变数值/取消请求。</summary>
 public sealed class ContentRuleQuery
 {
     public ContentRuleQuery(string queryKey, Unit owner, Unit otherUnit, int value,
@@ -56,7 +56,7 @@ public sealed class ContentRuleQuery
     public ContentRuleQuerySession Session { get; }
 }
 
-/// <summary>Tracks once-per-execution and once-per-target modifier applications without content-specific state.</summary>
+/// <summary>跟踪每次执行一次、每个目标一次的修正应用，不保存内容特有状态。</summary>
 public sealed class ContentRuleQuerySession
 {
     private readonly HashSet<string> applied = new HashSet<string>(StringComparer.Ordinal);
@@ -71,7 +71,7 @@ public sealed class ContentRuleQuerySession
     }
 }
 
-/// <summary>Dispatches a rule query through every active authored owner in deterministic priority order.</summary>
+/// <summary>按确定性优先级，把规则查询分发给当前全部有效的策划归属。</summary>
 public static class ContentRuleQueryRuntime
 {
     public static ContentRuleQuery Evaluate(ContentRuleQuery query)

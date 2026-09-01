@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace LegendsOfFurry.Content.Contracts
 {
-/// <summary>Declares one externally supplied package layer and every definition it intentionally replaces.</summary>
+/// <summary>声明一层外部内容包，以及它明确要替换的全部定义。</summary>
 public sealed class ContentPackDefinition
 {
     public string PackId { get; set; } = string.Empty;
@@ -15,7 +15,7 @@ public sealed class ContentPackDefinition
     public ContentPackage Content { get; set; } = new ContentPackage();
 }
 
-/// <summary>Optional semantic-version bounds for one required expansion pack.</summary>
+/// <summary>某个必需扩展包的可选语义化版本上下界。</summary>
 public sealed class ContentPackDependencyDefinition
 {
     public string PackId { get; set; } = string.Empty;
@@ -23,7 +23,7 @@ public sealed class ContentPackDependencyDefinition
     public string MaximumVersionExclusive { get; set; } = string.Empty;
 }
 
-/// <summary>An explicit replacement permission for one kind and stable ID.</summary>
+/// <summary>针对某一类型和稳定 ID 的显式替换许可。</summary>
 public sealed class ContentOverrideDefinition
 {
     public string DefinitionKind { get; set; } = string.Empty;

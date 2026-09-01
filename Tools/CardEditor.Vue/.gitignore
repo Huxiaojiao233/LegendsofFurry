@@ -1,9 +1,0 @@
-node_modules/
-dist/
-dist-electron/
-release/
-release-v2/
-release-kit/
-release-kit-*/
-*.log
-public/blockly-media/

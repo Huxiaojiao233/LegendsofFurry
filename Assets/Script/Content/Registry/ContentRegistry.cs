@@ -142,29 +142,29 @@ public sealed class ContentRegistry
         return cardPools.TryGetValue(poolId ?? string.Empty, out pool);
     }
 
-    /// <summary>Finds a published rarity by stable ID.</summary>
-    /// <param name="rarityId">The stable rarity ID.</param>
-    /// <param name="rarity">The matching definition when found.</param>
-    /// <returns>True when the package contains the rarity.</returns>
+    /// <summary>按稳定 ID 查找已发布稀有度。</summary>
+    /// <param name="rarityId">稳定稀有度 ID。</param>
+    /// <param name="rarity">找到时返回对应定义。</param>
+    /// <returns>内容包包含该稀有度时返回 true。</returns>
     public bool TryGetRarity(string rarityId, out RarityDefinition rarity)
     {
         return rarities.TryGetValue(rarityId ?? string.Empty, out rarity);
     }
 
-    /// <summary>Finds a managed asset by stable key.</summary>
-    /// <param name="assetKey">The stable asset key.</param>
-    /// <param name="asset">The matching definition when found.</param>
-    /// <returns>True when the package contains the asset.</returns>
+    /// <summary>按稳定 Key 查找受管资源。</summary>
+    /// <param name="assetKey">稳定资源 Key。</param>
+    /// <param name="asset">找到时返回对应定义。</param>
+    /// <returns>内容包包含该资源时返回 true。</returns>
     public bool TryGetAsset(string assetKey, out AssetDefinition asset)
     {
         return assets.TryGetValue(assetKey ?? string.Empty, out asset);
     }
 
-    /// <summary>Finds an enabled data-driven character by stable ID.</summary>
+    /// <summary>按稳定 ID 查找已启用的数据驱动角色。</summary>
     public bool TryGetCharacter(string characterId, out CharacterDefinition character) =>
         characters.TryGetValue(characterId ?? string.Empty, out character);
 
-    /// <summary>Gets an enabled character or throws a diagnostic error for a broken runtime reference.</summary>
+    /// <summary>获取已启用角色；运行时引用损坏时抛出可定位错误。</summary>
     public CharacterDefinition GetCharacter(string characterId)
     {
         if (!TryGetCharacter(characterId, out CharacterDefinition character))
@@ -172,19 +172,19 @@ public sealed class ContentRegistry
         return character;
     }
 
-    /// <summary>Finds an enabled equipment definition by stable ID.</summary>
+    /// <summary>按稳定 ID 查找已启用装备定义。</summary>
     public bool TryGetEquipment(string equipmentId, out EquipmentDefinition definition) =>
         equipment.TryGetValue(equipmentId ?? string.Empty, out definition);
 
     /// <summary>
-    /// Builds one definition index while validating nulls, kind, stable ID format, and duplicates.
-    /// Disabled definitions are validated but omitted from the runtime lookup.
+    /// 构建一份定义索引，同时校验空值、类型、稳定 ID 格式和重复项。
+    /// 停用定义仍会校验，但不会进入运行时查找表。
     /// </summary>
-    /// <typeparam name="TDefinition">The concrete shared definition type.</typeparam>
-    /// <param name="definitions">All definitions of one package collection.</param>
-    /// <param name="isEnabled">The predicate deciding whether a valid definition is exposed at runtime.</param>
-    /// <param name="expectedKind">The collection's expected definition kind.</param>
-    /// <returns>An ordinal stable-ID index containing enabled definitions.</returns>
+    /// <typeparam name="TDefinition">具体的共享定义类型。</typeparam>
+    /// <param name="definitions">该内容集合的全部定义。</param>
+    /// <param name="isEnabled">决定有效定义是否暴露给运行时的谓词。</param>
+    /// <param name="expectedKind">该集合期望的定义类型。</param>
+    /// <returns>按序号比较的稳定 ID 索引，只含启用定义。</returns>
     private static Dictionary<string, TDefinition> BuildIndex<TDefinition>(
         IEnumerable<TDefinition> definitions,
         Func<TDefinition, bool> isEnabled,

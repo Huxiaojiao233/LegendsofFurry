@@ -55,7 +55,7 @@ public static class ContentRuntimeCapabilityValidator
         new[] { ContentTriggerKeys.OnUnitTurnStart, ContentTriggerKeys.OnUnitTurnEnd, ContentTriggerKeys.OnActivatedAbility }
             .Concat(ContentRuleQueryKeys.All);
 
-    /// <summary>Validates cross-definition references after base content and all expansion layers are composed.</summary>
+    /// <summary>合成基础内容和全部扩展层之后，校验跨定义引用。</summary>
     private static void ValidateReferences(ContentPackage package)
     {
         System.Collections.Generic.HashSet<string> cardIds = package.Cards.Where(item => item.Enabled)
@@ -107,13 +107,13 @@ public static class ContentRuntimeCapabilityValidator
             throw new InvalidDataException("基础战斗设置引用了不存在或未启用的角色。");
     }
 
-    /// <summary>Validates stable identity, behavior ownership, trigger support, and graph capabilities.</summary>
-    /// <param name="runtime">The graph runtime used for capability preflight.</param>
-    /// <param name="ownerLabel">The localized definition kind used in diagnostics.</param>
-    /// <param name="owner">The definition that owns the behavior collection.</param>
-    /// <param name="ownerEnabled">Whether enabled graphs must be executable.</param>
-    /// <param name="behaviors">The definition's behavior collection.</param>
-    /// <param name="allowedTriggers">The lifecycle triggers supported for this definition kind.</param>
+    /// <summary>校验稳定身份、行为归属、触发器支持和行为图能力。</summary>
+    /// <param name="runtime">用于能力预检的行为图运行时。</param>
+    /// <param name="ownerLabel">诊断用的本地化定义类型名。</param>
+    /// <param name="owner">拥有该行为集合的定义。</param>
+    /// <param name="ownerEnabled">启用状态下的行为图是否必须可执行。</param>
+    /// <param name="behaviors">该定义的行为集合。</param>
+    /// <param name="allowedTriggers">该定义类型支持的生命周期触发器。</param>
     private static void ValidateOwnerBehaviors(
         ContentBehaviorRuntime runtime,
         string ownerLabel,

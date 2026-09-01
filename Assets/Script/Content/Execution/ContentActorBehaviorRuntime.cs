@@ -3,7 +3,7 @@ using LegendsOfFurry.Content.Contracts;
 
 namespace LegendsOfFurry.Content.Runtime
 {
-/// <summary>Executes character and equipment graphs through the same owner-neutral rule executor.</summary>
+/// <summary>通过同一套与归属无关的规则执行器，运行角色和装备行为图。</summary>
 public static class ContentActorBehaviorRuntime
 {
     public static CardPlayResult Execute(Unit owner, string triggerKey, BoardClickController actionPoints)

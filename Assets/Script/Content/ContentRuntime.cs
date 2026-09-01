@@ -86,7 +86,7 @@ public static class ContentRuntime
         });
     }
 
-    /// <summary>Returns the validated external file path that supplied an overridden or added asset.</summary>
+    /// <summary>返回覆盖或新增资源所对应的、已经校验过的外部文件路径。</summary>
     public static bool TryGetExternalAssetPath(string assetKey, out string path)
     {
         path = null;

@@ -57,7 +57,7 @@ public static class ContentPackageLoader
             manifest.catalogSha256, manifest.schemaVersion, manifest.contentVersion);
     }
 
-    /// <summary>Loads one hash-protected catalog relative to its owning manifest directory.</summary>
+    /// <summary>相对所属清单目录加载一份带哈希保护的 catalog。</summary>
     internal static ContentPackage LoadCatalog(
         string ownerDirectory,
         string catalogFile,

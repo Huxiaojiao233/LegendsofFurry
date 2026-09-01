@@ -370,7 +370,7 @@ public sealed class ContentValueExpressionResolver
                AssignValue(owner.State.Get(expression.statusId), out value);
     }
 
-    /// <summary>Reads the stacks of the status instance that owns the currently executing modifier graph.</summary>
+    /// <summary>读取当前正在执行修正图的状态实例层数。</summary>
     private bool ResolveOwnerStatusStacks(ContentValueExpression expression, ContentCardExecutionContext context, Unit target, int depth, out int value)
     {
         value = context.Owner?.RuntimeInstance is RuntimeStatusInstance instance ? instance.Stacks : 0;

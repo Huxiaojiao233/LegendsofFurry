@@ -33,10 +33,10 @@ public sealed class CardPoolDefinition : IContentDefinition
     public bool Enabled { get; set; } = true;
     public int SortOrder { get; set; }
 
-    /// <summary>Returns the registry kind for card pools.</summary>
+    /// <summary>返回卡池在注册表中的类型。</summary>
     public string GetDefinitionKind() => ContentDefinitionKinds.CardPool;
 
-    /// <summary>Returns the stable card-pool ID.</summary>
+    /// <summary>返回稳定卡池 ID。</summary>
     public string GetDefinitionId() => PoolId;
 }
 
@@ -55,10 +55,10 @@ public sealed class StatusDefinition : IContentDefinition
     public bool Enabled { get; set; } = true;
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
 
-    /// <summary>Returns the registry and behavior-owner kind for statuses.</summary>
+    /// <summary>返回状态在注册表和行为归属中的类型。</summary>
     public string GetDefinitionKind() => ContentDefinitionKinds.Status;
 
-    /// <summary>Returns the stable status ID.</summary>
+    /// <summary>返回稳定状态 ID。</summary>
     public string GetDefinitionId() => StatusId;
 }
 
@@ -80,10 +80,10 @@ public sealed class DeckDefinition : IContentDefinition
     public bool Enabled { get; set; } = true;
     public List<DeckEntryDefinition> Entries { get; set; } = new List<DeckEntryDefinition>();
 
-    /// <summary>Returns the registry kind for fixed decks.</summary>
+    /// <summary>返回固定牌库在注册表中的类型。</summary>
     public string GetDefinitionKind() => ContentDefinitionKinds.Deck;
 
-    /// <summary>Returns the stable deck ID.</summary>
+    /// <summary>返回稳定牌库 ID。</summary>
     public string GetDefinitionId() => DeckId;
 }
 
@@ -112,10 +112,10 @@ public sealed class ClassProfileDefinition : IContentDefinition
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
     public List<ClassTraitDefinition> Traits { get; set; } = new List<ClassTraitDefinition>();
 
-    /// <summary>Returns the registry and behavior-owner kind for class profiles.</summary>
+    /// <summary>返回职业资料在注册表和行为归属中的类型。</summary>
     public string GetDefinitionKind() => ContentDefinitionKinds.Class;
 
-    /// <summary>Returns the stable class ID.</summary>
+    /// <summary>返回稳定职业 ID。</summary>
     public string GetDefinitionId() => ClassId;
 
     /// <summary>读取整数职业特性；缺失或格式无效时返回默认值。</summary>
@@ -169,7 +169,7 @@ public sealed class GameSettingsDefinition
     public string EnemyCharacterId { get; set; } = string.Empty;
 }
 
-/// <summary>Describes a data-driven combatant independently from its scene GameObject.</summary>
+/// <summary>描述一个由数据驱动、不依赖场景物体的战斗单位。</summary>
 public sealed class CharacterDefinition : IContentDefinition
 {
     public string CharacterId { get; set; } = string.Empty;
@@ -189,7 +189,7 @@ public sealed class CharacterDefinition : IContentDefinition
     public string GetDefinitionId() => CharacterId;
 }
 
-/// <summary>Describes one equippable content item and the card pool it contributes.</summary>
+/// <summary>描述一件可装备内容及其贡献的卡池。</summary>
 public sealed class EquipmentDefinition : IContentDefinition
 {
     public string EquipmentId { get; set; } = string.Empty;
@@ -217,10 +217,10 @@ public sealed class RarityDefinition : IContentDefinition
     public decimal DefaultWeight { get; set; } = 1m;
     public int SortOrder { get; set; }
 
-    /// <summary>Returns the registry kind for rarities.</summary>
+    /// <summary>返回稀有度在注册表中的类型。</summary>
     public string GetDefinitionKind() => ContentDefinitionKinds.Rarity;
 
-    /// <summary>Returns the stable rarity ID.</summary>
+    /// <summary>返回稳定稀有度 ID。</summary>
     public string GetDefinitionId() => RarityId;
 }
 
@@ -234,10 +234,10 @@ public sealed class AssetDefinition : IContentDefinition
     public string RelativePath { get; set; } = string.Empty;
     public string? Sha256 { get; set; }
 
-    /// <summary>Returns the registry kind for managed assets.</summary>
+    /// <summary>返回受管资源在注册表中的类型。</summary>
     public string GetDefinitionKind() => ContentDefinitionKinds.Asset;
 
-    /// <summary>Returns the stable managed-asset key.</summary>
+    /// <summary>返回稳定受管资源 Key。</summary>
     public string GetDefinitionId() => AssetKey;
 }
 }

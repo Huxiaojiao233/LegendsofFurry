@@ -4,17 +4,17 @@ using LegendsOfFurry.Content.Contracts;
 namespace LegendsOfFurry.Content.Runtime
 {
 /// <summary>
-/// Identifies the real definition and optional runtime instance that owns a behavior graph.
-/// This keeps status, class, character, and equipment behavior execution independent from cards.
+/// 标识真正拥有行为图的定义，以及可选的运行时实例。
+/// 这样状态、职业、角色和装备的行为执行可以不依赖卡牌。
 /// </summary>
 public sealed class ContentBehaviorOwner
 {
-    /// <summary>Creates a validated behavior owner at the runtime content boundary.</summary>
-    /// <param name="definition">The published definition that owns the graph.</param>
-    /// <param name="displayName">The authored display name used in diagnostics.</param>
-    /// <param name="runtimeInstance">The optional mutable instance associated with this execution.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the definition is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when the kind or ID is invalid.</exception>
+    /// <summary>在运行时内容边界创建经过校验的行为归属。</summary>
+    /// <param name="definition">拥有该行为图的已发布定义。</param>
+    /// <param name="displayName">诊断使用的策划显示名。</param>
+    /// <param name="runtimeInstance">本次执行关联的可选可变实例。</param>
+    /// <exception cref="ArgumentNullException">定义为空时抛出。</exception>
+    /// <exception cref="ArgumentException">类型或 ID 无效时抛出。</exception>
     public ContentBehaviorOwner(
         IContentDefinition definition,
         string displayName,
@@ -38,9 +38,9 @@ public sealed class ContentBehaviorOwner
     public IContentDefinition Definition { get; }
     public object RuntimeInstance { get; }
 
-    /// <summary>Creates an owner descriptor for a card runtime instance.</summary>
-    /// <param name="card">The card instance whose definition owns the graph.</param>
-    /// <returns>A validated card behavior owner.</returns>
+    /// <summary>为卡牌运行时实例创建归属描述。</summary>
+    /// <param name="card">其定义拥有行为图的卡牌实例。</param>
+    /// <returns>经过校验的卡牌行为归属。</returns>
     public static ContentBehaviorOwner FromCard(CardInstance card)
     {
         if (card == null)
@@ -51,28 +51,28 @@ public sealed class ContentBehaviorOwner
         return new ContentBehaviorOwner(card.Definition, card.Definition.DisplayName, card);
     }
 
-    /// <summary>Creates an owner descriptor for a status runtime instance.</summary>
-    /// <param name="definition">The published status definition.</param>
-    /// <param name="instance">The mutable status instance currently firing the trigger.</param>
-    /// <returns>A validated status behavior owner.</returns>
+    /// <summary>为状态运行时实例创建归属描述。</summary>
+    /// <param name="definition">已发布的状态定义。</param>
+    /// <param name="instance">当前正在触发的可变状态实例。</param>
+    /// <returns>经过校验的状态行为归属。</returns>
     public static ContentBehaviorOwner FromStatus(StatusDefinition definition, RuntimeStatusInstance instance)
     {
         return new ContentBehaviorOwner(definition, definition?.DisplayName, instance);
     }
 
-    /// <summary>Creates an owner descriptor for a class profile.</summary>
-    /// <param name="definition">The selected published class profile.</param>
-    /// <returns>A validated class behavior owner.</returns>
+    /// <summary>为职业资料创建归属描述。</summary>
+    /// <param name="definition">当前选中的已发布职业资料。</param>
+    /// <returns>经过校验的职业行为归属。</returns>
     public static ContentBehaviorOwner FromClass(ClassProfileDefinition definition)
     {
         return new ContentBehaviorOwner(definition, definition?.DisplayName);
     }
 
-    /// <summary>Creates an owner descriptor for a character definition and its scene unit instance.</summary>
+    /// <summary>为角色定义及其场景单位实例创建归属描述。</summary>
     public static ContentBehaviorOwner FromCharacter(CharacterDefinition definition, Unit instance) =>
         new ContentBehaviorOwner(definition, definition?.DisplayName, instance);
 
-    /// <summary>Creates an owner descriptor for an equipped item instance.</summary>
+    /// <summary>为已装备物品实例创建归属描述。</summary>
     public static ContentBehaviorOwner FromEquipment(EquipmentInstance instance)
     {
         if (instance == null) throw new ArgumentNullException(nameof(instance));

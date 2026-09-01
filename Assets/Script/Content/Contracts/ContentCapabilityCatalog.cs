@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace LegendsOfFurry.Content.Contracts
 {
-/// <summary>Stable trigger keys shared by authored behaviors and combat event publishers.</summary>
+/// <summary>策划行为图与战斗事件发布方共用的稳定触发器 key。</summary>
 public static class ContentTriggerKeys
 {
     public const string OnPlay = "on_play";

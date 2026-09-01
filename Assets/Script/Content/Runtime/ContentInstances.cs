@@ -3,7 +3,7 @@ using LegendsOfFurry.Content.Contracts;
 
 namespace LegendsOfFurry.Content.Runtime
 {
-/// <summary>A mutable equipped-item identity that remains bound to its immutable authored definition.</summary>
+/// <summary>可变的已装备物品身份，始终绑定到不可变的策划定义。</summary>
 public sealed class EquipmentInstance : IContentInstance<EquipmentDefinition>
 {
     public EquipmentInstance(EquipmentDefinition definition)

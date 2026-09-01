@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace LegendsOfFurry.Content.Runtime
 {
-/// <summary>Owns equipped item instances independently from the HUD that displays them.</summary>
+/// <summary>独立于 HUD 持有已装备物品实例。</summary>
 [DisallowMultipleComponent]
 public sealed class RuntimeEquipmentLoadout : MonoBehaviour
 {
@@ -37,7 +37,7 @@ public sealed class RuntimeEquipmentLoadout : MonoBehaviour
         return removed;
     }
 
-    /// <summary>Builds the selected class loadout; legacy pool trait keys remain a schema-v1 compatibility fallback.</summary>
+    /// <summary>按所选职业组装装备栏；旧卡池特性 key 仍作为 schema v1 兼容回退。</summary>
     public void Configure(ClassProfileDefinition profile)
     {
         slots.Clear();

@@ -63,24 +63,24 @@ public sealed class ContentCardExecutionContext
     }
 
     /// <summary>
-    /// Creates an execution context for any real behavior owner, including statuses and class profiles.
-    /// Card-only selectors remain unavailable when the owner is not a card.
+    /// 为任意真实行为归属创建执行上下文，包括状态和职业资料。
+    /// 归属不是卡牌时，仅卡牌可用的选择器保持不可用。
     /// </summary>
-    /// <param name="owner">The definition and optional instance that own the graph.</param>
-    /// <param name="source">The unit causing the behavior.</param>
-    /// <param name="selectedUnit">The optional selected unit.</param>
-    /// <param name="selectedCell">The optional selected board cell.</param>
-    /// <param name="direction">The optional selected direction.</param>
-    /// <param name="hand">The optional card draw and zone service.</param>
-    /// <param name="actionPoints">The optional action point service.</param>
-    /// <param name="result">The shared execution result.</param>
-    /// <param name="enablePresentation">Whether presentation-only effects may run.</param>
-    /// <param name="actionPointsBefore">Action points before this execution, or -1 when unknown.</param>
-    /// <param name="manaBefore">Mana before this execution, or -1 when unknown.</param>
-    /// <param name="spentActionPoints">Action points already committed by the caller.</param>
-    /// <param name="spentMana">Mana already committed by the caller.</param>
-    /// <param name="randomSource">The optional deterministic random source.</param>
-    /// <param name="targetQueryService">The optional unit and card target query service.</param>
+    /// <param name="owner">拥有该行为图的定义及可选实例。</param>
+    /// <param name="source">引发该行为的单位。</param>
+    /// <param name="selectedUnit">可选的已选单位。</param>
+    /// <param name="selectedCell">可选的已选地块。</param>
+    /// <param name="direction">可选的已选方向。</param>
+    /// <param name="hand">可选的抽牌和牌区服务。</param>
+    /// <param name="actionPoints">可选的行动点服务。</param>
+    /// <param name="result">共享执行结果。</param>
+    /// <param name="enablePresentation">是否允许纯表现效果运行。</param>
+    /// <param name="actionPointsBefore">本次执行前的行动点，未知时为 -1。</param>
+    /// <param name="manaBefore">本次执行前的法力，未知时为 -1。</param>
+    /// <param name="spentActionPoints">调用方已经扣除的行动点。</param>
+    /// <param name="spentMana">调用方已经扣除的法力。</param>
+    /// <param name="randomSource">可选的确定性随机源。</param>
+    /// <param name="targetQueryService">可选的单位与卡牌目标查询服务。</param>
     public ContentCardExecutionContext(
         ContentBehaviorOwner owner,
         Unit source,
@@ -238,7 +238,7 @@ public sealed class ContentCardExecutionContext
         return target != null && damageRecords.Any(record => record.Target == target && record.KilledTarget);
     }
 
-    /// <summary>Applies authored outgoing-damage and hit-count rule queries.</summary>
+    /// <summary>应用策划编写的出场伤害和命中次数规则查询。</summary>
     /// <param name="target">当前伤害目标。</param>
     /// <param name="baseAmount">行为图计算出的基础伤害。</param>
     /// <param name="amount">应用锋利、恍惚、心火和剑蓄力后的每段伤害。</param>
@@ -258,7 +258,7 @@ public sealed class ContentCardExecutionContext
         return Math.Max(0, hits.Value);
     }
 
-    /// <summary>Dispatches the generic post-attack lifecycle query once per card execution.</summary>
+    /// <summary>每张卡执行一次，分发通用攻击后生命周期查询。</summary>
     internal void FinishAttackModifiers()
     {
         if (Source == null || Card?.Definition?.IsAttack != true) return;
@@ -369,13 +369,13 @@ public static class ContentCardEffectExecutor
     }
 
     /// <summary>
-    /// Verifies one real definition owner's trigger without converting it into a synthetic card.
+    /// 预检某个真实定义归属的触发器，不会把它伪装成一张合成卡牌。
     /// </summary>
-    /// <param name="ownerKind">The definition kind expected on every behavior.</param>
-    /// <param name="ownerId">The stable definition ID expected on every behavior.</param>
-    /// <param name="sourceBehaviors">All behavior graphs owned by the definition.</param>
-    /// <param name="triggerKey">The lifecycle trigger to preflight.</param>
-    /// <returns>True when at least one matching graph exists and every graph is executable.</returns>
+    /// <param name="ownerKind">每条行为应携带的定义类型。</param>
+    /// <param name="ownerId">每条行为应携带的稳定定义 ID。</param>
+    /// <param name="sourceBehaviors">该定义拥有的全部行为图。</param>
+    /// <param name="triggerKey">需要预检的生命周期触发器。</param>
+    /// <returns>至少存在一张匹配行为图，且每张图都可执行时返回 true。</returns>
     public static bool CanExecuteOwnedTrigger(
         string ownerKind,
         string ownerId,
@@ -517,12 +517,12 @@ public static class ContentCardEffectExecutor
     }
 
     /// <summary>
-    /// Executes behavior graphs belonging to the context's real definition owner.
+    /// 执行上下文中真实定义归属所拥有的行为图。
     /// </summary>
-    /// <param name="context">The shared execution context carrying the validated owner.</param>
-    /// <param name="sourceBehaviors">All graphs authored on that owner definition.</param>
-    /// <param name="triggerKey">The lifecycle trigger being dispatched.</param>
-    /// <returns>True when all matching graphs succeed or pause for supported interaction.</returns>
+    /// <param name="context">携带已校验归属的共享执行上下文。</param>
+    /// <param name="sourceBehaviors">该归属定义上编写的全部行为图。</param>
+    /// <param name="triggerKey">正在分发的生命周期触发器。</param>
+    /// <returns>全部匹配行为图成功，或因受支持交互而暂停时返回 true。</returns>
     public static bool TryExecuteOwnedTrigger(
         ContentCardExecutionContext context,
         IEnumerable<BehaviorDefinition> sourceBehaviors,
