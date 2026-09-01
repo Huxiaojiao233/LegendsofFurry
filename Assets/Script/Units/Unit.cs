@@ -18,7 +18,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
     [SerializeField] private UnitFaction faction = UnitFaction.Player;
 
     [Header("棋子高度")]
-    [SerializeField] private float heightOffset = 0.2f;
+    [SerializeField] private float heightOffset = 0f;
 
     [Header("移动动画")]
     [SerializeField] private float moveDuration = 0.35f;
@@ -159,8 +159,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
             return;
         }
 
-        Vector3 targetPosition = targetCell.transform.position;
-        targetPosition.y += heightOffset;
+        Vector3 targetPosition = StandPositionOn(targetCell);
         transform.position = targetPosition;
 
         Vector2Int previous = Position;
@@ -184,8 +183,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
             return false;
         }
 
-        Vector3 targetPosition = targetCell.transform.position;
-        targetPosition.y += heightOffset;
+        Vector3 targetPosition = StandPositionOn(targetCell);
 
         Vector2Int previous = Position;
         Position = targetCoordinate;
@@ -427,6 +425,17 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
         {
             armorText.text = armor.ToString();
         }
+    }
+
+    /// <summary>棋子轴心在底部中心，站到格子渲染包围盒顶面。</summary>
+    private Vector3 StandPositionOn(BoardCell cell)
+    {
+        Vector3 position = cell.transform.position;
+        Renderer renderer = cell.GetComponent<Renderer>();
+        if (renderer == null) renderer = cell.GetComponentInChildren<Renderer>();
+        position.y = renderer != null ? renderer.bounds.max.y : position.y;
+        position.y += heightOffset;
+        return position;
     }
 
     private void OnValidate()

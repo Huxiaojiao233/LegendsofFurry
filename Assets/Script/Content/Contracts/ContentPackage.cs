@@ -167,6 +167,7 @@ public sealed class GameSettingsDefinition
     public int BaseMoveSteps { get; set; } = 2;
     public string PlayerCharacterId { get; set; } = string.Empty;
     public string EnemyCharacterId { get; set; } = string.Empty;
+    public string DefaultWorldId { get; set; } = "demo";
 }
 
 /// <summary>描述一个由数据驱动、不依赖场景物体的战斗单位。</summary>

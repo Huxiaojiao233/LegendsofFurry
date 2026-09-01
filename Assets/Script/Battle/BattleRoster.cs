@@ -49,10 +49,62 @@ public sealed class BattleRoster : MonoBehaviour
         ClearScenePlaceholders();
         BattleEncounterConfig config = FindAnyObjectByType<BattleEncounterConfig>();
         GameSettingsDefinition settings = ContentRuntime.Registry.GameSettings;
+        string[] runEnemies = ResolveRunEnemyIds();
         SpawnSide(true, ResolveIds(true, config != null ? config.AllyCharacterIds : null, settings.PlayerCharacterId, MaximumAllies),
             config != null ? config.AllySpawnCells : null, new Vector2Int(3, 2), board);
-        SpawnSide(false, ResolveIds(false, config != null ? config.EnemyCharacterIds : null, settings.EnemyCharacterId, 8),
+        SpawnSide(false, ResolveIds(false, runEnemies ?? (config != null ? config.EnemyCharacterIds : null), settings.EnemyCharacterId, 8),
             config != null ? config.EnemySpawnCells : null, new Vector2Int(5, 6), board);
+    }
+
+    /// <summary>大地图冒险：己方放在当前关卡中心，仅在需要开战时刷敌人。</summary>
+    public void SpawnRunParty(Vector2Int allyCell, bool spawnEnemies, Vector2Int enemyCell)
+    {
+        if (!ContentRuntime.IsLoaded)
+        {
+            Debug.LogError($"战斗编制无法读取内容包：{ContentRuntime.LoadError}", this);
+            return;
+        }
+
+        BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
+        if (board == null)
+        {
+            Debug.LogError("战斗场景缺少棋盘，无法放置棋子。", this);
+            return;
+        }
+
+        ClearScenePlaceholders();
+        GameSettingsDefinition settings = ContentRuntime.Registry.GameSettings;
+        SpawnSide(true, ResolveIds(true, null, settings.PlayerCharacterId, MaximumAllies),
+            null, allyCell, board);
+        if (spawnEnemies)
+            SpawnEnemiesAt(enemyCell);
+    }
+
+    /// <summary>走进战斗关后在当前 10x10 里生成敌人。</summary>
+    public void SpawnEnemiesAt(Vector2Int enemyCell)
+    {
+        BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
+        if (board == null || !ContentRuntime.IsLoaded) return;
+        ClearEnemies();
+        GameSettingsDefinition settings = ContentRuntime.Registry.GameSettings;
+        string[] runEnemies = ResolveRunEnemyIds();
+        SpawnSide(false, ResolveIds(false, runEnemies, settings.EnemyCharacterId, 8),
+            null, enemyCell, board);
+    }
+
+    /// <summary>战斗结束后清掉敌人棋子，玩家留在原格。</summary>
+    public void ClearEnemies()
+    {
+        BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            Unit unit = enemies[i];
+            if (unit == null) continue;
+            board?.RemoveOccupant(unit);
+            Destroy(unit.gameObject);
+        }
+
+        enemies.Clear();
     }
 
     /// <summary>是否还有存活的己方单位。</summary>
@@ -145,6 +197,17 @@ public sealed class BattleRoster : MonoBehaviour
         }
 
         return ids;
+    }
+
+    private static string[] ResolveRunEnemyIds()
+    {
+        if (!RunSession.HasActive) return null;
+        if (!WorldCatalog.TryGet(RunSession.Current.worldId, out WorldDefinition world) &&
+            (world = WorldCatalog.Default) == null) return null;
+        if (!WorldCatalog.TryGetStage(world, RunSession.Current.currentStageId, out StageDefinition stage))
+            return null;
+        if (stage.EnemyCharacterIds == null || stage.EnemyCharacterIds.Count == 0) return null;
+        return stage.EnemyCharacterIds.ToArray();
     }
 
     private static bool HasLiving(List<Unit> units)

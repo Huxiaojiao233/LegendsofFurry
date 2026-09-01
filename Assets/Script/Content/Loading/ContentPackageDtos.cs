@@ -506,6 +506,7 @@ internal sealed class GameSettingsDefinitionDto
     public int baseMoveSteps;
     public string playerCharacterId;
     public string enemyCharacterId;
+    public string defaultWorldId;
 
     /// <summary>将基础战斗参数映射到共享合同。</summary>
     public GameSettingsDefinition ToContract() => new GameSettingsDefinition
@@ -513,7 +514,8 @@ internal sealed class GameSettingsDefinitionDto
         HandLimit = handLimit, StartingHandSize = startingHandSize, DrawPerTurn = drawPerTurn,
         BaseActionPoints = baseActionPoints, BaseMoveSteps = baseMoveSteps,
         PlayerCharacterId = playerCharacterId ?? string.Empty,
-        EnemyCharacterId = enemyCharacterId ?? string.Empty
+        EnemyCharacterId = enemyCharacterId ?? string.Empty,
+        DefaultWorldId = string.IsNullOrWhiteSpace(defaultWorldId) ? "demo" : defaultWorldId
     };
 }
 

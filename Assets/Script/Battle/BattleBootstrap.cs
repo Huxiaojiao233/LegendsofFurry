@@ -32,6 +32,8 @@ public static class RuntimeSceneBootstrap
     {
         if (sceneName == "S_ClassSelect" && Object.FindAnyObjectByType<ClassSelectionController>() == null)
             new GameObject("ClassSelectionController").AddComponent<ClassSelectionController>();
+        if (sceneName == "S_World" && Object.FindAnyObjectByType<WorldMapController>() == null)
+            new GameObject("WorldMapController").AddComponent<WorldMapController>();
         if (sceneName == "S_Battle" && Object.FindAnyObjectByType<BattleBootstrap>() == null)
             new GameObject("BattleBootstrap").AddComponent<BattleBootstrap>();
     }
@@ -50,12 +52,36 @@ public class BattleBootstrap : MonoBehaviour
         }
 
         BattleRoster roster = GetComponent<BattleRoster>() ?? gameObject.AddComponent<BattleRoster>();
-        roster.SpawnEncounter();
+        WorldPlaySession worldSession = null;
+        if (RunSession.HasActive)
+        {
+            BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
+            worldSession = GetComponent<WorldPlaySession>() ?? gameObject.AddComponent<WorldPlaySession>();
+            worldSession.Bind(board);
+            roster.SpawnRunParty(worldSession.AllySpawnCell, worldSession.ShouldStartCombat, worldSession.EnemySpawnCell);
+        }
+        else
+        {
+            roster.SpawnEncounter();
+        }
+
         Unit player = roster.PrimaryAlly;
         Unit enemy = roster.PrimaryEnemy;
-        if (player == null || enemy == null)
+        if (player == null)
+        {
+            Debug.LogError("战斗编制未能生成己方角色。", this);
+            return;
+        }
+
+        if (worldSession == null && enemy == null)
         {
             Debug.LogError("战斗编制未能生成至少一名己方和一名敌人。", this);
+            return;
+        }
+
+        if (worldSession != null && worldSession.ShouldStartCombat && enemy == null)
+        {
+            Debug.LogError("当前关卡需要战斗，但没有生成敌人。", this);
             return;
         }
 
@@ -73,17 +99,20 @@ public class BattleBootstrap : MonoBehaviour
                 .Configure(profile);
         }
 
+        if (RunSession.HasActive)
+            player.Revive(Mathf.Max(1, RunSession.Current.health));
+
         BattleFlow flow = FindAnyObjectByType<BattleFlow>();
         flow?.ConfigureCardsPerTurn(ContentRuntime.Registry.GameSettings.DrawPerTurn);
         flow?.BindCombatants(player, enemy);
 
         SetText("T_Self_Name", player.DisplayName);
-        SetText("T_Enemy_Name", FormatEnemyNames(roster));
+        SetText("T_Enemy_Name", enemy != null ? FormatEnemyNames(roster) : (worldSession != null ? "探索" : string.Empty));
 
         Canvas canvas = null;
         foreach (Canvas candidate in FindObjectsByType<Canvas>())
             if (candidate.renderMode != RenderMode.WorldSpace) { canvas = candidate; break; }
-        if (canvas != null && canvas.GetComponent<BattleRuntimeHud>() == null)
+        if (canvas != null && FindAnyObjectByType<BattleRuntimeHud>() == null)
             canvas.gameObject.AddComponent<BattleRuntimeHud>();
 
         Camera mainCamera = Camera.main;

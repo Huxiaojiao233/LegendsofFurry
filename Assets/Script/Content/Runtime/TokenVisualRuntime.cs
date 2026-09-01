@@ -16,6 +16,16 @@ public static class TokenVisualRuntime
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static readonly Color FallbackFrame = new Color(0.35f, 0.35f, 0.38f, 1f);
 
+    /// <summary>给 UI Image 用的头像 Sprite，走内容包 portrait key。</summary>
+    public static Sprite LoadPortraitSprite(CharacterDefinition definition)
+    {
+        if (definition == null) return null;
+        string key = definition.PortraitKey;
+        if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(definition.CharacterId))
+            key = "portrait." + definition.CharacterId;
+        return RuntimeCardAdapter.LoadManagedSprite(key, "portrait");
+    }
+
     /// <summary>按角色定义刷新棋子顶面贴图和侧面外框颜色。</summary>
     public static void Apply(Component host, CharacterDefinition definition)
     {
@@ -63,8 +73,14 @@ public static class TokenVisualRuntime
     private static void ApplyToMesh(GameObject host, Texture2D portrait, Color? frameColor)
     {
         CombatantTokenFactory.EnsureTokenComponents(host);
-        MeshRenderer renderer = host.GetComponent<MeshRenderer>();
+        MeshRenderer renderer = CombatantTokenFactory.ResolveVisualRenderer(host);
         if (renderer == null) return;
+
+        if (CombatantTokenFactory.HasAuthoredVisual(host))
+        {
+            ApplyToAuthoredRenderer(renderer, portrait, frameColor);
+            return;
+        }
 
         Material[] previous = renderer.sharedMaterials;
         Material frame = TakeRuntimeMaterial(previous, 0) ?? CreateUnlit("Frame");
@@ -74,6 +90,22 @@ public static class TokenVisualRuntime
         AssignTexture(face, portrait);
         AssignColor(face, Color.white);
         renderer.sharedMaterials = new[] { frame, face };
+        renderer.enabled = true;
+    }
+
+    /// <summary>手摆棋子保留 ProBuilder 材质，只改顶面贴图和可选外框颜色。</summary>
+    private static void ApplyToAuthoredRenderer(MeshRenderer renderer, Texture2D portrait, Color? frameColor)
+    {
+        Material[] materials = renderer.materials;
+        if (materials == null || materials.Length == 0) return;
+        if (frameColor.HasValue) AssignColor(materials[0], frameColor.Value);
+        int faceIndex = materials.Length >= 2 ? 1 : 0;
+        if (portrait != null)
+        {
+            AssignTexture(materials[faceIndex], portrait);
+            AssignColor(materials[faceIndex], Color.white);
+        }
+
         renderer.enabled = true;
     }
 

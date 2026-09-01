@@ -4,10 +4,11 @@ using TMPro;
 using UnityEngine;
 using LegendsOfFurry.Content.Runtime;
 using LegendsOfFurry.Content.Contracts;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-public enum BattlePhase { PlayerTurn, EnemyTurn, GameOver }
+public enum BattlePhase { Exploration, PlayerTurn, EnemyTurn, GameOver }
 
 public class BattleFlow : MonoBehaviour
 {
@@ -48,6 +49,8 @@ public class BattleFlow : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        if (WorldPlaySession.Instance != null && WorldPlaySession.Instance.IsExploring)
+            phase = BattlePhase.Exploration;
         ResolveReferences();
         ApplyContentConfiguration();
     }
@@ -57,6 +60,61 @@ public class BattleFlow : MonoBehaviour
         ResolveReferences();
         SubscribeRoster();
         yield return null;
+        if (WorldPlaySession.Instance != null && WorldPlaySession.Instance.IsExploring)
+        {
+            phase = BattlePhase.Exploration;
+            SetEndRoundInteractable(false);
+            yield break;
+        }
+
+        yield return BeginCombatRoutine(false);
+    }
+
+    /// <summary>从探索走进战斗关后开始回合循环。</summary>
+    public void BeginWorldCombat()
+    {
+        if (resultOverlay != null)
+        {
+            Destroy(resultOverlay);
+            resultOverlay = null;
+        }
+
+        ResolveReferences();
+        UnsubscribeRoster();
+        player = BattleUnits.PrimaryAlly ?? player;
+        enemy = BattleRoster.Instance != null ? BattleRoster.Instance.PrimaryEnemy : enemy;
+        SubscribeRoster();
+        round = 1;
+        isBusy = false;
+        StartCoroutine(BeginCombatRoutine(true));
+    }
+
+    /// <summary>打赢后不切场景，回到同一棋盘上的探索镜头。</summary>
+    public void EnterExplorationPhase()
+    {
+        if (resultOverlay != null)
+        {
+            Destroy(resultOverlay);
+            resultOverlay = null;
+        }
+
+        UnsubscribeRoster();
+        phase = BattlePhase.Exploration;
+        isBusy = false;
+        round = 1;
+        player = BattleUnits.PrimaryAlly ?? player;
+        enemy = null;
+        SubscribeRoster();
+        SetEndRoundInteractable(false);
+        boardClickController?.ClearSelection();
+        handCardSystem?.CancelTargeting();
+    }
+
+    private IEnumerator BeginCombatRoutine(bool drawOpeningHand)
+    {
+        phase = BattlePhase.PlayerTurn;
+        yield return null;
+        if (drawOpeningHand) handCardSystem?.DrawOpeningHand();
         bool frozen = BeginPlayerTurnState(false);
         SetEndRoundInteractable(true);
         if (frozen) StartCoroutine(SkipFrozenTurn());
@@ -68,6 +126,45 @@ public class BattleFlow : MonoBehaviour
         if (Instance == this) Instance = null;
         UnsubscribeRoster();
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private void Update()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || !keyboard.f8Key.wasPressedThisFrame) return;
+        WoundEnemiesForTest();
+    }
+
+    /// <summary>战斗中把存活敌人生命打到 1，方便测结算；编辑器 / Development 包可用。</summary>
+    private void WoundEnemiesForTest()
+    {
+        if (phase != BattlePhase.PlayerTurn && phase != BattlePhase.EnemyTurn)
+        {
+            Debug.Log("当前不在战斗中，F8 不会扣血。", this);
+            return;
+        }
+
+        int wounded = 0;
+        BattleRoster roster = BattleRoster.Instance;
+        if (roster != null)
+        {
+            for (int i = 0; i < roster.Enemies.Count; i++)
+            {
+                Unit unit = roster.Enemies[i];
+                if (unit == null || !unit.IsAlive) continue;
+                unit.Revive(1);
+                wounded++;
+            }
+        }
+        else if (enemy != null && enemy.IsAlive)
+        {
+            enemy.Revive(1);
+            wounded = 1;
+        }
+
+        Debug.Log(wounded > 0 ? $"测试：已将 {wounded} 名敌人生命设为 1。" : "测试：没有可扣血的敌人。", this);
+    }
+#endif
 
     public void RequestEndPlayerTurn()
     {
@@ -263,7 +360,7 @@ public class BattleFlow : MonoBehaviour
 
     private void HandleUnitDied(Unit unit)
     {
-        if (phase == BattlePhase.GameOver) return;
+        if (phase == BattlePhase.GameOver || phase == BattlePhase.Exploration) return;
         BattleRoster roster = BattleRoster.Instance;
         if (roster != null)
         {
@@ -283,46 +380,87 @@ public class BattleFlow : MonoBehaviour
         ShowResult(unit != null && unit.Faction == UnitFaction.Enemy);
     }
 
-    /// <summary>创建白底深色文字的战斗结果弹窗，并提供重新战斗与返回按钮。</summary>
+    /// <summary>屏幕中央一条简短胜负提示，点任意处关闭并退出战斗。</summary>
     private void ShowResult(bool playerWon)
     {
         if (resultOverlay != null) return;
         overlayCanvas ??= FindScreenCanvas();
         if (overlayCanvas == null) return;
-        resultOverlay = new GameObject("P_BattleResult", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        if (playerWon && RunSession.HasActive) CaptureRunAfterBattle(true);
+
+        resultOverlay = new GameObject(
+            "P_BattleResult", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         resultOverlay.transform.SetParent(overlayCanvas.transform, false);
+        resultOverlay.transform.SetAsLastSibling();
         RectTransform root = (RectTransform)resultOverlay.transform;
-        root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
-        resultOverlay.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.98f);
-        TMP_Text title = CreateText("ResultTitle", resultOverlay.transform, 60f);
-        title.rectTransform.anchorMin = title.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-        title.rectTransform.sizeDelta = new Vector2(700f, 100f);
-        title.rectTransform.anchoredPosition = new Vector2(0f, 70f);
-        Unit winner = playerWon ? player : enemy;
-        if (BattleRoster.Instance != null)
-        {
-            winner = playerWon ? BattleRoster.Instance.PrimaryAlly : BattleRoster.Instance.PrimaryEnemy;
-        }
-        title.text = $"{(winner != null ? winner.DisplayName : string.Empty)}胜利";
+        root.anchorMin = Vector2.zero;
+        root.anchorMax = Vector2.one;
+        root.offsetMin = root.offsetMax = Vector2.zero;
+        Image catcher = resultOverlay.GetComponent<Image>();
+        catcher.color = new Color(0f, 0f, 0f, 0.18f);
+        catcher.raycastTarget = true;
+
+        GameObject banner = new GameObject("Banner", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        banner.transform.SetParent(resultOverlay.transform, false);
+        RectTransform bannerRect = (RectTransform)banner.transform;
+        bannerRect.anchorMin = bannerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        bannerRect.sizeDelta = new Vector2(240f, 64f);
+        Image bannerImage = banner.GetComponent<Image>();
+        bannerImage.color = new Color(0.08f, 0.09f, 0.12f, 0.92f);
+        bannerImage.raycastTarget = false;
+
+        TMP_Text title = CreateText("ResultTitle", banner.transform, 34f);
+        title.rectTransform.anchorMin = Vector2.zero;
+        title.rectTransform.anchorMax = Vector2.one;
+        title.rectTransform.offsetMin = title.rectTransform.offsetMax = Vector2.zero;
+        title.text = playerWon ? "胜利" : "失败";
+        title.color = Color.white;
         title.alignment = TextAlignmentOptions.Center;
-        Button retry = CreateButton("重新战斗", new Vector2(-130f, -45f));
-        retry.onClick.AddListener(() => SceneManager.LoadScene("S_Battle"));
-        Button classes = CreateButton("返回职业选择", new Vector2(130f, -45f));
-        classes.onClick.AddListener(() => SceneManager.LoadScene("S_ClassSelect"));
+
+        Button click = resultOverlay.GetComponent<Button>();
+        click.transition = Selectable.Transition.None;
+        click.onClick.AddListener(() => DismissResult(playerWon));
     }
 
-    /// <summary>创建战斗结果弹窗中的浅灰按钮和深色居中文字。</summary>
-    private Button CreateButton(string label, Vector2 position)
+    private void DismissResult(bool playerWon)
     {
-        GameObject obj = new GameObject(label, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-        obj.transform.SetParent(resultOverlay.transform, false);
-        RectTransform rect = (RectTransform)obj.transform;
-        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(230f, 58f); rect.anchoredPosition = position;
-        obj.GetComponent<Image>().color = new Color(0.88f, 0.88f, 0.9f, 1f);
-        TMP_Text text = CreateText("Label", obj.transform, 24f);
-        text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one; text.rectTransform.offsetMin = text.rectTransform.offsetMax = Vector2.zero;
-        text.text = label; text.alignment = TextAlignmentOptions.Center;
-        return obj.GetComponent<Button>();
+        if (resultOverlay != null)
+        {
+            Destroy(resultOverlay);
+            resultOverlay = null;
+        }
+
+        if (RunSession.HasActive)
+        {
+            if (playerWon)
+            {
+                if (WorldPlaySession.Instance != null)
+                    WorldPlaySession.Instance.FinishCombatVictory();
+                else
+                    SceneManager.LoadScene("S_Battle");
+                return;
+            }
+
+            RunSession.Clear();
+            SceneManager.LoadScene("S_Menu");
+            return;
+        }
+
+        SceneManager.LoadScene("S_ClassSelect");
+    }
+
+    private void CaptureRunAfterBattle(bool won)
+    {
+        if (!won || !RunSession.HasActive) return;
+        WorldDefinition world = null;
+        WorldCatalog.TryGet(RunSession.Current.worldId, out world);
+        world ??= WorldCatalog.Default;
+        WorldCatalog.TryGetStage(world, RunSession.Current.currentStageId, out StageDefinition stage);
+        Unit ally = BattleRoster.Instance != null ? BattleRoster.Instance.PrimaryAlly : player;
+        List<string> deck = handCardSystem != null ? handCardSystem.ExportOwnedCardIds() : new List<string>(RunSession.Current.deckCardIds);
+        int health = ally != null ? ally.CurrentHealth : RunSession.Current.health;
+        int maxHealth = ally != null ? ally.MaxHealth : RunSession.Current.maxHealth;
+        RunSession.CompleteCurrentStage(health, maxHealth, deck, stage);
     }
 
     private void ResolveReferences()

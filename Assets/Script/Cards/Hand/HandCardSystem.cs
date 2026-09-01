@@ -74,10 +74,50 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
         ResolveReferences();
         BuildStartingDeck();
         Shuffle(drawPile);
+        bool exploring = WorldPlaySession.Instance != null && WorldPlaySession.Instance.IsExploring;
+        if (exploring)
+        {
+            UpdateDeckDisplay();
+            yield break;
+        }
+
+        DrawOpeningHand();
+        UpdateDeckDisplay();
+    }
+
+    /// <summary>探索结束后开战，或场景直接开战时补第一手牌。</summary>
+    public void DrawOpeningHand()
+    {
+        if (hand.Count > 0) return;
         int initialDraw = ContentRuntime.IsLoaded
             ? ContentRuntime.Registry.GameSettings.StartingHandSize
             : startingHandSize;
         DrawCards(initialDraw, true);
+    }
+
+    /// <summary>把所有区里的牌收回抽牌堆，供下一场战斗使用。</summary>
+    public void RecycleAllIntoDrawPile()
+    {
+        CancelTargeting();
+        for (int i = 0; i < hand.Count; i++)
+            if (hand[i] != null) Destroy(hand[i].gameObject);
+        hand.Clear();
+        drawPile.Clear();
+        discardPile.Clear();
+        exhaustPile.Clear();
+        drawPile.AddRange(totalDeck);
+        Shuffle(drawPile);
+        UpdateDeckDisplay();
+    }
+
+    /// <summary>奖励关把一张牌加入本局牌库。</summary>
+    public void GainCard(string cardId)
+    {
+        if (!ContentRuntime.IsLoaded || !ContentId.IsValid(cardId)) return;
+        if (!ContentRuntime.Registry.TryGetCard(cardId, out CardDefinition card) || card == null) return;
+        CardInstance instance = new CardInstance(card);
+        totalDeck.Add(instance);
+        drawPile.Add(instance);
         UpdateDeckDisplay();
     }
 
@@ -511,13 +551,46 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
         }
 
         string selectedClassId = GameSession.SelectedClassId;
-        if (!ContentRuntime.Registry.TryGetClassProfile(selectedClassId, out ClassProfileDefinition profile) || profile.DeckRecipe.Count == 0)
+        if (RunSession.HasActive && RunSession.Current.deckCardIds != null && RunSession.Current.deckCardIds.Length > 0)
         {
-            throw new InvalidOperationException($"数据库未提供职业 {selectedClassId} 的有效初始牌库配方。");
+            for (int i = 0; i < RunSession.Current.deckCardIds.Length; i++)
+            {
+                CardDefinition card = ContentRuntime.Registry.GetCard(RunSession.Current.deckCardIds[i]);
+                totalDeck.Add(new CardInstance(card));
+            }
         }
-        totalDeck.AddRange(StartingDeckBuilder.Build(profile, ContentRuntime.Registry));
+        else
+        {
+            if (!ContentRuntime.Registry.TryGetClassProfile(selectedClassId, out ClassProfileDefinition profile) || profile.DeckRecipe.Count == 0)
+            {
+                throw new InvalidOperationException($"数据库未提供职业 {selectedClassId} 的有效初始牌库配方。");
+            }
+            totalDeck.AddRange(StartingDeckBuilder.Build(profile, ContentRuntime.Registry));
+            if (RunSession.HasActive) RunSession.SetDeck(ExportOwnedCardIds());
+            Debug.Log($"{profile.DisplayName}初始牌库生成完毕：{totalDeck.Count}张。", this);
+        }
+
         drawPile.AddRange(totalDeck);
-        Debug.Log($"{profile.DisplayName}初始牌库生成完毕：{drawPile.Count}张。", this);
+    }
+
+    /// <summary>把当前牌库、手牌、弃牌和消耗堆里的卡牌 ID 交给存档。</summary>
+    public List<string> ExportOwnedCardIds()
+    {
+        List<string> ids = new List<string>();
+        AppendCardIds(ids, drawPile);
+        for (int i = 0; i < hand.Count; i++)
+            if (hand[i]?.Instance?.Definition != null) ids.Add(hand[i].Instance.Definition.CardId);
+        AppendCardIds(ids, discardPile);
+        AppendCardIds(ids, exhaustPile);
+        if (ids.Count == 0) AppendCardIds(ids, totalDeck);
+        return ids;
+    }
+
+    private static void AppendCardIds(List<string> ids, List<CardInstance> cards)
+    {
+        if (cards == null) return;
+        for (int i = 0; i < cards.Count; i++)
+            if (cards[i]?.Definition != null) ids.Add(cards[i].Definition.CardId);
     }
 
     private bool DrawOne()

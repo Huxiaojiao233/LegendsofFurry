@@ -413,7 +413,9 @@ public class BoardClickController : MonoBehaviour
             return;
         }
 
-        BoardGenerator board = unit.Board;
+        BoardGenerator board = unit.Board ?? FindAnyObjectByType<BoardGenerator>();
+        if (board == null) return;
+        if (unit.Board == null) unit.SetBoard(board);
         Vector2Int start = unit.Position;
         Queue<Vector2Int> frontier = new Queue<Vector2Int>();
         Dictionary<Vector2Int, int> costs = new Dictionary<Vector2Int, int>();
@@ -435,8 +437,8 @@ public class BoardClickController : MonoBehaviour
             {
                 Vector2Int next = current + direction;
                 if (costs.ContainsKey(next) ||
-                    !board.TryGetCell(next.x, next.y, out BoardCell cell) ||
-                    board.IsOccupied(next.x, next.y, unit))
+                    !board.CanStep(current, next, unit) ||
+                    !board.TryGetCell(next.x, next.y, out BoardCell cell))
                 {
                     continue;
                 }
@@ -459,7 +461,10 @@ public class BoardClickController : MonoBehaviour
     private void ShowFreeMoveRange(Unit unit, int steps)
     {
         ClearMoveRange();
-        BoardGenerator board = unit.Board;
+        if (unit == null) return;
+        BoardGenerator board = unit.Board ?? FindAnyObjectByType<BoardGenerator>();
+        if (board == null) return;
+        if (unit.Board == null) unit.SetBoard(board);
         Queue<Vector2Int> frontier = new Queue<Vector2Int>();
         Dictionary<Vector2Int, int> costs = new Dictionary<Vector2Int, int>();
         frontier.Enqueue(unit.Position);
@@ -472,7 +477,8 @@ public class BoardClickController : MonoBehaviour
             foreach (Vector2Int direction in FourDirections)
             {
                 Vector2Int next = current + direction;
-                if (costs.ContainsKey(next) || !board.TryGetCell(next.x, next.y, out BoardCell cell) || board.IsOccupied(next.x, next.y, unit)) continue;
+                if (costs.ContainsKey(next) || !board.CanStep(current, next, unit) ||
+                    !board.TryGetCell(next.x, next.y, out BoardCell cell)) continue;
                 costs[next] = distance + 1;
                 frontier.Enqueue(next);
                 movableCells[cell] = 0;
@@ -594,7 +600,14 @@ public class BoardClickController : MonoBehaviour
     {
         if (tooltipCanvas == null)
         {
-            tooltipCanvas = FindAnyObjectByType<Canvas>();
+            foreach (Canvas canvas in FindObjectsByType<Canvas>())
+            {
+                if (canvas.renderMode != RenderMode.WorldSpace)
+                {
+                    tooltipCanvas = canvas;
+                    break;
+                }
+            }
         }
 
         if (tooltipCanvas == null)

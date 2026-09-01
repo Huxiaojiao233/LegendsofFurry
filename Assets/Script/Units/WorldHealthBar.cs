@@ -14,7 +14,7 @@ public class WorldHealthBar : MonoBehaviour
     private static readonly Quaternion BarRotation =
         Quaternion.LookRotation(Vector3.back, Vector3.up) * Quaternion.Euler(-90f, 0f, 0f);
 
-    [SerializeField] private Vector3 worldOffset = new Vector3(0f, 0f, -0.5f);
+    [SerializeField] private Vector3 worldOffset = Vector3.zero;
 
     private Unit owner;
     private GameObject displayObject;
@@ -69,8 +69,14 @@ public class WorldHealthBar : MonoBehaviour
         }
 
         Transform displayTransform = displayObject.transform;
-        displayTransform.position = owner.transform.position + worldOffset;
+        displayTransform.position = owner.transform.position + Vector3.up * BarLift() + worldOffset;
         displayTransform.rotation = BarRotation;
+    }
+
+    private float BarLift()
+    {
+        Renderer renderer = owner.GetComponentInChildren<Renderer>();
+        return renderer != null ? renderer.bounds.size.y + 0.08f : 0.45f;
     }
 
     private void Build()
@@ -79,7 +85,11 @@ public class WorldHealthBar : MonoBehaviour
         RectTransform canvasRect = displayObject.AddComponent<RectTransform>();
         Canvas canvas = displayObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
+        canvas.worldCamera = Camera.main;
         canvas.sortingOrder = 32;
+        CanvasGroup group = displayObject.AddComponent<CanvasGroup>();
+        group.blocksRaycasts = false;
+        group.interactable = false;
 
         canvasRect.sizeDelta = new Vector2(BarWidth, HealthHeight + ArmorHeight + 6f);
         displayObject.transform.localScale = Vector3.one * WorldScale;

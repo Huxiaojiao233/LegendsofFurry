@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using LegendsOfFurry.Content.Contracts;
 using UnityEngine;
 
 /// <summary>
@@ -19,6 +21,7 @@ public class BoardGenerator : MonoBehaviour
     [Header("格子设置")]
     [SerializeField] private float cellSize = 1f;
     [SerializeField] private float gap = 0f;
+    [SerializeField] private float heightStep = 0.45f;
 
     [Header("节点")]
     [SerializeField] private Transform gridRoot;
@@ -33,11 +36,17 @@ public class BoardGenerator : MonoBehaviour
 
     private BoardCell[,] cells;
     private int[,] boardMap;
+    private int[,] cellHeights;
+    private string[,] cellStageIds;
+    private Func<int, int, bool> movementFilter;
     private readonly Dictionary<Vector2Int, Unit> occupants =
         new Dictionary<Vector2Int, Unit>();
 
     public int Width => cells == null ? width : cells.GetLength(0);
     public int Height => cells == null ? height : cells.GetLength(1);
+    public float Spacing => cellSize + gap;
+    public float HeightStep => heightStep;
+    public bool IsWorldBoard { get; private set; }
 
     private int[,] GenerateRandomBoardMap()
     {
@@ -47,7 +56,7 @@ public class BoardGenerator : MonoBehaviour
         {
             for (int x = 0; x < width; x++)
             {
-                map[z, x] = Random.value < RandomMapProbability ? 1 : 0;
+                map[z, x] = UnityEngine.Random.value < RandomMapProbability ? 1 : 0;
             }
         }
 
@@ -56,8 +65,81 @@ public class BoardGenerator : MonoBehaviour
 
     private void Awake()
     {
+        if (TryGenerateRunWorld()) return;
         boardMap = GenerateRandomBoardMap();
         GenerateBoard();
+    }
+
+    /// <summary>冒险进行中时把整张大地图拼进同一块棋盘，不再随机挖洞。</summary>
+    private bool TryGenerateRunWorld()
+    {
+        if (!RunSession.HasActive) return false;
+        if (!WorldCatalog.TryGet(RunSession.Current.worldId, out WorldDefinition world))
+            world = WorldCatalog.Default;
+        if (world == null) return false;
+        BuildWorldBoard(world);
+        return true;
+    }
+
+    /// <summary>按关卡格子生成连续地形；空洞只出现在没有关卡定义的大地图空位。</summary>
+    public void BuildWorldBoard(WorldDefinition world)
+    {
+        int mapWidth = Mathf.Max(1, world.WorldTerrainWidth);
+        int mapHeight = Mathf.Max(1, world.WorldTerrainHeight);
+        int tw = Mathf.Max(1, world.TerrainWidth);
+        int th = Mathf.Max(1, world.TerrainHeight);
+        width = mapWidth;
+        height = mapHeight;
+        boardMap = new int[mapHeight, mapWidth];
+        cellHeights = new int[mapWidth, mapHeight];
+        cellStageIds = new string[mapWidth, mapHeight];
+        for (int i = 0; i < world.Stages.Count; i++)
+        {
+            StageDefinition stage = world.Stages[i];
+            if (stage == null || !stage.Enabled) continue;
+            for (int localY = 0; localY < th; localY++)
+            {
+                for (int localX = 0; localX < tw; localX++)
+                {
+                    int x = stage.GridX * tw + localX;
+                    int z = stage.GridY * th + localY;
+                    boardMap[z, x] = 1;
+                    cellHeights[x, z] = stage.HeightAt(localX, localY, tw, th);
+                    cellStageIds[x, z] = stage.StageId;
+                }
+            }
+        }
+
+        IsWorldBoard = true;
+        GenerateBoard();
+    }
+
+    public void SetMovementFilter(Func<int, int, bool> filter)
+    {
+        movementFilter = filter;
+    }
+
+    public int GetHeight(int x, int z)
+    {
+        if (cellHeights == null ||
+            x < 0 || z < 0 ||
+            x >= cellHeights.GetLength(0) ||
+            z >= cellHeights.GetLength(1))
+        {
+            return 0;
+        }
+
+        return cellHeights[x, z];
+    }
+
+    /// <summary>四方向走一步：存在格子、高度差不超过 1、未被占用，并满足当前探索/战斗范围。</summary>
+    public bool CanStep(Vector2Int from, Vector2Int to, Unit mover, Vector2Int? goal = null)
+    {
+        if (movementFilter != null && !movementFilter(to.x, to.y)) return false;
+        if (!TryGetCell(to.x, to.y, out _)) return false;
+        if (Mathf.Abs(GetHeight(from.x, from.y) - GetHeight(to.x, to.y)) > 1) return false;
+        if (goal.HasValue && to == goal.Value) return true;
+        return !IsOccupied(to.x, to.y, mover);
     }
 
     /// <summary>根据 boardMap 实例化所有存在的棋盘格。</summary>
@@ -68,6 +150,12 @@ public class BoardGenerator : MonoBehaviour
 
         cells = new BoardCell[mapWidth, mapHeight];
         occupants.Clear();
+
+        if (cellPrefab == null)
+        {
+            Debug.LogError("棋盘格子预制件为空，无法生成棋盘。", this);
+            return;
+        }
 
         float spacing = cellSize + gap;
 
@@ -83,11 +171,15 @@ public class BoardGenerator : MonoBehaviour
                 GameObject cellObject = Instantiate(cellPrefab, gridRoot);
                 float posX = (x - (mapWidth - 1) / 2f) * spacing;
                 float posZ = (z - (mapHeight - 1) / 2f) * spacing;
-                cellObject.transform.localPosition = new Vector3(posX, 0f, posZ);
+                int tileHeight = cellHeights != null ? cellHeights[x, z] : 0;
+                cellObject.transform.localPosition = new Vector3(posX, tileHeight * heightStep, posZ);
                 cellObject.transform.localRotation = Quaternion.identity;
 
                 BoardCell cell = cellObject.GetComponent<BoardCell>();
-                cell.Initialize(x, z);
+                if (cell == null) cell = cellObject.GetComponentInChildren<BoardCell>();
+                if (cell == null) cell = cellObject.AddComponent<BoardCell>();
+                string stageId = cellStageIds != null ? cellStageIds[x, z] : null;
+                cell.Initialize(x, z, stageId, tileHeight);
                 cells[x, z] = cell;
             }
         }
@@ -288,7 +380,7 @@ public class BoardGenerator : MonoBehaviour
             foreach (Vector2Int direction in FourDirections)
             {
                 Vector2Int next = current + direction;
-                if (cameFrom.ContainsKey(next) || !IsWalkable(next, mover, goal))
+                if (cameFrom.ContainsKey(next) || !CanStep(current, next, mover, goal))
                 {
                     continue;
                 }
@@ -299,21 +391,6 @@ public class BoardGenerator : MonoBehaviour
         }
 
         return false;
-    }
-
-    private bool IsWalkable(Vector2Int coordinate, Unit mover, Vector2Int goal)
-    {
-        if (!TryGetCell(coordinate.x, coordinate.y, out _))
-        {
-            return false;
-        }
-
-        if (coordinate == goal)
-        {
-            return true;
-        }
-
-        return !IsOccupied(coordinate.x, coordinate.y, mover);
     }
 
     private bool IsFreeCell(int x, int z, Unit ignore)

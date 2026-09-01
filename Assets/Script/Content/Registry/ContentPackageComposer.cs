@@ -177,7 +177,8 @@ public static class ContentPackageComposer
             BaseActionPoints = incoming.BaseActionPoints > 0 ? incoming.BaseActionPoints : current.BaseActionPoints,
             BaseMoveSteps = incoming.BaseMoveSteps > 0 ? incoming.BaseMoveSteps : current.BaseMoveSteps,
             PlayerCharacterId = FirstNonEmpty(incoming.PlayerCharacterId, current.PlayerCharacterId),
-            EnemyCharacterId = FirstNonEmpty(incoming.EnemyCharacterId, current.EnemyCharacterId)
+            EnemyCharacterId = FirstNonEmpty(incoming.EnemyCharacterId, current.EnemyCharacterId),
+            DefaultWorldId = FirstNonEmpty(incoming.DefaultWorldId, current.DefaultWorldId)
         };
     }
 

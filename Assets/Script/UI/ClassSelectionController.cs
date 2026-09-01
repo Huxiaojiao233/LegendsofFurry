@@ -144,6 +144,14 @@ public class ClassSelectionController : MonoBehaviour
     private static void Select(string classId)
     {
         GameSession.SelectClass(classId);
+        WorldDefinition world = WorldCatalog.Default;
+        if (world == null)
+        {
+            Debug.LogError("没有可用的世界地图，无法开始冒险。");
+            return;
+        }
+
+        RunSession.StartNew(classId, world);
         SceneManager.LoadScene("S_Battle");
     }
 }
