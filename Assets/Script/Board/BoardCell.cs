@@ -10,8 +10,6 @@ public class BoardCell : MonoBehaviour
 
     private GameObject moveHighlight;
     private Renderer moveHighlightRenderer;
-    private Renderer cellRenderer;
-    private MaterialPropertyBlock propertyBlock;
 
     public Vector2Int Coordinate { get; private set; }
 
@@ -21,78 +19,38 @@ public class BoardCell : MonoBehaviour
         name = $"Cell_{x}_{y}";
     }
 
-    /// <summary>设置格子的移动范围高亮以及本次高亮颜色。</summary>
+    /// <summary>设置格子的移动/攻击范围高亮。草地格本身有渲染器，必须用独立覆盖层，不能只改格子染色。</summary>
     public void SetMoveHighlight(bool visible, Color color)
     {
-        if (cellRenderer == null)
-        {
-            cellRenderer = FindCellRenderer();
-        }
-
-        if (cellRenderer != null)
-        {
-            SetRendererHighlight(visible, color);
-            return;
-        }
-
         if (moveHighlight == null)
         {
             CreateMoveHighlight(color);
         }
 
-        ApplyColor(moveHighlightRenderer.material, color);
-        moveHighlight.SetActive(visible);
-    }
-
-    private Renderer FindCellRenderer()
-    {
-        Renderer renderer = GetComponent<Renderer>();
-        if (renderer != null)
+        if (moveHighlightRenderer != null)
         {
-            return renderer;
+            ApplyColor(moveHighlightRenderer.material, color);
         }
 
-        Renderer[] renderers = GetComponentsInChildren<Renderer>();
-        for (int i = 0; i < renderers.Length; i++)
+        if (moveHighlight != null)
         {
-            if (renderers[i] != moveHighlightRenderer)
-            {
-                return renderers[i];
-            }
+            moveHighlight.SetActive(visible);
         }
-
-        return null;
-    }
-
-    private void SetRendererHighlight(bool visible, Color color)
-    {
-        propertyBlock ??= new MaterialPropertyBlock();
-        if (!visible)
-        {
-            cellRenderer.SetPropertyBlock(null);
-            return;
-        }
-
-        cellRenderer.GetPropertyBlock(propertyBlock);
-        propertyBlock.SetColor("_BaseColor", color);
-        propertyBlock.SetColor("_Color", color);
-        cellRenderer.SetPropertyBlock(propertyBlock);
     }
 
     private void CreateMoveHighlight(Color color)
     {
-        Renderer cellRenderer = GetComponent<Renderer>();
-        if (cellRenderer == null)
+        Renderer tileRenderer = GetComponent<Renderer>();
+        if (tileRenderer == null)
         {
-            cellRenderer = GetComponentInChildren<Renderer>();
+            tileRenderer = GetComponentInChildren<Renderer>();
         }
 
         moveHighlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
         moveHighlight.name = HighlightName;
         moveHighlight.transform.SetParent(transform, false);
-        moveHighlight.transform.localPosition = new Vector3(0f, 0.02f, 0f);
         moveHighlight.transform.localRotation = Quaternion.identity;
-        moveHighlight.transform.localScale = new Vector3(0.9f, 0.025f, 0.9f);
+        PlaceHighlightOnTile(tileRenderer);
 
         Collider highlightCollider = moveHighlight.GetComponent<Collider>();
         if (highlightCollider != null)
@@ -101,32 +59,52 @@ public class BoardCell : MonoBehaviour
         }
 
         moveHighlightRenderer = moveHighlight.GetComponent<Renderer>();
-        Material material = CreateHighlightMaterial(cellRenderer, moveHighlightRenderer, color);
+        Material material = CreateHighlightMaterial(color);
         moveHighlightRenderer.material = material;
         moveHighlight.SetActive(false);
     }
 
-    private static Material CreateHighlightMaterial(Renderer sourceRenderer, Renderer fallbackRenderer, Color color)
+    /// <summary>覆盖层与草地格同一平面尺寸，只在顶面加一层薄板。</summary>
+    private void PlaceHighlightOnTile(Renderer tileRenderer)
     {
-        Material source = null;
-        if (sourceRenderer != null && sourceRenderer.sharedMaterial != null)
+        Bounds localBounds = ResolveTileLocalBounds(tileRenderer);
+        const float plateThickness = 0.02f;
+        moveHighlight.transform.localPosition = new Vector3(
+            localBounds.center.x,
+            localBounds.max.y + plateThickness * 0.5f,
+            localBounds.center.z);
+        moveHighlight.transform.localScale = new Vector3(
+            Mathf.Max(0.01f, localBounds.size.x),
+            plateThickness,
+            Mathf.Max(0.01f, localBounds.size.z));
+    }
+
+    private static Bounds ResolveTileLocalBounds(Renderer tileRenderer)
+    {
+        MeshFilter meshFilter = tileRenderer != null
+            ? tileRenderer.GetComponent<MeshFilter>()
+            : null;
+        Mesh mesh = meshFilter != null ? meshFilter.sharedMesh : null;
+        if (mesh != null)
         {
-            source = sourceRenderer.sharedMaterial;
-        }
-        else if (fallbackRenderer != null && fallbackRenderer.sharedMaterial != null)
-        {
-            source = fallbackRenderer.sharedMaterial;
+            return mesh.bounds;
         }
 
-        Material material = source != null ? new Material(source) : null;
-        if (material == null)
+        if (tileRenderer != null)
         {
-            Shader shader = Shader.Find("Sprites/Default");
-            material = shader != null
-                ? new Material(shader)
-                : new Material(Resources.GetBuiltinResource<Material>("Default-Material.mat"));
+            return tileRenderer.localBounds;
         }
 
+        return new Bounds(Vector3.zero, new Vector3(1f, 0.25f, 1f));
+    }
+
+    private static Material CreateHighlightMaterial(Color color)
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ??
+                        Shader.Find("Sprites/Default");
+        Material material = shader != null
+            ? new Material(shader)
+            : new Material(Resources.GetBuiltinResource<Material>("Default-Material.mat"));
         ApplyColor(material, color);
         return material;
     }

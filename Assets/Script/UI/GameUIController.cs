@@ -19,4 +19,10 @@ public class GameUIController : MonoBehaviour
         GameSession.ClearSelectedClass();
         SceneManager.LoadScene("S_ClassSelect", LoadSceneMode.Single);
     }
+
+    public void BackToMenu()
+    {
+        GameSession.ClearSelectedClass();
+        SceneManager.LoadScene("S_Menu", LoadSceneMode.Single);
+    }
 }

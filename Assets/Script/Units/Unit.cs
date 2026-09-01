@@ -2,12 +2,14 @@ using System;
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 
 /// <summary>
 /// 棋盘单位组件。保存逻辑坐标、阵营和战斗属性，处理选中脉冲与移动动画。
 /// 行动点由 BoardClickController 统一管理，Unit 只执行已经批准的移动。
 /// </summary>
-public class Unit : MonoBehaviour
+public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
 {
     [Header("棋盘")]
     [SerializeField] private BoardGenerator board;
@@ -60,6 +62,8 @@ public class Unit : MonoBehaviour
     public bool IsPlayer => faction == UnitFaction.Player;
     public string DisplayName => string.IsNullOrEmpty(displayName) ? gameObject.name : displayName;
     public CombatantState State => combatState != null ? combatState : combatState = GetComponent<CombatantState>() ?? gameObject.AddComponent<CombatantState>();
+    public string InstanceId { get; private set; }
+    public CharacterDefinition Definition { get; private set; }
 
     public event Action<Unit> Died;
     public event Action<Unit> StatsChanged;
@@ -68,6 +72,7 @@ public class Unit : MonoBehaviour
 
     private void Awake()
     {
+        InstanceId = Guid.NewGuid().ToString("N");
         normalScale = transform.localScale;
         currentHealth = maxHealth;
         armor = Mathf.Max(0, armor);
@@ -115,6 +120,14 @@ public class Unit : MonoBehaviour
         moveStepsPerTurn = Mathf.Max(1, movement);
         armor = 0;
         NotifyStatsChanged();
+    }
+
+    /// <summary>Binds this scene instance to an authored character and applies its base combat values.</summary>
+    public void ConfigureCombatant(CharacterDefinition definition)
+    {
+        Definition = definition ?? throw new ArgumentNullException(nameof(definition));
+        ConfigureCombatant(definition.DisplayName, definition.InitialHealth, definition.BaseDamage, definition.MoveSteps);
+        TokenVisualRuntime.Apply(this, definition);
     }
 
     /// <summary>从职业内容配置更新生命上限，并把当前生命恢复到新上限。</summary>
@@ -206,13 +219,14 @@ public class Unit : MonoBehaviour
 
     public void AddArmor(int amount)
     {
-        if (amount <= 0)
+        ContentRuleQuery query = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.ArmorGain, this, null, amount));
+        amount = query.Value;
+        if (query.Cancelled || amount <= 0)
         {
             return;
         }
-
-        int reduced = Mathf.Max(0, amount - State.Get(CombatStatus.Broken));
-        armor += reduced;
+        armor += amount;
         NotifyStatsChanged();
     }
 
@@ -240,46 +254,30 @@ public class Unit : MonoBehaviour
     /// <returns>本次结算的结构化结果。</returns>
     public DamageResolution ResolveDamage(DamageRequest request)
     {
+        if (request != null && request.Target != this)
+            return new DamageResolution { Request = request };
+        return DamagePipeline.Resolve(request, BeforeDamage, ApplyDamage, AfterDamage);
+    }
+
+    /// <summary>Applies an already intercepted request to this unit without publishing pipeline events.</summary>
+    private DamageResolution ApplyDamage(DamageRequest request)
+    {
         DamageResolution resolution = new DamageResolution { Request = request };
-        if (request == null || request.Target != this || request.Amount <= 0 || !IsAlive)
-        {
-            return resolution;
-        }
-        BeforeDamage?.Invoke(request);
-        if (request.Cancelled || request.Amount <= 0)
-        {
-            AfterDamage?.Invoke(resolution);
-            return resolution;
-        }
 
         int amount = request.Amount;
         DamageType damageType = request.DamageType;
 
-        if (damageType == DamageType.Normal)
+        ContentRuleQuery incoming = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.IncomingDamage, this, request.Source, amount, null, request.DamageTypeId));
+        if (incoming.Touched)
         {
-            if (State.Has(CombatStatus.NormalImmunity))
+            amount = Mathf.Max(0, incoming.Value);
+            if (incoming.Cancelled)
             {
                 resolution.WasDodgedOrImmune = true;
-                AfterDamage?.Invoke(resolution);
-                return resolution;
-            }
-            if (State.Has(CombatStatus.DodgeNextNormal))
-            {
-                State.Reduce(CombatStatus.DodgeNextNormal);
-                resolution.WasDodgedOrImmune = true;
-                AfterDamage?.Invoke(resolution);
-                return resolution;
-            }
-            if (State.NormalDamageAvoidChance > 0f && UnityEngine.Random.value < State.NormalDamageAvoidChance)
-            {
-                resolution.WasDodgedOrImmune = true;
-                AfterDamage?.Invoke(resolution);
                 return resolution;
             }
         }
-
-        if (State.Has(CombatStatus.Vulnerable))
-            amount = Mathf.FloorToInt(amount * 1.5f);
 
         bool bypassArmor = damageType == DamageType.Dark || damageType == DamageType.Poison || damageType == DamageType.True;
         int absorbed = bypassArmor ? 0 : Mathf.Min(armor, amount);
@@ -302,13 +300,15 @@ public class Unit : MonoBehaviour
                 healthDamage > 0 ? new Color(1f, 0.45f, 0.35f) : new Color(0.7f, 0.85f, 1f));
         }
 
-        if (!IsAlive && State.ReviveAvailable)
+        ContentRuleQuery recovery = !IsAlive
+            ? ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+                ContentRuleQueryKeys.LethalRecovery, this, request.Source, 0, null, request.DamageTypeId))
+            : null;
+        if (!IsAlive && recovery != null && recovery.Touched && recovery.Value > 0)
         {
-            State.ReviveAvailable = false;
-            currentHealth = Mathf.Min(5, maxHealth);
+            currentHealth = Mathf.Min(recovery.Value, maxHealth);
             NotifyStatsChanged();
             resolution.Revived = true;
-            AfterDamage?.Invoke(resolution);
             return resolution;
         }
 
@@ -318,7 +318,6 @@ public class Unit : MonoBehaviour
             Died?.Invoke(this);
         }
 
-        AfterDamage?.Invoke(resolution);
         return resolution;
     }
 
@@ -334,14 +333,21 @@ public class Unit : MonoBehaviour
 
     private IEnumerator HitReactionRoutine(Color flashColor)
     {
-        Renderer[] renderers = GetComponentsInChildren<Renderer>();
-        MaterialPropertyBlock block = new MaterialPropertyBlock();
-        Color[] originalColors = new Color[renderers.Length];
-        for (int i = 0; i < renderers.Length; i++)
+        MeshRenderer meshRenderer = GetComponent<MeshRenderer>();
+        Renderer renderer = meshRenderer != null ? meshRenderer : GetComponentInChildren<Renderer>();
+        if (renderer == null)
         {
-            originalColors[i] = renderers[i].sharedMaterial.HasProperty("_BaseColor")
-                ? renderers[i].sharedMaterial.GetColor("_BaseColor")
-                : renderers[i].sharedMaterial.color;
+            hitRoutine = null;
+            yield break;
+        }
+
+        Material[] shared = renderer.sharedMaterials;
+        int materialCount = shared != null ? shared.Length : 0;
+        MaterialPropertyBlock block = new MaterialPropertyBlock();
+        Color[] originalColors = new Color[materialCount];
+        for (int m = 0; m < materialCount; m++)
+        {
+            originalColors[m] = ReadBaseColor(shared[m]);
         }
 
         const float duration = 0.22f;
@@ -352,35 +358,44 @@ public class Unit : MonoBehaviour
             float t = Mathf.Clamp01(elapsed / duration);
             hitPunch = (1f - t) * 0.28f;
             Color flash = Color.Lerp(flashColor, Color.white, t);
-            for (int i = 0; i < renderers.Length; i++)
+            for (int m = 0; m < materialCount; m++)
             {
-                if (renderers[i] == null)
-                {
-                    continue;
-                }
-
-                renderers[i].GetPropertyBlock(block);
-                Color mixed = Color.Lerp(flash, originalColors[i], t);
+                renderer.GetPropertyBlock(block, m);
+                Color mixed = Color.Lerp(flash, originalColors[m], t);
                 block.SetColor("_BaseColor", mixed);
                 block.SetColor("_Color", mixed);
-                renderers[i].SetPropertyBlock(block);
+                renderer.SetPropertyBlock(block, m);
             }
 
             yield return null;
         }
 
         hitPunch = 0f;
-        for (int i = 0; i < renderers.Length; i++)
+        if (Definition != null)
         {
-            if (renderers[i] == null)
-            {
-                continue;
-            }
-
-            renderers[i].SetPropertyBlock(null);
+            TokenVisualRuntime.Apply(this, Definition);
+        }
+        else
+        {
+            renderer.SetPropertyBlock(null);
         }
 
         hitRoutine = null;
+    }
+
+    private static Color ReadBaseColor(Material material)
+    {
+        if (material == null)
+        {
+            return Color.white;
+        }
+
+        if (material.HasProperty("_BaseColor"))
+        {
+            return material.GetColor("_BaseColor");
+        }
+
+        return material.color;
     }
 
     /// <summary>回合开始时清除临时护甲。</summary>

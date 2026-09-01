@@ -18,24 +18,32 @@ public sealed class ContentPackage
     public List<RarityDefinition> Rarities { get; set; } = new List<RarityDefinition>();
     public List<AssetDefinition> Assets { get; set; } = new List<AssetDefinition>();
     public List<ClassProfileDefinition> ClassProfiles { get; set; } = new List<ClassProfileDefinition>();
+    public List<CharacterDefinition> Characters { get; set; } = new List<CharacterDefinition>();
+    public List<EquipmentDefinition> Equipment { get; set; } = new List<EquipmentDefinition>();
     public GameSettingsDefinition GameSettings { get; set; } = new GameSettingsDefinition();
 }
 
 /// <summary>
 /// 描述一个可供牌库配方和卡牌查询使用的卡池。
 /// </summary>
-public sealed class CardPoolDefinition
+public sealed class CardPoolDefinition : IContentDefinition
 {
     public string PoolId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public int SortOrder { get; set; }
+
+    /// <summary>Returns the registry kind for card pools.</summary>
+    public string GetDefinitionKind() => ContentDefinitionKinds.CardPool;
+
+    /// <summary>Returns the stable card-pool ID.</summary>
+    public string GetDefinitionId() => PoolId;
 }
 
 /// <summary>
 /// 描述一个可由卡牌效果引用的状态及其通用叠层规则。
 /// </summary>
-public sealed class StatusDefinition
+public sealed class StatusDefinition : IContentDefinition
 {
     public string StatusId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
@@ -46,6 +54,12 @@ public sealed class StatusDefinition
     public string DurationPolicy { get; set; } = "none";
     public bool Enabled { get; set; } = true;
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
+
+    /// <summary>Returns the registry and behavior-owner kind for statuses.</summary>
+    public string GetDefinitionKind() => ContentDefinitionKinds.Status;
+
+    /// <summary>Returns the stable status ID.</summary>
+    public string GetDefinitionId() => StatusId;
 }
 
 /// <summary>描述一个可扩展的职业特性键值。</summary>
@@ -58,13 +72,19 @@ public sealed class ClassTraitDefinition
 /// <summary>
 /// 描述一套固定牌库及其卡牌数量。
 /// </summary>
-public sealed class DeckDefinition
+public sealed class DeckDefinition : IContentDefinition
 {
     public string DeckId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public bool IsTestDeck { get; set; }
     public bool Enabled { get; set; } = true;
     public List<DeckEntryDefinition> Entries { get; set; } = new List<DeckEntryDefinition>();
+
+    /// <summary>Returns the registry kind for fixed decks.</summary>
+    public string GetDefinitionKind() => ContentDefinitionKinds.Deck;
+
+    /// <summary>Returns the stable deck ID.</summary>
+    public string GetDefinitionId() => DeckId;
 }
 
 /// <summary>
@@ -78,7 +98,7 @@ public sealed class DeckEntryDefinition
 }
 
 /// <summary>描述职业基础数值、起始牌库配方和被动行为。</summary>
-public sealed class ClassProfileDefinition
+public sealed class ClassProfileDefinition : IContentDefinition
 {
     public string ClassId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
@@ -91,6 +111,12 @@ public sealed class ClassProfileDefinition
     public List<DeckRecipePoolDefinition> DeckRecipe { get; set; } = new List<DeckRecipePoolDefinition>();
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
     public List<ClassTraitDefinition> Traits { get; set; } = new List<ClassTraitDefinition>();
+
+    /// <summary>Returns the registry and behavior-owner kind for class profiles.</summary>
+    public string GetDefinitionKind() => ContentDefinitionKinds.Class;
+
+    /// <summary>Returns the stable class ID.</summary>
+    public string GetDefinitionId() => ClassId;
 
     /// <summary>读取整数职业特性；缺失或格式无效时返回默认值。</summary>
     public int GetTraitInt(string key, int defaultValue = 0)
@@ -139,28 +165,79 @@ public sealed class GameSettingsDefinition
     public int DrawPerTurn { get; set; } = 5;
     public int BaseActionPoints { get; set; } = 3;
     public int BaseMoveSteps { get; set; } = 2;
+    public string PlayerCharacterId { get; set; } = string.Empty;
+    public string EnemyCharacterId { get; set; } = string.Empty;
+}
+
+/// <summary>Describes a data-driven combatant independently from its scene GameObject.</summary>
+public sealed class CharacterDefinition : IContentDefinition
+{
+    public string CharacterId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int InitialHealth { get; set; } = 10;
+    public int BaseDamage { get; set; } = 3;
+    public int MoveSteps { get; set; } = 2;
+    public string TokenFrameColor { get; set; } = string.Empty;
+    public string PortraitKey { get; set; } = string.Empty;
+    public bool Enabled { get; set; } = true;
+    public int SortOrder { get; set; }
+    public List<string> Tags { get; set; } = new List<string>();
+    public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
+
+    public string GetDefinitionKind() => ContentDefinitionKinds.Character;
+    public string GetDefinitionId() => CharacterId;
+}
+
+/// <summary>Describes one equippable content item and the card pool it contributes.</summary>
+public sealed class EquipmentDefinition : IContentDefinition
+{
+    public string EquipmentId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string SlotKey { get; set; } = string.Empty;
+    public string CardPoolId { get; set; } = string.Empty;
+    public bool Enabled { get; set; } = true;
+    public int SortOrder { get; set; }
+    public List<string> Tags { get; set; } = new List<string>();
+    public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
+
+    public string GetDefinitionKind() => ContentDefinitionKinds.Equipment;
+    public string GetDefinitionId() => EquipmentId;
 }
 
 /// <summary>
 /// 描述稀有度的显示属性和默认抽取权重。
 /// </summary>
-public sealed class RarityDefinition
+public sealed class RarityDefinition : IContentDefinition
 {
     public string RarityId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string ColorHex { get; set; } = "#FFFFFFFF";
     public decimal DefaultWeight { get; set; } = 1m;
     public int SortOrder { get; set; }
+
+    /// <summary>Returns the registry kind for rarities.</summary>
+    public string GetDefinitionKind() => ContentDefinitionKinds.Rarity;
+
+    /// <summary>Returns the stable rarity ID.</summary>
+    public string GetDefinitionId() => RarityId;
 }
 
 /// <summary>
 /// 描述内容数据库引用的受管图片、音效或表现资源。
 /// </summary>
-public sealed class AssetDefinition
+public sealed class AssetDefinition : IContentDefinition
 {
     public string AssetKey { get; set; } = string.Empty;
     public string AssetKind { get; set; } = "artwork";
     public string RelativePath { get; set; } = string.Empty;
     public string? Sha256 { get; set; }
+
+    /// <summary>Returns the registry kind for managed assets.</summary>
+    public string GetDefinitionKind() => ContentDefinitionKinds.Asset;
+
+    /// <summary>Returns the stable managed-asset key.</summary>
+    public string GetDefinitionId() => AssetKey;
 }
 }

@@ -1,0 +1,448 @@
+{
+  "assets": [
+    {
+      "assetKey": "card.block_01.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/block_01.png",
+      "sha256": "38f8ecc7f0185be1f869852679b39bd6d081b0e7b1739e54e1955b1ff4525518"
+    },
+    {
+      "assetKey": "card.bow_charge_snipe.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/bow_charge_snipe.png",
+      "sha256": "4604f1c15e3b2d92ed4739948a7f0df5d85af424d4d4aee0ec220afc52e5d55e"
+    },
+    {
+      "assetKey": "card.bow_elbow.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/bow_elbow.png",
+      "sha256": "7b781800906dde016147138e193d317c39114f99584f38f446a7e2b76925cf7a"
+    },
+    {
+      "assetKey": "card.bow_piercing.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/bow_piercing.png",
+      "sha256": "b577621e3b037d50ba71f5d2309f9a812f84ea37b14b21c0a16e3081a33c4ea1"
+    },
+    {
+      "assetKey": "card.bow_rain.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/bow_rain.png",
+      "sha256": "0b65f9a4aa3cc99794fe0e9f3b5a328c1fe3283e6fdc285909383293e0aabd8f"
+    },
+    {
+      "assetKey": "card.bow_roll.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/bow_roll.png",
+      "sha256": "fe15f2048aa7050ac6798e70cf1ad58f33f77250ea6e9675ef86ec2b00a2f292"
+    },
+    {
+      "assetKey": "card.bow_scatter.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/bow_scatter.png",
+      "sha256": "68f5dd069e296d4b8a31c699736320d28f8c1e1409d4cdb86eb871f3bde4ad0f"
+    },
+    {
+      "assetKey": "card.bow_shot.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/bow_shot.png",
+      "sha256": "53d4034bfea0592c6baebab7b5ec82d71f0b1e7d18a5e96767a7f24a7e401fa6"
+    },
+    {
+      "assetKey": "card.cloak_appraise.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cloak_appraise.png",
+      "sha256": "f8f4f3d22e4ac994cd45da615cf42ca084fe1ae1faa48700a1869ce71208a7aa"
+    },
+    {
+      "assetKey": "card.cloak_broken.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cloak_broken.png",
+      "sha256": "300b9055c4fc73b1c4cc1da1a74e5b6ce97b7a4d4df54126c9041d30c8966e5f"
+    },
+    {
+      "assetKey": "card.cloak_clear.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cloak_clear.png",
+      "sha256": "1ef733e35da275c438dca76e125ba6cb4177ddea5a5df53f798666ed3fda558e"
+    },
+    {
+      "assetKey": "card.cloak_cover.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cloak_cover.png",
+      "sha256": "dcfe99642ba40456a687c8b49d0c66e90dc1e8a27690da6346a9eb99a1aea6fa"
+    },
+    {
+      "assetKey": "card.cloak_hide.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cloak_hide.png",
+      "sha256": "0dae913dd22d412b8f5f912ca46f0677f361b13f6b16ff54c7e0adc3b9371052"
+    },
+    {
+      "assetKey": "card.cloak_worn.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cloak_worn.png",
+      "sha256": "1a03c334dfb814679d590cfad55755e7ab228a4cc93ebb4bd0a59a4884b0b808"
+    },
+    {
+      "assetKey": "card.cross_appraise.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cross_appraise.png",
+      "sha256": "2347437af2113438f142c96bffea7005403e671e2eb8eb2b4e6c72283782b3a8"
+    },
+    {
+      "assetKey": "card.cross_brilliant.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cross_brilliant.png",
+      "sha256": "cf4a0bd7fab4a8fda84052bef1bc5616ff14f296352761e58f71ff22209c6eac"
+    },
+    {
+      "assetKey": "card.cross_dim.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cross_dim.png",
+      "sha256": "52bab6e2f408b2e7eab30264dc1aadf70085916d9ffa204b54adca842bef4bd6"
+    },
+    {
+      "assetKey": "card.cross_flash.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cross_flash.png",
+      "sha256": "6ef22e74b0ec21260d8b945ff3967df5cbcb9d6914a776c77a66ba36c64ce4e9"
+    },
+    {
+      "assetKey": "card.cross_glimmer.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cross_glimmer.png",
+      "sha256": "4230dae2954a4708059d4f1eaaf07b025db969a65a706445a4a83a254b2ab4e5"
+    },
+    {
+      "assetKey": "card.cross_possessed.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/cross_possessed.png",
+      "sha256": "4b5ab5be19a25ea9094912416059a1f639137d0636ce0b13cb6d7c5a0b1d74e2"
+    },
+    {
+      "assetKey": "card.crystal_backlash.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/crystal_backlash.png",
+      "sha256": "2a583673cddc015f3f7c76018ee8351badcca976a0d11030c2cd95d782633c07"
+    },
+    {
+      "assetKey": "card.crystal_ball_appraise.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/crystal_ball_appraise.png",
+      "sha256": "fd862951d8ae2c2e8991d8deb2e9d0eb2b104d6e414cd4376a288940b494de87"
+    },
+    {
+      "assetKey": "card.crystal_channel.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/crystal_channel.png",
+      "sha256": "8a7ae36a141e893fed051d3f3b95410cc2d21d2d12b977227ce7f7d197d0a67e"
+    },
+    {
+      "assetKey": "card.crystal_divination.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/crystal_divination.png",
+      "sha256": "38f1d3b4413111933421a95f42e2f5d3e71060ef5319a6255c136ba62fb664ba"
+    },
+    {
+      "assetKey": "card.crystal_inference.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/crystal_inference.png",
+      "sha256": "3971f35367b74ee2f161ed7eff682fe7e32147f4ddd2286fa526fff81810911a"
+    },
+    {
+      "assetKey": "card.crystal_preview.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/crystal_preview.png",
+      "sha256": "e376a2dd5644b1e13e297f9ab7729c9f25589e7b55d16b84410113485fb2904a"
+    },
+    {
+      "assetKey": "card.crystal_shatter.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/crystal_shatter.png",
+      "sha256": "6be75544984e23cf696be28b86a77aba9177e38ac60b782ca81426493b9ac85c"
+    },
+    {
+      "assetKey": "card.dagger_assassinate.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/dagger_assassinate.png",
+      "sha256": "b6fa0de2fc055e4350027afae94135593431302aa0998a46994076ecfc2a14b5"
+    },
+    {
+      "assetKey": "card.dagger_combo.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/dagger_combo.png",
+      "sha256": "ad7fd8cd4430b91114e8f36ebbfbf1c406e4b39cc5aadc02e98c1b1d38c77f4c"
+    },
+    {
+      "assetKey": "card.dagger_cut.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/dagger_cut.png",
+      "sha256": "fcf7b4301a7e1484e61e15a8243e967661a49fa393fffdc1cf0a7326e4c9481f"
+    },
+    {
+      "assetKey": "card.dagger_throat.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/dagger_throat.png",
+      "sha256": "37cf1ea4b9f2b9cafd493bdcc914b429839b2db4148b0b04adb6ed1f976c25b9"
+    },
+    {
+      "assetKey": "card.dagger_throw.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/dagger_throw.png",
+      "sha256": "e0910fd224d280de8df7476dff965ccf9c88c0db63453f93ac85388f0b0cdea0"
+    },
+    {
+      "assetKey": "card.dagger_thrust.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/dagger_thrust.png",
+      "sha256": "410d29a7bab0646d3d5bf74ed1371e65eeecc34ddec7608e2e17c376ea9a85ce"
+    },
+    {
+      "assetKey": "card.dagger_wrist.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/dagger_wrist.png",
+      "sha256": "b003d9132aa563eee132e45d03fde71da30ad77cbb4240d06bc9b46dc180ceef"
+    },
+    {
+      "assetKey": "card.emerald_appraise.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/emerald_appraise.png",
+      "sha256": "49a2bd298208a3551ae4a576245bbfad6b66cb3ed474caa941f9bb27136aa15b"
+    },
+    {
+      "assetKey": "card.emerald_brilliant.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/emerald_brilliant.png",
+      "sha256": "85b7966ddfbbf982cee84ef658b3a4d121b42ee9300080bb3731d6e870bec0ba"
+    },
+    {
+      "assetKey": "card.emerald_dim.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/emerald_dim.png",
+      "sha256": "e3e947ff2fb06072b7825c4605909b5d06e4f0e51e63f80b83bc54d50e6c2c8d"
+    },
+    {
+      "assetKey": "card.emerald_flash.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/emerald_flash.png",
+      "sha256": "91fcf553e7fddc10f0443c8578788d2b356eaef301c46d22633071c8ca54ddbd"
+    },
+    {
+      "assetKey": "card.emerald_glimmer.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/emerald_glimmer.png",
+      "sha256": "52293bbf971590bd04a645c2ddb0ba99ddc4a1acf03ac76dedc861253b20bdbd"
+    },
+    {
+      "assetKey": "card.emerald_notice.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/emerald_notice.png",
+      "sha256": "89d4fa1e4400ba4a725b7caae1f6471933f3a6547fa269ead9edace780d61e98"
+    },
+    {
+      "assetKey": "card.heal_01.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/heal_01.png",
+      "sha256": "700cb846feb8af0921856fd3be32788f0b70eac788cdfeb47b2fae0f9f20b96f"
+    },
+    {
+      "assetKey": "card.hit_01.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/hit_01.png",
+      "sha256": "dd4f8b2de8d39252455b022e7e6dc51da1e8844f76a9219676ceb5986d1784fe"
+    },
+    {
+      "assetKey": "card.run_01.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/run_01.png",
+      "sha256": "d1a2d2fb468cb49c4ab0cc96880bb6f62ad6fbe2ef7ab235e932bddf0f8381f3"
+    },
+    {
+      "assetKey": "card.scepter_dispel.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/scepter_dispel.png",
+      "sha256": "413ebf79d0269256082aff33754fbeaff593e304c6b317e6d67abec41cc4b2bb"
+    },
+    {
+      "assetKey": "card.scepter_elbow.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/scepter_elbow.png",
+      "sha256": "bd9b55e18cfff2c415322fd92aef6bb29930537521ed54228aa9a662e5ba880a"
+    },
+    {
+      "assetKey": "card.scepter_heal.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/scepter_heal.png",
+      "sha256": "e030f1c3d4e831a57ba2bd4b9c34323f8e429832b9361396aee95859043f2cb4"
+    },
+    {
+      "assetKey": "card.scepter_inner_fire.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/scepter_inner_fire.png",
+      "sha256": "851184b476264969a17105c4896d488364b2e8845ad10106a16158d03b4f4dbb"
+    },
+    {
+      "assetKey": "card.scepter_light_shield.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/scepter_light_shield.png",
+      "sha256": "05cab92906c721b14fee1fe0575f388feb141d02b1086a1337782326c147ed1a"
+    },
+    {
+      "assetKey": "card.scepter_shine.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/scepter_shine.png",
+      "sha256": "1f7b54f0290a8a5932c56e10ea6369004dc43e28e0441db5dc938084592f34ce"
+    },
+    {
+      "assetKey": "card.scepter_tap.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/scepter_tap.png",
+      "sha256": "4de0748861a3fe74ef8f733f4c108c2fc29a9dc9ba1d5cb3871590dce720226c"
+    },
+    {
+      "assetKey": "card.shield_bash.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/shield_bash.png",
+      "sha256": "9a653cbebf22e45f841141c3c120c68f909c7bdf64dcf89e921367bbcafb05c9"
+    },
+    {
+      "assetKey": "card.shield_polish.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/shield_polish.png",
+      "sha256": "3f3fa24fe21f83d28ce29062e244767d3b1dc245b1b60a21bd8ae58e71867933"
+    },
+    {
+      "assetKey": "card.shield_protect.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/shield_protect.png",
+      "sha256": "9765d3fd305a62833031c9b21f2117cf8824a34ed4e4a0ee5ff60cc9c7b46792"
+    },
+    {
+      "assetKey": "card.shield_raise.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/shield_raise.png",
+      "sha256": "3f2575bed96f8d968a4323d7557a8ca9a685b6222efd3f39ca9c9e95b5f7c0e0"
+    },
+    {
+      "assetKey": "card.shield_throw.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/shield_throw.png",
+      "sha256": "8bc346dae4a16d2e71bbde420d83aeecfe42009117da55ce418daf9968689877"
+    },
+    {
+      "assetKey": "card.staff_arcane.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/staff_arcane.png",
+      "sha256": "b044ab26f3683162836e1288bfed7bc39253074d4c2a8770c6d3a7edeac59d27"
+    },
+    {
+      "assetKey": "card.staff_fireball.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/staff_fireball.png",
+      "sha256": "c0a27d8e50b6f1797bfe0a1c8d9ed374e5b6826a8daaffec3513df7ac0f1a575"
+    },
+    {
+      "assetKey": "card.staff_ice.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/staff_ice.png",
+      "sha256": "fbfd03bc4b1cd13336a9ae1bd515a11fcabdb77ead52ac84f34d0251ef3d0d2b"
+    },
+    {
+      "assetKey": "card.staff_lightning.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/staff_lightning.png",
+      "sha256": "8bbbaf6de023136bca5ca7b10e24ea459b7fcdfe4a8f5220421f189032c9ce77"
+    },
+    {
+      "assetKey": "card.staff_meditate.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/staff_meditate.png",
+      "sha256": "b816706662cd446710303bc9fc37f823a8e949be1878854eec0cd58c7f3d1c64"
+    },
+    {
+      "assetKey": "card.staff_storm.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/staff_storm.png",
+      "sha256": "755cb386406b450c27c842b57e4d4be2a4a9d614542ac506fa8b542aeaf24cd3"
+    },
+    {
+      "assetKey": "card.staff_swing.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/staff_swing.png",
+      "sha256": "6a9222dbecc7e5f32bec1ba64d4034d3bf3f45141295d2ebd82f00da72641308"
+    },
+    {
+      "assetKey": "card.sword_charge.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/sword_charge.png",
+      "sha256": "8fe8e7709637112cc36ea3fca05c5b84d247a10cf7aeb9a49f067355b39ee465"
+    },
+    {
+      "assetKey": "card.sword_desperate_throw.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/sword_desperate_throw.png",
+      "sha256": "fb23965e3fe56f7e19221a1e5bd34abe6e26bc4f8a25a15b7bc7cc2b6e1272a8"
+    },
+    {
+      "assetKey": "card.sword_flurry.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/sword_flurry.png",
+      "sha256": "79614344dcf3a36a7c00112251fa5685c120ec9931aced15ccec46407201c33f"
+    },
+    {
+      "assetKey": "card.sword_guard.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/sword_guard.png",
+      "sha256": "ba1d102fd0a27b17001e1111ee698c92be14f27a9071c5f5741c3e8bcd69248f"
+    },
+    {
+      "assetKey": "card.sword_pommel.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/sword_pommel.png",
+      "sha256": "b4e99a88a52b316dfbdf87798f0e9899c4bdaa94ce30b3dcb0d78352f64bd3dd"
+    },
+    {
+      "assetKey": "card.sword_slash.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/sword_slash.png",
+      "sha256": "5d85dda1534836ea51db20a8dbd323d792452677688dd68e5ec4e118670b20d3"
+    },
+    {
+      "assetKey": "card.sword_thrust.artwork",
+      "assetKind": "artwork",
+      "relativePath": "assets/CardArt/sword_thrust.png",
+      "sha256": "2df2a4b2d68abb7b6594b6b4928ae2dff79b9aa9d7bb6295e825290534a5f61c"
+    },
+    {
+      "assetKey": "class.assassin.art",
+      "assetKind": "class_artwork",
+      "relativePath": "assets/ClassIMG/Assassin.png",
+      "sha256": "76652ea238076260df104f53fc6dc3abfa67d9c7085887e09daca9b45dd0a31b"
+    },
+    {
+      "assetKey": "class.mage.art",
+      "assetKind": "class_artwork",
+      "relativePath": "assets/ClassIMG/Mage.png",
+      "sha256": "60c08a16247d49a3664c2fa12f002ee94798132d5c8f206cf9cf6915a9965c44"
+    },
+    {
+      "assetKey": "class.priest.art",
+      "assetKind": "class_artwork",
+      "relativePath": "assets/ClassIMG/Priest.png",
+      "sha256": "0645c0830e26f4656c2efdd2679b65c0208a62344ed16f0782b3a59c4c130a56"
+    },
+    {
+      "assetKey": "class.ranger.art",
+      "assetKind": "class_artwork",
+      "relativePath": "assets/ClassIMG/Ranger.png",
+      "sha256": "3a1c7c84dbd44d78d342a95a35887c86d4fedf027ff8357d5ea78d323de8a01c"
+    },
+    {
+      "assetKey": "class.warrior.art",
+      "assetKind": "class_artwork",
+      "relativePath": "assets/ClassIMG/Warrior.png",
+      "sha256": "b353eaa725c7f6fc2f15907640a88048b301e6e3cb8bc239a520da5f54611ec7"
+    }
+  ]
+}

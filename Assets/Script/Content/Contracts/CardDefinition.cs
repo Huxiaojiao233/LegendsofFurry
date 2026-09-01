@@ -7,7 +7,7 @@ namespace LegendsOfFurry.Content.Contracts
 /// <summary>
 /// 描述一张由内容数据库维护、可被游戏运行时加载的卡牌。
 /// </summary>
-public sealed class CardDefinition
+public sealed class CardDefinition : IContentDefinition
 {
     public string CardId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
@@ -27,6 +27,12 @@ public sealed class CardDefinition
     public List<string> Tags { get; set; } = new List<string>();
     public List<CardPoolMembership> Pools { get; set; } = new List<CardPoolMembership>();
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
+
+    /// <summary>Returns the registry and behavior-owner kind for cards.</summary>
+    public string GetDefinitionKind() => ContentDefinitionKinds.Card;
+
+    /// <summary>Returns the stable card ID authored by the content package.</summary>
+    public string GetDefinitionId() => CardId;
 }
 
 /// <summary>

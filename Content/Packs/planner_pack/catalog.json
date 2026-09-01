@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "contentVersion": "1.0.0",
+  "layout": "split",
+  "parts": [
+    {
+      "kind": "cards",
+      "file": "cards.json",
+      "sha256": "abb7777483c479aaa512a51e42f6564d40248562031e6fc2ae678111796fa440"
+    },
+    {
+      "kind": "cardPools",
+      "file": "card-pools.json",
+      "sha256": "5826b5f70617b8c1ee1778070af00f6334f2225396bfabe4dc3a12548b48f23d"
+    },
+    {
+      "kind": "statuses",
+      "file": "statuses.json",
+      "sha256": "de3639a28a63fd894de7fc3f78b1e5afd3a5ef2881d1f687c49e7ba72e705147"
+    },
+    {
+      "kind": "decks",
+      "file": "decks.json",
+      "sha256": "b1b8165f8d139f4fdcdccda58ba02d10fa1e8ab569e02916f8f8ba2a18ca64c8"
+    },
+    {
+      "kind": "rarities",
+      "file": "rarities.json",
+      "sha256": "c50583d972e4b05d70774d435deaaaa33b78dc186a637262eafa31c02f70469f"
+    },
+    {
+      "kind": "assets",
+      "file": "assets.json",
+      "sha256": "bdd14b063b787c8d4502f74e1b30f12da5323ef4bd2bcb76c27b2a54460216d9"
+    },
+    {
+      "kind": "classProfiles",
+      "file": "classes.json",
+      "sha256": "985673fb05ff8237bc9a87d15577d0087dc404344d1e00f9fab488f368a25a7b"
+    },
+    {
+      "kind": "characters",
+      "file": "characters.json",
+      "sha256": "55e3e18cd539533566183e9951733934b0751a3ad445822ad166a6a4aeff767f"
+    },
+    {
+      "kind": "equipment",
+      "file": "equipment.json",
+      "sha256": "303f136ed2123739ee3177565f5753b18cd7a608de4360ebed7eeba4f7df510c"
+    },
+    {
+      "kind": "gameSettings",
+      "file": "game-settings.json",
+      "sha256": "7ed7b57ca543e798f999a24e458793b4c724270920caf6f0842e7a55357f91a9"
+    }
+  ]
+}

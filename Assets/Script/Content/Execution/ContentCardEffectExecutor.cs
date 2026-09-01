@@ -40,9 +40,67 @@ public sealed class ContentCardExecutionContext
         int spentActionPoints = 0,
         int spentMana = 0,
         IContentRandomSource randomSource = null,
-        IContentTargetQueryService targetQueryService = null)
+        IContentTargetQueryService targetQueryService = null,
+        ContentRuleQuery ruleQuery = null)
+        : this(
+            ContentBehaviorOwner.FromCard(card),
+            source,
+            selectedUnit,
+            selectedCell,
+            direction,
+            hand,
+            actionPoints,
+            result,
+            enablePresentation,
+            actionPointsBefore,
+            manaBefore,
+            spentActionPoints,
+            spentMana,
+            randomSource,
+            targetQueryService,
+            ruleQuery)
     {
-        Card = card;
+    }
+
+    /// <summary>
+    /// Creates an execution context for any real behavior owner, including statuses and class profiles.
+    /// Card-only selectors remain unavailable when the owner is not a card.
+    /// </summary>
+    /// <param name="owner">The definition and optional instance that own the graph.</param>
+    /// <param name="source">The unit causing the behavior.</param>
+    /// <param name="selectedUnit">The optional selected unit.</param>
+    /// <param name="selectedCell">The optional selected board cell.</param>
+    /// <param name="direction">The optional selected direction.</param>
+    /// <param name="hand">The optional card draw and zone service.</param>
+    /// <param name="actionPoints">The optional action point service.</param>
+    /// <param name="result">The shared execution result.</param>
+    /// <param name="enablePresentation">Whether presentation-only effects may run.</param>
+    /// <param name="actionPointsBefore">Action points before this execution, or -1 when unknown.</param>
+    /// <param name="manaBefore">Mana before this execution, or -1 when unknown.</param>
+    /// <param name="spentActionPoints">Action points already committed by the caller.</param>
+    /// <param name="spentMana">Mana already committed by the caller.</param>
+    /// <param name="randomSource">The optional deterministic random source.</param>
+    /// <param name="targetQueryService">The optional unit and card target query service.</param>
+    public ContentCardExecutionContext(
+        ContentBehaviorOwner owner,
+        Unit source,
+        Unit selectedUnit,
+        BoardCell selectedCell,
+        Vector2Int? direction,
+        ICardDrawService hand,
+        BoardClickController actionPoints,
+        CardPlayResult result,
+        bool enablePresentation = true,
+        int actionPointsBefore = -1,
+        int manaBefore = -1,
+        int spentActionPoints = 0,
+        int spentMana = 0,
+        IContentRandomSource randomSource = null,
+        IContentTargetQueryService targetQueryService = null,
+        ContentRuleQuery ruleQuery = null)
+    {
+        Owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        Card = owner.RuntimeInstance as CardInstance;
         Source = source;
         SelectedUnit = selectedUnit;
         SelectedCell = selectedCell;
@@ -59,8 +117,11 @@ public sealed class ContentCardExecutionContext
             spentMana);
         RandomSource = randomSource ?? UnityContentRandomSource.Instance;
         TargetQueryService = targetQueryService;
+        RuleQuery = ruleQuery;
+        RuleQuerySession = ruleQuery?.Session ?? new ContentRuleQuerySession();
     }
 
+    public ContentBehaviorOwner Owner { get; }
     public CardInstance Card { get; }
     public Unit Source { get; }
     public Unit SelectedUnit { get; }
@@ -76,6 +137,8 @@ public sealed class ContentCardExecutionContext
     public object CurrentGraphTarget { get; private set; }
     public IContentRandomSource RandomSource { get; }
     public IContentTargetQueryService TargetQueryService { get; }
+    public ContentRuleQuery RuleQuery { get; }
+    public ContentRuleQuerySession RuleQuerySession { get; }
     public bool IsAwaitingInteraction { get; private set; }
     public string PendingInteractionNodeId { get; private set; }
     public string PendingInteractionKind { get; private set; }
@@ -86,7 +149,6 @@ public sealed class ContentCardExecutionContext
     private readonly List<CardDamageRecord> damageRecords = new List<CardDamageRecord>();
     private readonly List<ContentCombatLogEntry> combatLog = new List<ContentCombatLogEntry>();
     private readonly HashSet<Unit> quickTargets = new HashSet<Unit>();
-    private readonly HashSet<Unit> swordChargeTargets = new HashSet<Unit>();
 
     /// <summary>设置当前解释中的行为和触发器，供每个节点生成可定位日志。</summary>
     internal void BeginBehavior(BehaviorDefinition behavior)
@@ -100,7 +162,8 @@ public sealed class ContentCardExecutionContext
     {
         object target = CurrentGraphTarget ?? (object)SelectedUnit ?? Source;
         combatLog.Add(new ContentCombatLogEntry(
-            Card?.Definition?.CardId ?? Card?.Data?.cardId ?? string.Empty,
+            Owner.OwnerKind,
+            Owner.OwnerId,
             CurrentTriggerKey,
             CurrentBehaviorId,
             node?.NodeId ?? string.Empty,
@@ -175,7 +238,7 @@ public sealed class ContentCardExecutionContext
         return target != null && damageRecords.Any(record => record.Target == target && record.KilledTarget);
     }
 
-    /// <summary>把旧的一次性攻击修正应用到数据库伤害节点，并返回该目标需要结算的段数。</summary>
+    /// <summary>Applies authored outgoing-damage and hit-count rule queries.</summary>
     /// <param name="target">当前伤害目标。</param>
     /// <param name="baseAmount">行为图计算出的基础伤害。</param>
     /// <param name="amount">应用锋利、恍惚、心火和剑蓄力后的每段伤害。</param>
@@ -184,21 +247,24 @@ public sealed class ContentCardExecutionContext
     {
         amount = Math.Max(0, baseAmount);
         if (Source == null || Card?.Definition?.IsAttack != true || target == null) return 1;
-        if (Source.State.Has("sharp")) amount += 1;
-        if (Card.Definition.FamilyId == "sword" && Source.State.Has("sword_charge") && swordChargeTargets.Add(target))
-            amount += Source.State.Get("sword_charge");
-        amount = Math.Max(0, amount - Source.State.Get("haze"));
-        if (Source.State.Has("heart_fire")) amount = Mathf.FloorToInt(amount * 1.1f);
-        return Source.State.Has("quick") && quickTargets.Add(target) ? 2 : 1;
+        ContentRuleQuery damage = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.OutgoingAttackDamage, Source, target, amount, Card.Definition,
+            session: RuleQuerySession));
+        amount = Math.Max(0, damage.Value);
+        if (!quickTargets.Add(target)) return 1;
+        ContentRuleQuery hits = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.AttackHitCount, Source, target, 1, Card.Definition,
+            session: RuleQuerySession));
+        return Math.Max(0, hits.Value);
     }
 
-    /// <summary>在 on_play 完成后消耗锋利、速攻以及剑类蓄力，保持旧战斗基线。</summary>
+    /// <summary>Dispatches the generic post-attack lifecycle query once per card execution.</summary>
     internal void FinishAttackModifiers()
     {
         if (Source == null || Card?.Definition?.IsAttack != true) return;
-        if (Source.State.Has("sharp")) Source.State.Reduce("sharp");
-        if (Source.State.Has("quick")) Source.State.Reduce("quick");
-        if (Card.Definition.FamilyId == "sword" && Source.State.Has("sword_charge")) Source.State.Remove("sword_charge");
+        ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.AfterAttack, Source, SelectedUnit, 0, Card.Definition,
+            session: RuleQuerySession));
     }
 }
 
@@ -295,7 +361,34 @@ public static class ContentCardEffectExecutor
     public static bool CanExecuteTrigger(CardDefinition definition, string triggerKey)
     {
         if (definition == null || string.IsNullOrWhiteSpace(triggerKey)) return false;
-        BehaviorDefinition[] behaviors = definition.Behaviors
+        return CanExecuteOwnedTrigger(
+            ContentDefinitionKinds.Card,
+            definition.CardId,
+            definition.Behaviors,
+            triggerKey);
+    }
+
+    /// <summary>
+    /// Verifies one real definition owner's trigger without converting it into a synthetic card.
+    /// </summary>
+    /// <param name="ownerKind">The definition kind expected on every behavior.</param>
+    /// <param name="ownerId">The stable definition ID expected on every behavior.</param>
+    /// <param name="sourceBehaviors">All behavior graphs owned by the definition.</param>
+    /// <param name="triggerKey">The lifecycle trigger to preflight.</param>
+    /// <returns>True when at least one matching graph exists and every graph is executable.</returns>
+    public static bool CanExecuteOwnedTrigger(
+        string ownerKind,
+        string ownerId,
+        IEnumerable<BehaviorDefinition> sourceBehaviors,
+        string triggerKey)
+    {
+        if (!ContentDefinitionKinds.CanOwnBehavior(ownerKind) || !ContentId.IsValid(ownerId) ||
+            sourceBehaviors == null || string.IsNullOrWhiteSpace(triggerKey))
+        {
+            return false;
+        }
+
+        BehaviorDefinition[] behaviors = sourceBehaviors
             .Where(behavior => behavior.Enabled && behavior.TriggerKey == triggerKey)
             .OrderBy(behavior => behavior.Priority)
             .ThenBy(behavior => behavior.BehaviorId, StringComparer.Ordinal)
@@ -305,7 +398,10 @@ public static class ContentCardEffectExecutor
             return false;
         }
 
-        return behaviors.All(BehaviorRuntime.CanExecuteBehavior) && HasValidInteractionPlacement(behaviors);
+        return behaviors.All(behavior =>
+                   behavior.OwnerKind == ownerKind && behavior.OwnerId == ownerId &&
+                   BehaviorRuntime.CanExecuteBehavior(behavior)) &&
+               HasValidInteractionPlacement(behaviors);
     }
 
     /// <summary>确保需要玩家输入的效果位于最终行为的最终叶子，完成回调后不会遗漏后续节点。</summary>
@@ -355,7 +451,8 @@ public static class ContentCardEffectExecutor
             return false;
         }
 
-        if (node.OperationKey is "end_turn" or "no_op" or "play_vfx" or "play_sfx") return true;
+        if (node.OperationKey is "end_turn" or "no_op" or "play_vfx" or "play_sfx" or "cancel_query" or
+            "transform_owner_status" or "appraise_equipment") return true;
 
         bool requiresAmount = node.OperationKey is not "remove_status" and not "clear_statuses" and
             not "remove_cards_by_query" and not "move_cards";
@@ -377,6 +474,20 @@ public static class ContentCardEffectExecutor
         {
             if (parameters.query == null) return false;
         }
+        if (node.OperationKey == "generate_card" &&
+            !ContentCardZoneKeys.IsConcrete(parameters.destinationZone ?? ContentCardZoneKeys.Hand))
+            return false;
+        if (node.OperationKey == "move_cards" &&
+            (!ContentCardZoneKeys.IsConcrete(parameters.sourceZone) ||
+             !ContentCardZoneKeys.IsConcrete(parameters.destinationZone) ||
+             parameters.sourceZone == parameters.destinationZone))
+            return false;
+        if (node.OperationKey == "remove_cards_by_query" &&
+            !ContentCardZoneKeys.IsConcreteOrAll(parameters.zone ?? ContentCardZoneKeys.All))
+            return false;
+        if (node.OperationKey == "modify_query_value" &&
+            parameters.mode is not "add" and not "set" and not "min" and not "max" and not "multiply_percent")
+            return false;
         return node.OperationKey != "damage" || Enum.TryParse(parameters.damageType, true, out DamageType _);
     }
 
@@ -402,9 +513,34 @@ public static class ContentCardEffectExecutor
             return false;
         }
 
-        foreach (BehaviorDefinition behavior in context.Card.Definition.Behaviors
+        return TryExecuteOwnedTrigger(context, context.Card.Definition.Behaviors, triggerKey);
+    }
+
+    /// <summary>
+    /// Executes behavior graphs belonging to the context's real definition owner.
+    /// </summary>
+    /// <param name="context">The shared execution context carrying the validated owner.</param>
+    /// <param name="sourceBehaviors">All graphs authored on that owner definition.</param>
+    /// <param name="triggerKey">The lifecycle trigger being dispatched.</param>
+    /// <returns>True when all matching graphs succeed or pause for supported interaction.</returns>
+    public static bool TryExecuteOwnedTrigger(
+        ContentCardExecutionContext context,
+        IEnumerable<BehaviorDefinition> sourceBehaviors,
+        string triggerKey)
+    {
+        if (context?.Owner == null || !CanExecuteOwnedTrigger(
+                context.Owner.OwnerKind,
+                context.Owner.OwnerId,
+                sourceBehaviors,
+                triggerKey))
+        {
+            return false;
+        }
+
+        foreach (BehaviorDefinition behavior in sourceBehaviors
                      .Where(item => item.Enabled && item.TriggerKey == triggerKey)
-                     .OrderBy(item => item.Priority))
+                     .OrderBy(item => item.Priority)
+                     .ThenBy(item => item.BehaviorId, StringComparer.Ordinal))
         {
             context.BeginBehavior(behavior);
             ContentBehaviorExecutionStatus status = ContentBehaviorGraphInterpreter.Execute(
@@ -418,12 +554,12 @@ public static class ContentCardEffectExecutor
             if (status != ContentBehaviorExecutionStatus.Succeeded)
             {
                 Debug.LogError(
-                    $"卡牌 {context.Card.Definition.CardId} 的行为 {behavior.BehaviorId} 执行结果为 {status}。",
+                    $"内容 {context.Owner.OwnerKind}:{context.Owner.OwnerId} 的行为 {behavior.BehaviorId} 执行结果为 {status}。",
                     context.Source);
                 return false;
             }
         }
-        if (triggerKey == "on_play") context.FinishAttackModifiers();
+        if (context.Card != null && triggerKey == "on_play") context.FinishAttackModifiers();
         return true;
     }
 
@@ -453,10 +589,45 @@ public static class ContentCardEffectExecutor
         };
         int amount = 0;
         bool requiresAmount = node.OperationKey is not "end_turn" and not "no_op" and not "play_vfx" and not "play_sfx" and
-            not "remove_status" and not "clear_statuses" and not "remove_cards_by_query" and not "move_cards";
+            not "remove_status" and not "clear_statuses" and not "remove_cards_by_query" and not "move_cards" and
+            not "cancel_query" and not "transform_owner_status" and not "appraise_equipment";
         if (requiresAmount && !TryResolveAmount(node.ParametersJson, context, target, out amount)) return false;
         switch (node.OperationKey)
         {
+            case "modify_query_value":
+                if (context.RuleQuery == null || !MatchesQuery(parameters, context.RuleQuery)) return false;
+                if (!TryApplyQueryEffect(context, node, parameters)) return true;
+                context.RuleQuery.Touched = true;
+                context.RuleQuery.Value = parameters.mode switch
+                {
+                    "set" => amount,
+                    "min" => Math.Min(context.RuleQuery.Value, amount),
+                    "max" => Math.Max(context.RuleQuery.Value, amount),
+                    "multiply_percent" => Mathf.FloorToInt(context.RuleQuery.Value * amount / 100f),
+                    _ => context.RuleQuery.Value + amount
+                };
+                return true;
+            case "cancel_query":
+                if (context.RuleQuery == null || !MatchesQuery(parameters, context.RuleQuery)) return false;
+                if (!TryApplyQueryEffect(context, node, parameters)) return true;
+                context.RuleQuery.Touched = true;
+                context.RuleQuery.Cancelled = true;
+                return true;
+            case "consume_owner_status":
+                if (context.Owner.RuntimeInstance is not RuntimeStatusInstance ownerStatus ||
+                    (context.RuleQuery != null && !MatchesQuery(parameters, context.RuleQuery))) return false;
+                if (context.RuleQuery != null) context.RuleQuery.Touched = true;
+                context.Source?.State.Reduce(ownerStatus.StatusId, Mathf.Max(1, amount));
+                return true;
+            case "transform_owner_status":
+                if (context.Owner.RuntimeInstance is not RuntimeStatusInstance transformed || context.Source == null ||
+                    parameters.threshold <= 0 || string.IsNullOrWhiteSpace(parameters.resultStatusId)) return false;
+                if (transformed.Stacks < parameters.threshold ||
+                    (!string.IsNullOrWhiteSpace(parameters.blockedByStatusId) &&
+                     context.Source.State.Has(parameters.blockedByStatusId))) return true;
+                context.Source.State.Remove(transformed.StatusId);
+                context.Source.State.Add(parameters.resultStatusId, 1, parameters.durationTurns, transformed.SourceId);
+                return true;
             case "damage":
                 if (target == null) return false;
                 int hitCount = context.PrepareAttackDamage(target, amount, out int modifiedAmount);
@@ -531,12 +702,14 @@ public static class ContentCardEffectExecutor
                 return true;
             case "generate_card":
                 return context.CardZones != null &&
-                       context.CardZones.GenerateCards(parameters.query, Mathf.Max(0, amount), parameters.destinationZone ?? "hand");
+                       context.CardZones.GenerateCards(parameters.query, Mathf.Max(0, amount),
+                           parameters.destinationZone ?? ContentCardZoneKeys.Hand);
             case "move_cards":
                 return context.CardZones != null &&
                        context.CardZones.MoveCards(parameters.query, Mathf.Max(0, amount), parameters.sourceZone, parameters.destinationZone) >= 0;
             case "remove_cards_by_query":
-                return context.CardZones != null && context.CardZones.RemoveCards(parameters.query, parameters.zone ?? "all") >= 0;
+                return context.CardZones != null && context.CardZones.RemoveCards(
+                    parameters.query, parameters.zone ?? ContentCardZoneKeys.All) >= 0;
             case "modify_card_runtime_value":
                 if (context.Card == null || string.IsNullOrWhiteSpace(parameters.runtimeKey)) return false;
                 context.Card.ModifyRuntimeValue(parameters.runtimeKey, amount);
@@ -566,9 +739,53 @@ public static class ContentCardEffectExecutor
                 if (context.EnablePresentation)
                     Debug.Log($"内容表现请求：{node.OperationKey} / {parameters.assetKey}", context.Source);
                 return true;
+            case "appraise_equipment":
+                return TryAppraiseEquipment(context, parameters);
             default:
                 return false;
         }
+    }
+
+    /// <summary>鉴定当前绑定装备：先诅咒判定，再按品质套表抽一张临时消耗牌入手，满手则进弃牌。</summary>
+    private static bool TryAppraiseEquipment(ContentCardExecutionContext context, EffectParametersDto parameters)
+    {
+        if (context?.CardZones == null || !ContentRuntime.IsLoaded) return false;
+        string equipmentId = parameters.equipmentId;
+        if (string.IsNullOrWhiteSpace(equipmentId))
+            EquipmentAppraisal.TryGetEquipmentIdFromCard(context.Card?.Definition.CardId, out equipmentId);
+        if (!ContentRuntime.Registry.TryGetEquipment(equipmentId, out EquipmentDefinition equipment))
+            return false;
+        CardDefinition reward = EquipmentAppraisal.Roll(
+            ContentRuntime.Registry.GetCardsInPool(equipment.CardPoolId),
+            context.RandomSource.NextUnit(),
+            context.RandomSource.NextUnit(),
+            context.RandomSource.NextUnit());
+        if (reward == null) return true;
+        CardInstance instance = new CardInstance(reward);
+        instance.ApplyAppraisalRewardFlags();
+        return context.CardZones.AddCardToHandOrDiscard(instance);
+    }
+
+    private static bool MatchesQuery(EffectParametersDto parameters, ContentRuleQuery query)
+    {
+        if (!string.IsNullOrWhiteSpace(parameters.damageType) &&
+            !string.Equals(parameters.damageType, query.DamageTypeId, StringComparison.Ordinal)) return false;
+        if (!string.IsNullOrWhiteSpace(parameters.familyId) &&
+            !string.Equals(parameters.familyId, query.Card?.FamilyId, StringComparison.Ordinal)) return false;
+        if (!string.IsNullOrWhiteSpace(parameters.tag) &&
+            (query.Card?.Tags == null || !query.Card.Tags.Contains(parameters.tag, StringComparer.Ordinal))) return false;
+        if (parameters.requiresAttack && query.Card?.IsAttack != true) return false;
+        return true;
+    }
+
+    private static bool TryApplyQueryEffect(
+        ContentCardExecutionContext context,
+        BehaviorNodeDefinition node,
+        EffectParametersDto parameters)
+    {
+        string key = context.Owner.OwnerKind + ":" + context.Owner.OwnerId + ":" + node.NodeId;
+        if (parameters.scope == "once_per_battle") return context.Source != null && context.Source.State.TryMarkRuleUsed(key);
+        return context.RuleQuery.Session.TryApply(key, parameters.scope, context.RuleQuery.OtherUnit);
     }
 
     /// <summary>从效果 JSON 中提取 amount 表达式的安全解析对象。</summary>
@@ -632,6 +849,14 @@ public static class ContentCardEffectExecutor
         public string zone;
         public string runtimeKey;
         public string assetKey;
+        public string familyId;
+        public string tag;
+        public string scope;
+        public bool requiresAttack;
+        public int threshold;
+        public string resultStatusId;
+        public string blockedByStatusId;
+        public string equipmentId;
     }
 
     /// <summary>表示 kind=constant 的整数数值表达式。</summary>
@@ -647,10 +872,11 @@ public static class ContentCardEffectExecutor
 public sealed class ContentCombatLogEntry
 {
     /// <summary>创建一条不可变节点执行日志。</summary>
-    public ContentCombatLogEntry(string cardId, string triggerKey, string behaviorId, string nodeId,
+    public ContentCombatLogEntry(string ownerKind, string ownerId, string triggerKey, string behaviorId, string nodeId,
         string operationKey, string target, string inputJson, string result)
     {
-        CardId = cardId;
+        OwnerKind = ownerKind;
+        OwnerId = ownerId;
         TriggerKey = triggerKey;
         BehaviorId = behaviorId;
         NodeId = nodeId;
@@ -660,7 +886,9 @@ public sealed class ContentCombatLogEntry
         Result = result;
     }
 
-    public string CardId { get; }
+    public string OwnerKind { get; }
+    public string OwnerId { get; }
+    public string CardId => OwnerKind == ContentDefinitionKinds.Card ? OwnerId : string.Empty;
     public string TriggerKey { get; }
     public string BehaviorId { get; }
     public string NodeId { get; }

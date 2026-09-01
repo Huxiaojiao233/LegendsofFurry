@@ -38,15 +38,32 @@ public sealed class ContentBuildValidator : IPreprocessBuildWithReport
     /// <returns>已经通过全部构建门禁的内容包。</returns>
     public static ContentPackage ValidatePublishedContent()
     {
-        string contentRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
-        ContentPackage package = ContentPackageLoader.LoadFromDirectory(contentRoot);
+        ContentLoadResult loadResult = ContentRuntime.LoadComposedSnapshot();
+        ContentPackage package = loadResult.Package;
         ContentRuntimeCapabilityValidator.ValidateOrThrow(package);
-        if (package.Cards.Count == 0) throw new InvalidDataException("内容包没有可用卡牌。");
+        if (package.Cards.Count == 0) throw new InvalidDataException("内容包没有可用卡牌。请把离线内容包放到工程 Content/Packs。");
         if (!package.Cards.Any(card => card.Enabled)) throw new InvalidDataException("内容包没有已启用卡牌。");
         if (package.ClassProfiles.Count == 0 || package.ClassProfiles.Any(profile => profile.DeckRecipe.Count == 0))
             throw new InvalidDataException("职业资料缺失，或存在没有初始牌库配方的职业。");
-        Debug.Log($"数据库内容构建检查通过：{package.ContentVersion}，{package.Cards.Count} 张卡牌。");
+        ValidateArtworkFiles(package, loadResult);
+        Debug.Log($"数据库内容构建检查通过：{package.ContentVersion}，{package.Cards.Count} 张卡牌，扩展包 {loadResult.LoadedPacks.Count} 个。");
         return package;
+    }
+
+    /// <summary>
+    /// 已引用卡面必须能从离线内容包解析到磁盘文件。
+    /// </summary>
+    private static void ValidateArtworkFiles(ContentPackage package, ContentLoadResult loadResult)
+    {
+        System.Collections.Generic.HashSet<string> referencedKeys = package.Cards
+            .Where(card => card.Enabled && !string.IsNullOrWhiteSpace(card.ArtworkKey))
+            .Select(card => card.ArtworkKey)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (AssetDefinition asset in package.Assets.Where(item => referencedKeys.Contains(item.AssetKey)))
+        {
+            if (!loadResult.TryGetExternalAssetPath(asset.AssetKey, out string path) || !File.Exists(path))
+                throw new FileNotFoundException($"卡面必须来自离线内容包，找不到：{asset.AssetKey} -> {asset.RelativePath}");
+        }
     }
 
     /// <summary>

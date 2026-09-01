@@ -1,0 +1,28 @@
+{
+  "characters": [
+    {
+      "characterId": "hongye",
+      "displayName": "鸿叶",
+      "description": "玩家角色。",
+      "initialHealth": 30,
+      "baseDamage": 3,
+      "moveSteps": 2,
+      "enabled": true,
+      "sortOrder": 10,
+      "tags": [],
+      "behaviors": []
+    },
+    {
+      "characterId": "taigao",
+      "displayName": "太糕",
+      "description": "当前战斗敌人。",
+      "initialHealth": 100,
+      "baseDamage": 3,
+      "moveSteps": 2,
+      "enabled": true,
+      "sortOrder": 20,
+      "tags": [],
+      "behaviors": []
+    }
+  ]
+}

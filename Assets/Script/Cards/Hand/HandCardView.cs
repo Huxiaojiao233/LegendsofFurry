@@ -1,4 +1,6 @@
 using System.Collections;
+using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -43,7 +45,7 @@ public class HandCardView : MonoBehaviour,
         cardImage = GetComponent<Image>();
         cardImage.sprite = cardData.artwork;
         cardImage.preserveAspect = false;
-        cardImage.color = cardData.artwork != null ? Color.white : RarityColor(cardData.rarity);
+        cardImage.color = cardData.artwork != null ? Color.white : RarityColor(cardData.rarityId);
 
         if (cardData.artwork == null)
         {
@@ -93,7 +95,7 @@ public class HandCardView : MonoBehaviour,
         rarity.rectTransform.pivot = new Vector2(1f, 1f);
         rarity.rectTransform.anchoredPosition = new Vector2(-4f, -6f);
         rarity.rectTransform.sizeDelta = new Vector2(56f, 32f);
-        rarity.text = RarityName(cardData.rarity);
+        rarity.text = RarityName(cardData.rarityId);
         rarity.alignment = TextAlignmentOptions.Right;
 
         TMP_Text rules = CreateText("Rules", root.transform, 16f, FontStyles.Normal);
@@ -125,21 +127,18 @@ public class HandCardView : MonoBehaviour,
         rect.offsetMax = new Vector2(-6f, -6f);
     }
 
-    private static Color RarityColor(CardRarity rarity) => rarity switch
+    private static Color RarityColor(string rarityId)
     {
-        CardRarity.Gray => new Color(0.28f, 0.3f, 0.34f, 1f),
-        CardRarity.Blue => new Color(0.12f, 0.31f, 0.55f, 1f),
-        CardRarity.Purple => new Color(0.38f, 0.17f, 0.52f, 1f),
-        CardRarity.Gold => new Color(0.65f, 0.48f, 0.08f, 1f),
-        CardRarity.Red => new Color(0.55f, 0.12f, 0.14f, 1f),
-        _ => Color.gray
-    };
+        if (ContentRuntime.IsLoaded && ContentRuntime.Registry.TryGetRarity(rarityId, out RarityDefinition rarity) &&
+            ColorUtility.TryParseHtmlString(rarity.ColorHex, out Color color)) return color;
+        return Color.gray;
+    }
 
-    private static string RarityName(CardRarity rarity) => rarity switch
+    private static string RarityName(string rarityId)
     {
-        CardRarity.Gray => "灰", CardRarity.Blue => "蓝", CardRarity.Purple => "紫",
-        CardRarity.Gold => "金", CardRarity.Red => "红", _ => rarity.ToString()
-    };
+        return ContentRuntime.IsLoaded && ContentRuntime.Registry.TryGetRarity(rarityId, out RarityDefinition rarity)
+            ? rarity.DisplayName : rarityId;
+    }
 
     public void SetLayoutPosition(Vector2 position, bool immediate = false)
     {

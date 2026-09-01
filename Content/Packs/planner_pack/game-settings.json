@@ -1,0 +1,11 @@
+{
+  "gameSettings": {
+    "handLimit": 10,
+    "startingHandSize": 5,
+    "drawPerTurn": 5,
+    "baseActionPoints": 3,
+    "baseMoveSteps": 2,
+    "playerCharacterId": "",
+    "enemyCharacterId": ""
+  }
+}

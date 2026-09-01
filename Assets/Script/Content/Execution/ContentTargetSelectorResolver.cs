@@ -80,10 +80,10 @@ public sealed class ContentTargetSelectorResolver
         Register("all_enemies", ResolveAllEnemies);
         Register("all_units", ResolveAllUnits);
         Register("current_card", ResolveCurrentCard);
-        Register("cards_in_hand", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone("hand", context, out targets));
-        Register("cards_in_draw_pile", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone("draw", context, out targets));
-        Register("cards_in_discard_pile", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone("discard", context, out targets));
-        Register("cards_in_exhaust_pile", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone("exhaust", context, out targets));
+        Register("cards_in_hand", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone(ContentCardZoneKeys.Hand, context, out targets));
+        Register("cards_in_draw_pile", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone(ContentCardZoneKeys.Draw, context, out targets));
+        Register("cards_in_discard_pile", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone(ContentCardZoneKeys.Discard, context, out targets));
+        Register("cards_in_exhaust_pile", (ContentTargetSelectorParameters parameters, ContentCardExecutionContext context, out IReadOnlyList<object> targets) => ResolveCardsInZone(ContentCardZoneKeys.Exhaust, context, out targets));
     }
 
     /// <summary>

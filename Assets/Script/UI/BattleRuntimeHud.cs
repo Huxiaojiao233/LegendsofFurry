@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
 using TMPro;
@@ -31,13 +30,13 @@ public class BattleRuntimeHud : MonoBehaviour
     {
         public Button Button;
         public TMP_Text Info;
-        public string PoolId = string.Empty;
+        public string SlotKey = string.Empty;
     }
 
     /// <summary>解析战斗对象、职业配置和场景 UI，并绑定装备卸下事件。</summary>
     private void Start()
     {
-        player = GameObject.Find("Player")?.GetComponent<Unit>();
+        player = BattleUnits.PrimaryAlly;
         hand = FindAnyObjectByType<HandCardSystem>();
         ContentClassPassiveRuntime.TryGetSelectedProfile(out profile);
         ResolveInterfaceBindings();
@@ -57,8 +56,8 @@ public class BattleRuntimeHud : MonoBehaviour
     private void RefreshInterface()
     {
         if (player == null) return;
-        string className = profile != null ? profile.DisplayName : GameSession.SelectedClass.ToString();
-        if (selfNameAndClassText != null) selfNameAndClassText.text = "鸿叶";
+        string className = profile != null ? profile.DisplayName : GameSession.SelectedClassId;
+        if (selfNameAndClassText != null) selfNameAndClassText.text = player.DisplayName;
         if (careerText != null) careerText.text = className;
         if (selfStatusText != null)
         {
@@ -81,7 +80,7 @@ public class BattleRuntimeHud : MonoBehaviour
         if (classAbilityButton != null)
         {
             classAbilityButton.interactable = BattleFlow.CanPlayerAct &&
-                                               !player.State.PriestHealUsedThisTurn &&
+                                               !player.State.ActivatedAbilityUsedThisTurn &&
                                                (hand?.HandCount ?? 0) > 0;
         }
     }
@@ -156,12 +155,12 @@ public class BattleRuntimeHud : MonoBehaviour
     private void ResolveEquipmentBindings()
     {
         Transform root = transform.Find("P_SelfInfo/EquipmentColumn/ControlPanel");
-        BindEquipmentSlot("weapon", root?.Find("Weapon"));
-        BindEquipmentSlot("offhand", root?.Find("Armor1"));
-        BindEquipmentSlot("accessory", root?.Find("Accessories"));
-        BindEquipmentSlot("armor", root?.Find("Armor2"));
-        BindEquipmentSlot("treasure", root?.Find("Treasure"));
-        BindEquipmentSlot("boot", root?.Find("Boot"));
+        BindEquipmentSlot(ContentEquipmentSlotKeys.Weapon, root?.Find("Weapon"));
+        BindEquipmentSlot(ContentEquipmentSlotKeys.Offhand, root?.Find("Armor1"));
+        BindEquipmentSlot(ContentEquipmentSlotKeys.Accessory, root?.Find("Accessories"));
+        BindEquipmentSlot(ContentEquipmentSlotKeys.Armor, root?.Find("Armor2"));
+        BindEquipmentSlot(ContentEquipmentSlotKeys.Treasure, root?.Find("Treasure"));
+        BindEquipmentSlot(ContentEquipmentSlotKeys.Boot, root?.Find("Boot"));
     }
 
     /// <summary>登记一个场景装备槽；点击已有装备时只卸下该槽，不影响其他槽。</summary>
@@ -171,7 +170,8 @@ public class BattleRuntimeHud : MonoBehaviour
         EquipmentSlotView slot = new EquipmentSlotView
         {
             Button = slotRoot.GetComponent<Button>(),
-            Info = slotRoot.Find("Info")?.GetComponent<TMP_Text>()
+            Info = slotRoot.Find("Info")?.GetComponent<TMP_Text>(),
+            SlotKey = slotKey
         };
         equipmentSlots[slotKey] = slot;
         if (slot.Button != null) slot.Button.onClick.AddListener(() => Unequip(slotKey));
@@ -180,48 +180,36 @@ public class BattleRuntimeHud : MonoBehaviour
     /// <summary>从职业数据特性填充初始装备；主手缺省时使用职业牌库配方中的首个有效卡池。</summary>
     private void ApplyInitialEquipment()
     {
-        if (profile == null) return;
-        string fallbackWeapon = profile.DeckRecipe.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.PoolId))?.PoolId ?? string.Empty;
-        Equip("weapon", profile.GetTraitString("equipment_weapon_pool", fallbackWeapon));
-        Equip("offhand", profile.GetTraitString("equipment_offhand_pool"));
-        Equip("accessory", profile.GetTraitString("equipment_accessory_pool"));
-        Equip("armor", profile.GetTraitString("equipment_armor_pool"));
-        Equip("treasure", profile.GetTraitString("equipment_treasure_pool"));
-        Equip("boot", profile.GetTraitString("equipment_boot_pool"));
+        if (player == null || profile == null) return;
+        RuntimeEquipmentLoadout loadout = player.GetComponent<RuntimeEquipmentLoadout>();
+        foreach (EquipmentSlotView slot in equipmentSlots.Values) RefreshEquipmentSlot(slot, loadout);
     }
 
     /// <summary>把卡池 ID 装入指定槽位，并使用内容数据库中的卡池显示名刷新界面。</summary>
-    private void Equip(string slotKey, string poolId)
-    {
-        if (!equipmentSlots.TryGetValue(slotKey, out EquipmentSlotView slot)) return;
-        slot.PoolId = poolId ?? string.Empty;
-        RefreshEquipmentSlot(slot);
-    }
-
     /// <summary>响应装备槽点击；已有装备变为未装备状态，空槽点击不会产生副作用。</summary>
     private void Unequip(string slotKey)
     {
-        if (!equipmentSlots.TryGetValue(slotKey, out EquipmentSlotView slot) || string.IsNullOrEmpty(slot.PoolId)) return;
-        slot.PoolId = string.Empty;
-        RefreshEquipmentSlot(slot);
+        if (!equipmentSlots.TryGetValue(slotKey, out EquipmentSlotView slot)) return;
+        RuntimeEquipmentLoadout loadout = player != null ? player.GetComponent<RuntimeEquipmentLoadout>() : null;
+        if (loadout == null || !loadout.Unequip(slotKey)) return;
+        RefreshEquipmentSlot(slot, loadout);
     }
 
     /// <summary>根据槽内卡池 ID 刷新策划名称；无装备或失效引用均显示“未装备”。</summary>
-    private static void RefreshEquipmentSlot(EquipmentSlotView slot)
+    private static void RefreshEquipmentSlot(EquipmentSlotView slot, RuntimeEquipmentLoadout loadout)
     {
         if (slot.Info == null) return;
-        slot.Info.text = !string.IsNullOrEmpty(slot.PoolId) && ContentRuntime.IsLoaded &&
-                         ContentRuntime.Registry.TryGetCardPool(slot.PoolId, out CardPoolDefinition pool)
-            ? pool.DisplayName
-            : "未装备";
+        slot.Info.text = loadout != null && loadout.TryGet(slot.SlotKey, out EquipmentInstance item)
+            ? item.Definition.DisplayName : "未装备";
     }
 
-    /// <summary>牧师职业启用时创建祈福按钮；治疗目标也改由棋盘棋子选择。</summary>
+    /// <summary>Creates the selected class's authored activated-ability button.</summary>
     private void CreateClassAbilityButton()
     {
-        if (!ContentClassPassiveRuntime.GetSelectedTraitBool("card_sacrifice_heal")) return;
+        string abilityId = profile?.GetTraitString("activated_ability_id");
+        if (string.IsNullOrWhiteSpace(abilityId)) return;
         GameObject buttonObject = new GameObject(
-            "PriestHeal", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            "ClassAbility_" + abilityId, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         Transform leftPanel = transform.Find("P_SelfInfo") ?? transform;
         buttonObject.transform.SetParent(leftPanel, false);
         RectTransform buttonRect = (RectTransform)buttonObject.transform;
@@ -232,12 +220,13 @@ public class BattleRuntimeHud : MonoBehaviour
         buttonRect.SetAsLastSibling();
         buttonObject.GetComponent<Image>().color = new Color(0.48f, 0.35f, 0.12f, 0.95f);
         classAbilityButton = buttonObject.GetComponent<Button>();
-        classAbilityButton.onClick.AddListener(() => hand?.BeginPriestSacrifice());
+        classAbilityButton.onClick.AddListener(() => hand?.BeginActivatedClassAbility());
         TMP_Text label = CreateText("Label", buttonObject.transform, 18f);
         label.rectTransform.anchorMin = Vector2.zero;
         label.rectTransform.anchorMax = Vector2.one;
         label.rectTransform.offsetMin = label.rectTransform.offsetMax = Vector2.zero;
-        label.text = "祈福：消耗1张牌，治疗5";
+        label.text = profile.GetTraitString("activated_ability_description",
+            profile.GetTraitString("activated_ability_name", abilityId));
         label.alignment = TextAlignmentOptions.Center;
     }
 

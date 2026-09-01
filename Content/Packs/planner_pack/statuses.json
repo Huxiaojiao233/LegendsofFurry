@@ -1,0 +1,1062 @@
+{
+  "statuses": [
+    {
+      "statusId": "block_retention",
+      "displayName": "格挡",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.block_retention.query_armor_retention",
+          "ownerKind": "status",
+          "ownerId": "block_retention",
+          "triggerKey": "query_armor_retention",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.block_retention.query_armor_retention.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.block_retention.query_armor_retention.retain",
+              "parentNodeId": "rule.status.block_retention.query_armor_retention.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"set\",\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            },
+            {
+              "nodeId": "rule.status.block_retention.query_armor_retention.consume",
+              "parentNodeId": "rule.status.block_retention.query_armor_retention.root",
+              "branchKey": "children",
+              "sortOrder": 2,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "broken",
+      "displayName": "破损",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 10,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.broken.on_unit_turn_end",
+          "ownerKind": "status",
+          "ownerId": "broken",
+          "triggerKey": "on_unit_turn_end",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.broken.on_unit_turn_end.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.broken.on_unit_turn_end.decay",
+              "parentNodeId": "rule.status.broken.on_unit_turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.broken.query_armor_gain",
+          "ownerKind": "status",
+          "ownerId": "broken",
+          "triggerKey": "query_armor_gain",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.broken.query_armor_gain.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.broken.query_armor_gain.modify",
+              "parentNodeId": "rule.status.broken.query_armor_gain.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"add\",\"amount\":{\"kind\":\"multiply\",\"left\":{\"kind\":\"owner_status_stacks\"},\"right\":{\"kind\":\"constant\",\"value\":-1}}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "cannot_attack",
+      "displayName": "禁攻",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 1,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.cannot_attack.query_can_play_card",
+          "ownerKind": "status",
+          "ownerId": "cannot_attack",
+          "triggerKey": "query_can_play_card",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.cannot_attack.query_can_play_card.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.cannot_attack.query_can_play_card.cancel",
+              "parentNodeId": "rule.status.cannot_attack.query_can_play_card.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "cancel_query",
+              "parametersJson": "{\"requiresAttack\":true}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "cold",
+      "displayName": "寒冷",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 3,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.cold.on_status_changed",
+          "ownerKind": "status",
+          "ownerId": "cold",
+          "triggerKey": "on_status_changed",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.cold.on_status_changed.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.cold.on_status_changed.transform",
+              "parentNodeId": "rule.status.cold.on_status_changed.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "transform_owner_status",
+              "parametersJson": "{\"threshold\":3,\"resultStatusId\":\"frozen\",\"blockedByStatusId\":\"warming\"}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.cold.on_unit_turn_end",
+          "ownerKind": "status",
+          "ownerId": "cold",
+          "triggerKey": "on_unit_turn_end",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.cold.on_unit_turn_end.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.cold.on_unit_turn_end.decay",
+              "parentNodeId": "rule.status.cold.on_unit_turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.cold.query_move_steps",
+          "ownerKind": "status",
+          "ownerId": "cold",
+          "triggerKey": "query_move_steps",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.cold.query_move_steps.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.cold.query_move_steps.modify",
+              "parentNodeId": "rule.status.cold.query_move_steps.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"add\",\"amount\":{\"kind\":\"multiply\",\"left\":{\"kind\":\"owner_status_stacks\"},\"right\":{\"kind\":\"constant\",\"value\":-1}}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "corruption",
+      "displayName": "腐化",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "status.corruption.turn_end",
+          "ownerKind": "status",
+          "ownerId": "corruption",
+          "triggerKey": "on_unit_turn_end",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "status.corruption.turn_end.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "status.corruption.turn_end.apply",
+              "parentNodeId": "status.corruption.turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "damage",
+              "parametersJson": "{\"target\":\"self\",\"amount\":{\"kind\":\"status_stacks\",\"statusId\":\"corruption\",\"target\":\"self\"},\"damageType\":\"dark\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "dodge_next_normal",
+      "displayName": "闪避",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 1,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.dodge_next_normal.query_incoming_damage",
+          "ownerKind": "status",
+          "ownerId": "dodge_next_normal",
+          "triggerKey": "query_incoming_damage",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.dodge_next_normal.query_incoming_damage.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.dodge_next_normal.query_incoming_damage.cancel",
+              "parentNodeId": "rule.status.dodge_next_normal.query_incoming_damage.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "cancel_query",
+              "parametersJson": "{\"damageType\":\"normal\"}"
+            },
+            {
+              "nodeId": "rule.status.dodge_next_normal.query_incoming_damage.consume",
+              "parentNodeId": "rule.status.dodge_next_normal.query_incoming_damage.root",
+              "branchKey": "children",
+              "sortOrder": 2,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"damageType\":\"normal\",\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "exhaustion",
+      "displayName": "力竭",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 3,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.exhaustion.query_maximum_action_points",
+          "ownerKind": "status",
+          "ownerId": "exhaustion",
+          "triggerKey": "query_maximum_action_points",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.exhaustion.query_maximum_action_points.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.exhaustion.query_maximum_action_points.modify",
+              "parentNodeId": "rule.status.exhaustion.query_maximum_action_points.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"add\",\"amount\":{\"kind\":\"multiply\",\"left\":{\"kind\":\"owner_status_stacks\"},\"right\":{\"kind\":\"constant\",\"value\":-1}}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "frozen",
+      "displayName": "冻结",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 1,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.frozen.query_can_take_turn",
+          "ownerKind": "status",
+          "ownerId": "frozen",
+          "triggerKey": "query_can_take_turn",
+          "priority": -100,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.frozen.query_can_take_turn.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.frozen.query_can_take_turn.cancel",
+              "parentNodeId": "rule.status.frozen.query_can_take_turn.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "cancel_query",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.frozen.query_can_take_turn.consume",
+              "parentNodeId": "rule.status.frozen.query_can_take_turn.root",
+              "branchKey": "children",
+              "sortOrder": 2,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            },
+            {
+              "nodeId": "rule.status.frozen.query_can_take_turn.warming",
+              "parentNodeId": "rule.status.frozen.query_can_take_turn.root",
+              "branchKey": "children",
+              "sortOrder": 3,
+              "nodeKind": "effect",
+              "operationKey": "add_status",
+              "parametersJson": "{\"target\":\"self\",\"statusId\":\"warming\",\"durationTurns\":1,\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "haze",
+      "displayName": "恍惚",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.haze.query_outgoing_attack_damage",
+          "ownerKind": "status",
+          "ownerId": "haze",
+          "triggerKey": "query_outgoing_attack_damage",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.haze.query_outgoing_attack_damage.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.haze.query_outgoing_attack_damage.modify",
+              "parentNodeId": "rule.status.haze.query_outgoing_attack_damage.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"add\",\"amount\":{\"kind\":\"multiply\",\"left\":{\"kind\":\"owner_status_stacks\"},\"right\":{\"kind\":\"constant\",\"value\":-1}}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "heart_fire",
+      "displayName": "心火",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.heart_fire.on_unit_turn_start",
+          "ownerKind": "status",
+          "ownerId": "heart_fire",
+          "triggerKey": "on_unit_turn_start",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.heart_fire.on_unit_turn_start.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.heart_fire.on_unit_turn_start.armor",
+              "parentNodeId": "rule.status.heart_fire.on_unit_turn_start.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "gain_armor",
+              "parametersJson": "{\"target\":\"self\",\"amount\":{\"kind\":\"constant\",\"value\":5}}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.heart_fire.query_outgoing_attack_damage",
+          "ownerKind": "status",
+          "ownerId": "heart_fire",
+          "triggerKey": "query_outgoing_attack_damage",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.heart_fire.query_outgoing_attack_damage.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.heart_fire.query_outgoing_attack_damage.modify",
+              "parentNodeId": "rule.status.heart_fire.query_outgoing_attack_damage.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"multiply_percent\",\"amount\":{\"kind\":\"constant\",\"value\":110}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "mana_exhaustion",
+      "displayName": "魔力枯竭",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 1,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.mana_exhaustion.query_mana_gain",
+          "ownerKind": "status",
+          "ownerId": "mana_exhaustion",
+          "triggerKey": "query_mana_gain",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.mana_exhaustion.query_mana_gain.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.mana_exhaustion.query_mana_gain.cancel",
+              "parentNodeId": "rule.status.mana_exhaustion.query_mana_gain.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "cancel_query",
+              "parametersJson": "{}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "normal_immunity",
+      "displayName": "普通免疫",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 1,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.normal_immunity.query_incoming_damage",
+          "ownerKind": "status",
+          "ownerId": "normal_immunity",
+          "triggerKey": "query_incoming_damage",
+          "priority": -100,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.normal_immunity.query_incoming_damage.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.normal_immunity.query_incoming_damage.cancel",
+              "parentNodeId": "rule.status.normal_immunity.query_incoming_damage.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "cancel_query",
+              "parametersJson": "{\"damageType\":\"normal\"}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.normal_immunity.on_unit_turn_start",
+          "ownerKind": "status",
+          "ownerId": "normal_immunity",
+          "triggerKey": "on_unit_turn_start",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.normal_immunity.on_unit_turn_start.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.normal_immunity.on_unit_turn_start.remove",
+              "parentNodeId": "rule.status.normal_immunity.on_unit_turn_start.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "remove_status",
+              "parametersJson": "{\"target\":\"self\",\"statusId\":\"normal_immunity\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "poison",
+      "displayName": "中毒",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "status.poison.turn_end",
+          "ownerKind": "status",
+          "ownerId": "poison",
+          "triggerKey": "on_unit_turn_end",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "status.poison.turn_end.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "status.poison.turn_end.apply",
+              "parentNodeId": "status.poison.turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "damage",
+              "parametersJson": "{\"target\":\"self\",\"amount\":{\"kind\":\"status_stacks\",\"statusId\":\"poison\",\"target\":\"self\"},\"damageType\":\"poison\"}"
+            },
+            {
+              "nodeId": "status.poison.turn_end.decay",
+              "parentNodeId": "status.poison.turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 2,
+              "nodeKind": "effect",
+              "operationKey": "reduce_status",
+              "parametersJson": "{\"target\":\"self\",\"statusId\":\"poison\",\"amount\":{\"kind\":\"constant\",\"value\":2}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "quick",
+      "displayName": "速攻",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.quick.query_after_attack",
+          "ownerKind": "status",
+          "ownerId": "quick",
+          "triggerKey": "query_after_attack",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.quick.query_after_attack.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.quick.query_after_attack.consume",
+              "parentNodeId": "rule.status.quick.query_after_attack.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.quick.query_attack_hit_count",
+          "ownerKind": "status",
+          "ownerId": "quick",
+          "triggerKey": "query_attack_hit_count",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.quick.query_attack_hit_count.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.quick.query_attack_hit_count.modify",
+              "parentNodeId": "rule.status.quick.query_attack_hit_count.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"add\",\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "raise_shield_pending",
+      "displayName": "举盾",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 1,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.raise_shield_pending.on_unit_turn_end",
+          "ownerKind": "status",
+          "ownerId": "raise_shield_pending",
+          "triggerKey": "on_unit_turn_end",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.raise_shield_pending.on_unit_turn_end.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.raise_shield_pending.on_unit_turn_end.remove",
+              "parentNodeId": "rule.status.raise_shield_pending.on_unit_turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "remove_status",
+              "parametersJson": "{\"target\":\"self\",\"statusId\":\"raise_shield_pending\"}"
+            },
+            {
+              "nodeId": "rule.status.raise_shield_pending.on_unit_turn_end.armor",
+              "parentNodeId": "rule.status.raise_shield_pending.on_unit_turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 2,
+              "nodeKind": "effect",
+              "operationKey": "gain_armor",
+              "parametersJson": "{\"target\":\"self\",\"amount\":{\"kind\":\"divide\",\"left\":{\"kind\":\"source_armor\"},\"right\":{\"kind\":\"constant\",\"value\":2}}}"
+            },
+            {
+              "nodeId": "rule.status.raise_shield_pending.on_unit_turn_end.cannot",
+              "parentNodeId": "rule.status.raise_shield_pending.on_unit_turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 3,
+              "nodeKind": "effect",
+              "operationKey": "add_status",
+              "parametersJson": "{\"target\":\"self\",\"statusId\":\"cannot_attack\",\"durationTurns\":1,\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "regeneration",
+      "displayName": "再生",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "status.regeneration.turn_end",
+          "ownerKind": "status",
+          "ownerId": "regeneration",
+          "triggerKey": "on_unit_turn_end",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "status.regeneration.turn_end.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "status.regeneration.turn_end.apply",
+              "parentNodeId": "status.regeneration.turn_end.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "heal",
+              "parametersJson": "{\"target\":\"self\",\"amount\":{\"kind\":\"status_stacks\",\"statusId\":\"regeneration\",\"target\":\"self\"},\"damageType\":\"normal\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "sharp",
+      "displayName": "锋利",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.sharp.query_after_attack",
+          "ownerKind": "status",
+          "ownerId": "sharp",
+          "triggerKey": "query_after_attack",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.sharp.query_after_attack.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.sharp.query_after_attack.consume",
+              "parentNodeId": "rule.status.sharp.query_after_attack.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.sharp.query_outgoing_attack_damage",
+          "ownerKind": "status",
+          "ownerId": "sharp",
+          "triggerKey": "query_outgoing_attack_damage",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.sharp.query_outgoing_attack_damage.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.sharp.query_outgoing_attack_damage.modify",
+              "parentNodeId": "rule.status.sharp.query_outgoing_attack_damage.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"add\",\"amount\":{\"kind\":\"constant\",\"value\":1}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "sword_charge",
+      "displayName": "蓄力",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.sword_charge.query_after_attack",
+          "ownerKind": "status",
+          "ownerId": "sword_charge",
+          "triggerKey": "query_after_attack",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.sword_charge.query_after_attack.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.sword_charge.query_after_attack.consume",
+              "parentNodeId": "rule.status.sword_charge.query_after_attack.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "consume_owner_status",
+              "parametersJson": "{\"familyId\":\"sword\",\"amount\":{\"kind\":\"constant\",\"value\":999}}"
+            }
+          ]
+        },
+        {
+          "behaviorId": "rule.status.sword_charge.query_outgoing_attack_damage",
+          "ownerKind": "status",
+          "ownerId": "sword_charge",
+          "triggerKey": "query_outgoing_attack_damage",
+          "priority": 0,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.sword_charge.query_outgoing_attack_damage.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.sword_charge.query_outgoing_attack_damage.modify",
+              "parentNodeId": "rule.status.sword_charge.query_outgoing_attack_damage.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"add\",\"familyId\":\"sword\",\"scope\":\"once_per_target\",\"amount\":{\"kind\":\"owner_status_stacks\"}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "vulnerable",
+      "displayName": "易损",
+      "description": "",
+      "category": "negative",
+      "maximumStacks": 0,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": [
+        {
+          "behaviorId": "rule.status.vulnerable.query_incoming_damage",
+          "ownerKind": "status",
+          "ownerId": "vulnerable",
+          "triggerKey": "query_incoming_damage",
+          "priority": 10,
+          "enabled": true,
+          "nodes": [
+            {
+              "nodeId": "rule.status.vulnerable.query_incoming_damage.root",
+              "parentNodeId": null,
+              "branchKey": "children",
+              "sortOrder": 0,
+              "nodeKind": "sequence",
+              "operationKey": "sequence",
+              "parametersJson": "{}"
+            },
+            {
+              "nodeId": "rule.status.vulnerable.query_incoming_damage.modify",
+              "parentNodeId": "rule.status.vulnerable.query_incoming_damage.root",
+              "branchKey": "children",
+              "sortOrder": 1,
+              "nodeKind": "effect",
+              "operationKey": "modify_query_value",
+              "parametersJson": "{\"mode\":\"multiply_percent\",\"amount\":{\"kind\":\"constant\",\"value\":150}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "statusId": "warming",
+      "displayName": "回暖",
+      "description": "",
+      "category": "positive",
+      "maximumStacks": 1,
+      "stackingPolicy": "add",
+      "durationPolicy": "turns",
+      "enabled": true,
+      "behaviors": []
+    }
+  ]
+}

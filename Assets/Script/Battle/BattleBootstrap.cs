@@ -37,37 +37,48 @@ public static class RuntimeSceneBootstrap
     }
 }
 
-[DefaultExecutionOrder(-900)]
+[DefaultExecutionOrder(-50)]
 public class BattleBootstrap : MonoBehaviour
 {
-    /// <summary>初始化双方战斗数据、BattleInterface、卡牌解析器和棋盘摄像机控制。</summary>
+    /// <summary>生成编制棋子、绑定职业与卡牌解析器，并补齐战斗 HUD / 摄像机。</summary>
     private void Awake()
     {
-        Unit player = GameObject.Find("Player")?.GetComponent<Unit>();
-        Unit enemy = GameObject.Find("Monster")?.GetComponent<Unit>();
-        if (player == null || enemy == null)
+        if (!ContentRuntime.IsLoaded)
         {
-            Debug.LogError("战斗场景缺少 Player 或 Monster 单位。", this);
+            Debug.LogError($"战斗内容未加载：{ContentRuntime.LoadError}", this);
             return;
         }
 
-        player.ConfigureCombatant("鸿叶", 30, 3, 2);
-        enemy.ConfigureCombatant("太糕", 100, 3, 2);
+        BattleRoster roster = GetComponent<BattleRoster>() ?? gameObject.AddComponent<BattleRoster>();
+        roster.SpawnEncounter();
+        Unit player = roster.PrimaryAlly;
+        Unit enemy = roster.PrimaryEnemy;
+        if (player == null || enemy == null)
+        {
+            Debug.LogError("战斗编制未能生成至少一名己方和一名敌人。", this);
+            return;
+        }
+
         player.State.ClearAll();
-        enemy.State.ClearAll();
+        for (int i = 0; i < roster.Enemies.Count; i++)
+        {
+            roster.Enemies[i]?.State.ClearAll();
+        }
+
         if (ContentClassPassiveRuntime.TryGetSelectedProfile(out ClassProfileDefinition profile))
         {
             player.ConfigureMaximumHealth(profile.InitialHealth);
-            player.State.NormalDamageAvoidChance = profile.GetTraitFloat("normal_damage_avoid_chance");
-            player.State.ReviveAvailable = profile.GetTraitBool("revive_available");
             player.State.ConfigureMana(profile.InitialMana, profile.MaximumMana);
+            (player.GetComponent<RuntimeEquipmentLoadout>() ?? player.gameObject.AddComponent<RuntimeEquipmentLoadout>())
+                .Configure(profile);
         }
 
         BattleFlow flow = FindAnyObjectByType<BattleFlow>();
-        flow?.ConfigureCardsPerTurn(5);
+        flow?.ConfigureCardsPerTurn(ContentRuntime.Registry.GameSettings.DrawPerTurn);
+        flow?.BindCombatants(player, enemy);
 
-        SetText("T_Self_Name", "鸿叶");
-        SetText("T_Enemy_Name", "太糕");
+        SetText("T_Self_Name", player.DisplayName);
+        SetText("T_Enemy_Name", FormatEnemyNames(roster));
 
         Canvas canvas = null;
         foreach (Canvas candidate in FindObjectsByType<Canvas>())
@@ -93,5 +104,18 @@ public class BattleBootstrap : MonoBehaviour
     {
         TMP_Text text = GameObject.Find(name)?.GetComponent<TMP_Text>();
         if (text != null) text.text = value;
+    }
+
+    private static string FormatEnemyNames(BattleRoster roster)
+    {
+        if (roster.Enemies.Count == 1) return roster.PrimaryEnemy.DisplayName;
+        var names = new System.Text.StringBuilder();
+        for (int i = 0; i < roster.Enemies.Count; i++)
+        {
+            if (roster.Enemies[i] == null) continue;
+            if (names.Length > 0) names.Append(" / ");
+            names.Append(roster.Enemies[i].DisplayName);
+        }
+        return names.ToString();
     }
 }

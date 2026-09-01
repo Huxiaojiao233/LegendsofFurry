@@ -14,6 +14,8 @@ internal sealed class ContentPackageDto
 {
     public int schemaVersion;
     public string contentVersion;
+    public string layout;
+    public ContentCatalogPartRefDto[] parts;
     public CardDefinitionDto[] cards;
     public CardPoolDefinitionDto[] cardPools;
     public StatusDefinitionDto[] statuses;
@@ -21,6 +23,8 @@ internal sealed class ContentPackageDto
     public RarityDefinitionDto[] rarities;
     public AssetDefinitionDto[] assets;
     public ClassProfileDefinitionDto[] classProfiles;
+    public CharacterDefinitionDto[] characters;
+    public EquipmentDefinitionDto[] equipment;
     public GameSettingsDefinitionDto gameSettings;
 
     /// <summary>
@@ -41,6 +45,8 @@ internal sealed class ContentPackageDto
         ConvertItems(rarities, package.Rarities, item => item.ToContract());
         ConvertItems(assets, package.Assets, item => item.ToContract());
         ConvertItems(classProfiles, package.ClassProfiles, item => item.ToContract());
+        ConvertItems(characters, package.Characters, item => item.ToContract());
+        ConvertItems(equipment, package.Equipment, item => item.ToContract());
         package.GameSettings = gameSettings == null ? new GameSettingsDefinition() : gameSettings.ToContract();
         return package;
     }
@@ -498,13 +504,80 @@ internal sealed class GameSettingsDefinitionDto
     public int drawPerTurn;
     public int baseActionPoints;
     public int baseMoveSteps;
+    public string playerCharacterId;
+    public string enemyCharacterId;
 
     /// <summary>将基础战斗参数映射到共享合同。</summary>
     public GameSettingsDefinition ToContract() => new GameSettingsDefinition
     {
         HandLimit = handLimit, StartingHandSize = startingHandSize, DrawPerTurn = drawPerTurn,
-        BaseActionPoints = baseActionPoints, BaseMoveSteps = baseMoveSteps
+        BaseActionPoints = baseActionPoints, BaseMoveSteps = baseMoveSteps,
+        PlayerCharacterId = playerCharacterId ?? string.Empty,
+        EnemyCharacterId = enemyCharacterId ?? string.Empty
     };
+}
+
+/// <summary>Unity JSON DTO for a data-driven combatant.</summary>
+[Serializable]
+internal sealed class CharacterDefinitionDto
+{
+    public string characterId;
+    public string displayName;
+    public string description;
+    public int initialHealth;
+    public int baseDamage;
+    public int moveSteps;
+    public string tokenFrameColor;
+    public string portraitKey;
+    public bool enabled;
+    public int sortOrder;
+    public string[] tags;
+    public BehaviorDefinitionDto[] behaviors;
+
+    public CharacterDefinition ToContract()
+    {
+        CharacterDefinition definition = new CharacterDefinition
+        {
+            CharacterId = characterId ?? string.Empty, DisplayName = displayName ?? string.Empty,
+            Description = description ?? string.Empty, InitialHealth = initialHealth,
+            BaseDamage = baseDamage, MoveSteps = moveSteps,
+            TokenFrameColor = tokenFrameColor ?? string.Empty, PortraitKey = portraitKey ?? string.Empty,
+            Enabled = enabled, SortOrder = sortOrder
+        };
+        if (tags != null) definition.Tags.AddRange(tags);
+        if (behaviors != null) foreach (BehaviorDefinitionDto behavior in behaviors)
+            if (behavior != null) definition.Behaviors.Add(behavior.ToContract());
+        return definition;
+    }
+}
+
+/// <summary>Unity JSON DTO for an equippable content item.</summary>
+[Serializable]
+internal sealed class EquipmentDefinitionDto
+{
+    public string equipmentId;
+    public string displayName;
+    public string description;
+    public string slotKey;
+    public string cardPoolId;
+    public bool enabled;
+    public int sortOrder;
+    public string[] tags;
+    public BehaviorDefinitionDto[] behaviors;
+
+    public EquipmentDefinition ToContract()
+    {
+        EquipmentDefinition definition = new EquipmentDefinition
+        {
+            EquipmentId = equipmentId ?? string.Empty, DisplayName = displayName ?? string.Empty,
+            Description = description ?? string.Empty, SlotKey = slotKey ?? string.Empty,
+            CardPoolId = cardPoolId ?? string.Empty, Enabled = enabled, SortOrder = sortOrder
+        };
+        if (tags != null) definition.Tags.AddRange(tags);
+        if (behaviors != null) foreach (BehaviorDefinitionDto behavior in behaviors)
+            if (behavior != null) definition.Behaviors.Add(behavior.ToContract());
+        return definition;
+    }
 }
 
 /// <summary>表示 current.json 中当前内容版本和 manifest 路径。</summary>
@@ -527,6 +600,63 @@ internal sealed class ContentManifestDto
     public int cardCount;
     public int statusCount;
     public int deckCount;
+    public int characterCount;
+    public int equipmentCount;
+}
+
+/// <summary>分文件 catalog 索引中的一个切片声明。</summary>
+[Serializable]
+internal sealed class ContentCatalogPartRefDto
+{
+    public string kind;
+    public string file;
+    public string sha256;
+}
+
+/// <summary>Physical external pack manifest stored beside its hash-protected catalog.</summary>
+[Serializable]
+internal sealed class ContentPackManifestDto
+{
+    public int formatVersion;
+    public string packId;
+    public string packVersion;
+    public int schemaVersion;
+    public int loadOrder;
+    public string[] dependencies;
+    public ContentPackDependencyDefinitionDto[] dependencyVersions;
+    public ContentOverrideDefinitionDto[] overrides;
+    public string catalogFile;
+    public string catalogSha256;
+}
+
+/// <summary>Unity field DTO for optional semantic-version bounds on one pack dependency.</summary>
+[Serializable]
+internal sealed class ContentPackDependencyDefinitionDto
+{
+    public string packId;
+    public string minimumVersion;
+    public string maximumVersionExclusive;
+
+    public ContentPackDependencyDefinition ToContract() => new ContentPackDependencyDefinition
+    {
+        PackId = packId ?? string.Empty,
+        MinimumVersion = minimumVersion ?? string.Empty,
+        MaximumVersionExclusive = maximumVersionExclusive ?? string.Empty
+    };
+}
+
+/// <summary>Unity field DTO for one explicit definition replacement permission.</summary>
+[Serializable]
+internal sealed class ContentOverrideDefinitionDto
+{
+    public string definitionKind;
+    public string definitionId;
+
+    public ContentOverrideDefinition ToContract() => new ContentOverrideDefinition
+    {
+        DefinitionKind = definitionKind ?? string.Empty,
+        DefinitionId = definitionId ?? string.Empty
+    };
 }
 }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using LegendsOfFurry.Content.Contracts;
 
@@ -14,6 +15,11 @@ public sealed class ContentRegistry
     private readonly Dictionary<string, StatusDefinition> statuses;
     private readonly Dictionary<string, DeckDefinition> decks;
     private readonly Dictionary<string, ClassProfileDefinition> classProfiles;
+    private readonly Dictionary<string, CardPoolDefinition> cardPools;
+    private readonly Dictionary<string, RarityDefinition> rarities;
+    private readonly Dictionary<string, AssetDefinition> assets;
+    private readonly Dictionary<string, CharacterDefinition> characters;
+    private readonly Dictionary<string, EquipmentDefinition> equipment;
 
     /// <summary>
     /// 从经过校验的内容包构建不可变索引；重复 ID 会立即抛出异常而不是覆盖。
@@ -27,10 +33,15 @@ public sealed class ContentRegistry
         }
 
         Package = package;
-        cards = package.Cards.Where(item => item.Enabled).ToDictionary(item => item.CardId, StringComparer.Ordinal);
-        statuses = package.Statuses.Where(item => item.Enabled).ToDictionary(item => item.StatusId, StringComparer.Ordinal);
-        decks = package.Decks.Where(item => item.Enabled).ToDictionary(item => item.DeckId, StringComparer.Ordinal);
-        classProfiles = package.ClassProfiles.Where(item => item.Enabled).ToDictionary(item => item.ClassId, StringComparer.Ordinal);
+        cards = BuildIndex(package.Cards, item => item.Enabled, ContentDefinitionKinds.Card);
+        statuses = BuildIndex(package.Statuses, item => item.Enabled, ContentDefinitionKinds.Status);
+        decks = BuildIndex(package.Decks, item => item.Enabled, ContentDefinitionKinds.Deck);
+        classProfiles = BuildIndex(package.ClassProfiles, item => item.Enabled, ContentDefinitionKinds.Class);
+        cardPools = BuildIndex(package.CardPools, item => item.Enabled, ContentDefinitionKinds.CardPool);
+        rarities = BuildIndex(package.Rarities, _ => true, ContentDefinitionKinds.Rarity);
+        assets = BuildIndex(package.Assets, _ => true, ContentDefinitionKinds.Asset);
+        characters = BuildIndex(package.Characters, item => item.Enabled, ContentDefinitionKinds.Character);
+        equipment = BuildIndex(package.Equipment, item => item.Enabled, ContentDefinitionKinds.Equipment);
     }
 
     public ContentPackage Package { get; }
@@ -38,6 +49,11 @@ public sealed class ContentRegistry
     public IReadOnlyCollection<StatusDefinition> Statuses => statuses.Values;
     public IReadOnlyCollection<DeckDefinition> Decks => decks.Values;
     public IReadOnlyCollection<ClassProfileDefinition> ClassProfiles => classProfiles.Values;
+    public IReadOnlyCollection<CardPoolDefinition> CardPools => cardPools.Values;
+    public IReadOnlyCollection<RarityDefinition> Rarities => rarities.Values;
+    public IReadOnlyCollection<AssetDefinition> Assets => assets.Values;
+    public IReadOnlyCollection<CharacterDefinition> Characters => characters.Values;
+    public IReadOnlyCollection<EquipmentDefinition> Equipment => equipment.Values;
     public GameSettingsDefinition GameSettings => Package.GameSettings;
 
     /// <summary>
@@ -123,8 +139,89 @@ public sealed class ContentRegistry
     /// <summary>按稳定 ID 查找启用卡池，供装备栏等内容驱动界面显示策划名称。</summary>
     public bool TryGetCardPool(string poolId, out CardPoolDefinition pool)
     {
-        pool = Package.CardPools.FirstOrDefault(item => item.Enabled && item.PoolId == poolId);
-        return pool != null;
+        return cardPools.TryGetValue(poolId ?? string.Empty, out pool);
+    }
+
+    /// <summary>Finds a published rarity by stable ID.</summary>
+    /// <param name="rarityId">The stable rarity ID.</param>
+    /// <param name="rarity">The matching definition when found.</param>
+    /// <returns>True when the package contains the rarity.</returns>
+    public bool TryGetRarity(string rarityId, out RarityDefinition rarity)
+    {
+        return rarities.TryGetValue(rarityId ?? string.Empty, out rarity);
+    }
+
+    /// <summary>Finds a managed asset by stable key.</summary>
+    /// <param name="assetKey">The stable asset key.</param>
+    /// <param name="asset">The matching definition when found.</param>
+    /// <returns>True when the package contains the asset.</returns>
+    public bool TryGetAsset(string assetKey, out AssetDefinition asset)
+    {
+        return assets.TryGetValue(assetKey ?? string.Empty, out asset);
+    }
+
+    /// <summary>Finds an enabled data-driven character by stable ID.</summary>
+    public bool TryGetCharacter(string characterId, out CharacterDefinition character) =>
+        characters.TryGetValue(characterId ?? string.Empty, out character);
+
+    /// <summary>Gets an enabled character or throws a diagnostic error for a broken runtime reference.</summary>
+    public CharacterDefinition GetCharacter(string characterId)
+    {
+        if (!TryGetCharacter(characterId, out CharacterDefinition character))
+            throw new KeyNotFoundException($"内容包中不存在启用角色：{characterId}");
+        return character;
+    }
+
+    /// <summary>Finds an enabled equipment definition by stable ID.</summary>
+    public bool TryGetEquipment(string equipmentId, out EquipmentDefinition definition) =>
+        equipment.TryGetValue(equipmentId ?? string.Empty, out definition);
+
+    /// <summary>
+    /// Builds one definition index while validating nulls, kind, stable ID format, and duplicates.
+    /// Disabled definitions are validated but omitted from the runtime lookup.
+    /// </summary>
+    /// <typeparam name="TDefinition">The concrete shared definition type.</typeparam>
+    /// <param name="definitions">All definitions of one package collection.</param>
+    /// <param name="isEnabled">The predicate deciding whether a valid definition is exposed at runtime.</param>
+    /// <param name="expectedKind">The collection's expected definition kind.</param>
+    /// <returns>An ordinal stable-ID index containing enabled definitions.</returns>
+    private static Dictionary<string, TDefinition> BuildIndex<TDefinition>(
+        IEnumerable<TDefinition> definitions,
+        Func<TDefinition, bool> isEnabled,
+        string expectedKind)
+        where TDefinition : class, IContentDefinition
+    {
+        if (definitions == null)
+        {
+            throw new InvalidDataException($"内容包缺少 {expectedKind} 定义集合。");
+        }
+
+        Dictionary<string, TDefinition> result =
+            new Dictionary<string, TDefinition>(StringComparer.Ordinal);
+        HashSet<string> allIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (TDefinition definition in definitions)
+        {
+            if (definition == null)
+            {
+                throw new InvalidDataException($"内容包的 {expectedKind} 集合包含空定义。");
+            }
+
+            string id = definition.GetDefinitionId();
+            if (definition.GetDefinitionKind() != expectedKind || !ContentId.IsValid(id))
+            {
+                throw new InvalidDataException($"内容定义类型或稳定 ID 无效：{expectedKind}:{id}。");
+            }
+            if (!allIds.Add(id))
+            {
+                throw new InvalidDataException($"内容包包含重复定义：{expectedKind}:{id}。");
+            }
+            if (isEnabled(definition))
+            {
+                result.Add(id, definition);
+            }
+        }
+
+        return result;
     }
 }
 }

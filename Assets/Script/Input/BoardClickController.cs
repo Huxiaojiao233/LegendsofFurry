@@ -4,6 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using LegendsOfFurry.Content.Runtime;
 
 /// <summary>
 /// 棋盘交互总控制器。
@@ -62,6 +63,7 @@ public class BoardClickController : MonoBehaviour
     public int CurrentActionPoints => currentActionPoints;
     public int NextMoveDiscount => nextMoveDiscount;
     public bool IsResolvingFreeMove => isFreeMoveMode;
+    public Unit SelectedUnit => selectedUnit;
     public event Action<int, int> ActionPointsChanged;
 
     private void Awake()
@@ -128,7 +130,7 @@ public class BoardClickController : MonoBehaviour
     public void ResetActionPoints()
     {
         nextMoveDiscount = 0;
-        Unit player = GameObject.Find("Player")?.GetComponent<Unit>();
+        Unit player = BattleUnits.PrimaryAlly;
         effectiveMaximumActionPoints = player == null
             ? maxActionPoints
             : player.State.EffectiveActionPointMaximum(maxActionPoints);
@@ -226,12 +228,21 @@ public class BoardClickController : MonoBehaviour
         ClearAttackRange();
         HideMoveCostTooltip();
 
-        if (caster == null || caster.Board == null || radius < 0)
+        if (caster == null || radius < 0)
         {
             return;
         }
 
-        BoardGenerator board = caster.Board;
+        BoardGenerator board = caster.Board ?? FindAnyObjectByType<BoardGenerator>();
+        if (board == null)
+        {
+            return;
+        }
+
+        if (caster.Board == null)
+        {
+            caster.SetBoard(board);
+        }
         Vector2Int origin = caster.Position;
 
         for (int x = origin.x - radius; x <= origin.x + radius; x++)
@@ -392,8 +403,11 @@ public class BoardClickController : MonoBehaviour
     private void ShowMoveRange(Unit unit)
     {
         ClearAttackRange();
-        int coldSurcharge = unit.State.Get(CombatStatus.Cold);
-        int searchBudget = currentActionPoints + nextMoveDiscount - coldSurcharge;
+        int baseBudget = currentActionPoints + nextMoveDiscount;
+        ContentRuleQuery moveQuery = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.MoveSteps, unit, null, baseBudget));
+        int searchBudget = moveQuery.Value;
+        int movementPenalty = baseBudget - searchBudget;
         if (searchBudget <= 0)
         {
             return;
@@ -430,7 +444,7 @@ public class BoardClickController : MonoBehaviour
                 int nextStepDistance = currentCost + 1;
                 costs[next] = nextStepDistance;
                 frontier.Enqueue(next);
-                int payableCost = Mathf.Max(0, nextStepDistance + coldSurcharge - nextMoveDiscount);
+                int payableCost = Mathf.Max(0, nextStepDistance + movementPenalty - nextMoveDiscount);
                 movableCells[cell] = payableCost;
 
                 float fade = maxActionPoints <= 1

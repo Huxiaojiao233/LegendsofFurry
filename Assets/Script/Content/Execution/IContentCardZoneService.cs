@@ -58,5 +58,10 @@ public interface IContentCardZoneService : ICardDrawService
     /// </summary>
     /// <param name="count">处理牌顶数量。</param>
     void PlayTopCardsForFree(int count, Action onComplete);
+
+    /// <summary>
+    /// 把一张已生成的卡加入手牌；手牌已满时该张进入弃牌堆。
+    /// </summary>
+    bool AddCardToHandOrDiscard(CardInstance instance);
 }
 }

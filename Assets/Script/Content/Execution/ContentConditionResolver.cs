@@ -1,16 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using LegendsOfFurry.Content.Contracts;
-using UnityEngine;
 
-#pragma warning disable 0649 // Unity JsonUtility 会通过反射填充条件参数 DTO 字段。
+#pragma warning disable 0649 // 条件参数由安全 JSON 映射填充。
 
 namespace LegendsOfFurry.Content.Runtime
 {
 /// <summary>
 /// 描述逻辑条件列表中的一个受控子条件。
 /// </summary>
-[Serializable]
 public sealed class ContentNestedCondition
 {
     public string key;
@@ -20,7 +19,6 @@ public sealed class ContentNestedCondition
 /// <summary>
 /// 保存首期条件处理器共用的结构化参数，不包含任意可执行表达式文本。
 /// </summary>
-[Serializable]
 public sealed class ContentConditionParameters
 {
     public string target;
@@ -118,9 +116,10 @@ public sealed class ContentConditionResolver
         }
         try
         {
-            ContentConditionParameters parameters =
-                JsonUtility.FromJson<ContentConditionParameters>(node.ParametersJson) ??
-                new ContentConditionParameters();
+            if (!TryReadParameters(node.ParametersJson, out ContentConditionParameters parameters))
+            {
+                return false;
+            }
             Unit target = context.CurrentGraphTarget as Unit ?? context.SelectedUnit;
             return TryEvaluateNested(node.OperationKey, parameters, context, target, 0, out result);
         }
@@ -153,9 +152,10 @@ public sealed class ContentConditionResolver
         }
         try
         {
-            ContentConditionParameters parameters =
-                JsonUtility.FromJson<ContentConditionParameters>(node.ParametersJson) ??
-                new ContentConditionParameters();
+            if (!TryReadParameters(node.ParametersJson, out ContentConditionParameters parameters))
+            {
+                return false;
+            }
             return CanEvaluateParameters(node.OperationKey, parameters, 0);
         }
         catch (ArgumentException)
@@ -171,6 +171,106 @@ public sealed class ContentConditionResolver
     public System.Collections.Generic.IReadOnlyList<string> GetRegisteredKeys()
     {
         return registry.GetRegisteredKeys();
+    }
+
+    /// <summary>用安全 JSON 解析器读取条件参数，避免 JsonUtility 对递归类型走 10 层序列化深度。</summary>
+    private static bool TryReadParameters(string json, out ContentConditionParameters parameters)
+    {
+        parameters = new ContentConditionParameters();
+        if (string.IsNullOrWhiteSpace(json)) return true;
+        if (!ContentSafeJsonParser.TryParse(json, out object parsed)) return false;
+        return TryMapParameters(parsed, 0, out parameters);
+    }
+
+    private static bool TryMapParameters(object parsed, int depth, out ContentConditionParameters parameters)
+    {
+        parameters = null;
+        if (depth > MaximumDepth || parsed is not Dictionary<string, object> values)
+        {
+            return false;
+        }
+
+        parameters = new ContentConditionParameters();
+        TryReadString(values, "target", out parameters.target);
+        TryReadString(values, "team", out parameters.team);
+        TryReadString(values, "statusId", out parameters.statusId);
+        TryReadString(values, "tag", out parameters.tag);
+        TryReadString(values, "poolId", out parameters.poolId);
+        TryReadString(values, "rarityId", out parameters.rarityId);
+        TryReadString(values, "comparison", out parameters.comparison);
+        if (values.TryGetValue("chance", out object chance) && !TryReadFloat(chance, out parameters.chance))
+        {
+            return false;
+        }
+        if (!TryMapOptionalExpression(values, "left", out parameters.left) ||
+            !TryMapOptionalExpression(values, "right", out parameters.right) ||
+            !TryMapOptionalExpression(values, "value", out parameters.value) ||
+            !TryMapNestedConditions(values, depth, out parameters.conditions))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryMapOptionalExpression(
+        Dictionary<string, object> values, string key, out ContentValueExpression expression)
+    {
+        expression = null;
+        return !values.TryGetValue(key, out object parsed) ||
+               ContentValueExpressionResolver.TryMapFromParsed(parsed, out expression);
+    }
+
+    private static bool TryMapNestedConditions(
+        Dictionary<string, object> values, int depth, out ContentNestedCondition[] conditions)
+    {
+        conditions = null;
+        if (!values.TryGetValue("conditions", out object parsed) || parsed == null) return true;
+        if (parsed is not List<object> items) return false;
+        conditions = new ContentNestedCondition[items.Count];
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (items[i] is not Dictionary<string, object> child ||
+                !TryReadString(child, "key", out string key))
+            {
+                return false;
+            }
+
+            ContentConditionParameters nested = new ContentConditionParameters();
+            if (child.TryGetValue("parameters", out object nestedParsed) && nestedParsed != null &&
+                !TryMapParameters(nestedParsed, depth + 1, out nested))
+            {
+                return false;
+            }
+
+            conditions[i] = new ContentNestedCondition { key = key, parameters = nested };
+        }
+
+        return true;
+    }
+
+    private static bool TryReadString(Dictionary<string, object> values, string key, out string value)
+    {
+        value = null;
+        if (!values.TryGetValue(key, out object parsed) || parsed == null) return false;
+        value = parsed as string;
+        return value != null;
+    }
+
+    private static bool TryReadFloat(object parsed, out float value)
+    {
+        value = 0f;
+        switch (parsed)
+        {
+            case double number:
+                value = (float)number;
+                return true;
+            case long integer:
+                value = integer;
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>注册一个强类型条件委托。</summary>
