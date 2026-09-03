@@ -1,0 +1,4 @@
+interface:
+  display_name: "分块世界地图设计"
+  short_description: "规划有限自定义地图与未来无限地图共用的分块数据架构"
+  default_prompt: "使用 $chunked-world-map-design 为我的游戏设计地图数据结构与加载方案。"
