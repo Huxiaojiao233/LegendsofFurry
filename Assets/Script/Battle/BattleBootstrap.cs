@@ -30,6 +30,12 @@ public static class RuntimeSceneBootstrap
     /// <summary>按场景名称创建且只创建一个职业选择或战斗初始化器。</summary>
     private static void EnsureScene(string sceneName)
     {
+        if (!ContentRuntime.IsLoaded)
+        {
+            ContentLoadFailureNotice.Ensure();
+            return;
+        }
+
         if (sceneName == "S_ClassSelect" && Object.FindAnyObjectByType<ClassSelectionController>() == null)
             new GameObject("ClassSelectionController").AddComponent<ClassSelectionController>();
         if (sceneName == "S_World" && Object.FindAnyObjectByType<WorldMapController>() == null)

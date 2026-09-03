@@ -5,7 +5,7 @@ namespace LegendsOfFurry.Content.Contracts
 {
 
 /// <summary>
-/// 表示从 SQLite 编辑源导出的完整、只读游戏内容快照。
+/// 表示从 .lofepackage 加载的完整、只读游戏内容快照。
 /// </summary>
 public sealed class ContentPackage
 {

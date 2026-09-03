@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.IO;
+using System.IO.Compression;
 using System;
 using System.Security.Cryptography;
 using System.Text;
@@ -345,6 +346,44 @@ public sealed class ContentArchitectureFoundationTests
         }
     }
 
+    /// <summary>Ensures a zipped .lofepackage with split catalog loads and resolves assets.</summary>
+    [Test]
+    public void PhysicalContentPackLoadsFromLofePackageFile()
+    {
+        string temporary = Path.Combine(Path.GetTempPath(), "lof-pack-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string packRoot = Path.Combine(temporary, "Packs");
+            string staging = Path.Combine(temporary, "staging");
+            Directory.CreateDirectory(Path.Combine(staging, "assets"));
+            string assetPath = Path.Combine(staging, "assets", "art.png");
+            File.WriteAllBytes(assetPath, Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));
+            string characters = "{\"characters\":[{\"characterId\":\"zip_hero\",\"displayName\":\"Zip Hero\",\"initialHealth\":20,\"baseDamage\":3,\"moveSteps\":2,\"enabled\":true}]}";
+            string assets = "{\"assets\":[{\"assetKey\":\"zip.art\",\"assetKind\":\"artwork\",\"relativePath\":\"assets/art.png\"}]}";
+            File.WriteAllText(Path.Combine(staging, "characters.json"), characters, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(staging, "assets.json"), assets, new UTF8Encoding(false));
+            string catalog = $"{{\"schemaVersion\":2,\"contentVersion\":\"1.0.0\",\"layout\":\"split\",\"parts\":[{{\"kind\":\"characters\",\"file\":\"characters.json\",\"sha256\":\"{ComputeSha256(characters)}\"}},{{\"kind\":\"assets\",\"file\":\"assets.json\",\"sha256\":\"{ComputeSha256(assets)}\"}}]}}";
+            File.WriteAllText(Path.Combine(staging, "catalog.json"), catalog, new UTF8Encoding(false));
+            string manifest = $"{{\"formatVersion\":2,\"packId\":\"zip_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":2,\"loadOrder\":100,\"dependencies\":[],\"overrides\":[],\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
+            File.WriteAllText(Path.Combine(staging, ContentPackLoader.ManifestFileName), manifest, new UTF8Encoding(false));
+            Directory.CreateDirectory(packRoot);
+            CreateZipFromDirectory(staging, Path.Combine(packRoot, "zip_pack.lofepackage"));
+            string baseRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
+
+            ContentLoadResult result = ContentPackLoader.Load(baseRoot, new[] { packRoot });
+
+            Assert.That(result.LoadedPacks.Single().Definition.PackId, Is.EqualTo("zip_pack"));
+            Assert.That(result.Package.Characters.Any(item => item.CharacterId == "zip_hero"), Is.True);
+            Assert.That(result.TryGetExternalAssetPath("zip.art", out string resolved), Is.True);
+            Assert.That(File.Exists(resolved), Is.True);
+        }
+        finally
+        {
+            if (Directory.Exists(temporary)) Directory.Delete(temporary, true);
+        }
+    }
+
     /// <summary>Ensures a tampered catalog never reaches package composition.</summary>
     [Test]
     public void PhysicalContentPackRejectsCatalogHashMismatch()
@@ -463,6 +502,20 @@ public sealed class ContentArchitectureFoundationTests
         finally
         {
             if (Directory.Exists(temporary)) Directory.Delete(temporary, true);
+        }
+    }
+
+    private static void CreateZipFromDirectory(string sourceDirectory, string destinationFile)
+    {
+        using FileStream stream = File.Create(destinationFile);
+        using ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Create);
+        foreach (string file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(sourceDirectory, file).Replace('\\', '/');
+            ZipArchiveEntry entry = archive.CreateEntry(relative);
+            using Stream destination = entry.Open();
+            using FileStream source = File.OpenRead(file);
+            source.CopyTo(destination);
         }
     }
 

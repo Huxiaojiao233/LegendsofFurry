@@ -34,17 +34,20 @@ public static class ContentRuntime
             string localPacks = ResolveGameDirectoryPacksRoot();
             string userPacks = Path.Combine(Application.persistentDataPath, "Content", "Packs");
             string settingsPath = Path.Combine(Application.persistentDataPath, "Content", "pack-settings.json");
+            Debug.Log($"内容加载开始。引擎桩：{baseRoot}；内置包：{bundledPacks}；投放目录：{localPacks}");
             IReadOnlyCollection<string> disabled = ContentPackLoader.ReadDisabledPackIds(settingsPath);
+            // 编辑器读工程根 Content/Packs；玩家包打进 StreamingAssets，旁边的 Content/Packs 只作为可选模组。
+            bool isEditor = Application.isEditor;
             loadResult = ContentPackLoader.Load(baseRoot, new[]
             {
-                new ContentPackRoot(bundledPacks, true),
-                new ContentPackRoot(localPacks, true),
+                new ContentPackRoot(bundledPacks, !isEditor),
+                new ContentPackRoot(localPacks, isEditor),
                 new ContentPackRoot(userPacks, false)
             }, disabled);
             ContentPackage package = loadResult.Package;
             ContentRuntimeCapabilityValidator.ValidateOrThrow(package);
             if (package.Cards.Count == 0)
-                throw new InvalidDataException("没有可用卡牌。请把离线内容包放到游戏 Content/Packs 目录。");
+                throw new InvalidDataException("没有可用卡牌。玩家包需要 StreamingAssets/Content/Packs/lofe_core.lofepackage。");
             Registry = new ContentRegistry(package);
             LoadError = null;
             foreach (ContentLoadDiagnostic diagnostic in Diagnostics)

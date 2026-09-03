@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -87,8 +88,9 @@ public sealed class ContentPackLoadInfo
 /// <summary>发现直接子目录中的内容包，校验清单和资源，再把它们合成。</summary>
 public static class ContentPackLoader
 {
-    public const int SupportedPackFormatVersion = 1;
+    public const int SupportedPackFormatVersion = 2;
     public const string ManifestFileName = "pack.json";
+    public const string PackageExtension = ".lofepackage";
 
     /// <summary>加载一份已发布的基础内容根目录，以及各搜索根下发现的全部扩展包。</summary>
     public static ContentLoadResult Load(string baseContentRoot, IEnumerable<string> packRoots)
@@ -173,28 +175,98 @@ public static class ContentPackLoader
             if (string.IsNullOrWhiteSpace(rootValue)) continue;
             string root = Path.GetFullPath(rootValue);
             if (!Directory.Exists(root)) continue;
+            foreach (string packageFile in Directory.GetFiles(root, "*" + PackageExtension)
+                         .OrderBy(item => item, StringComparer.Ordinal))
+            {
+                string fileName = Path.GetFileName(packageFile);
+                if (string.IsNullOrEmpty(fileName) || fileName.StartsWith("_", StringComparison.Ordinal))
+                    continue;
+#if !UNITY_EDITOR
+                if (string.Equals(Path.GetFileNameWithoutExtension(fileName), "planner_pack", StringComparison.OrdinalIgnoreCase))
+                    continue;
+#endif
+                TryAddDiscovered(result, diagnostics, disabled, packRoot.Required, packageFile, () =>
+                    LoadPack(Path.Combine(ExtractPackage(packageFile), ManifestFileName), packRoot.Required));
+            }
             foreach (string directory in Directory.GetDirectories(root).OrderBy(item => item, StringComparer.Ordinal))
             {
+                string folderName = Path.GetFileName(directory);
+                if (string.IsNullOrEmpty(folderName) || folderName.StartsWith("_", StringComparison.Ordinal))
+                    continue;
+#if !UNITY_EDITOR
+                if (string.Equals(folderName, "planner_pack", StringComparison.OrdinalIgnoreCase))
+                    continue;
+#endif
                 string manifestPath = Path.Combine(directory, ManifestFileName);
                 if (!File.Exists(manifestPath)) continue;
-                try
-                {
-                    ContentPackLoadInfo info = LoadPack(manifestPath, packRoot.Required);
-                    if (disabled.Contains(info.Definition.PackId))
-                    {
-                        diagnostics.Add(new ContentLoadDiagnostic("info", info.Definition.PackId, directory,
-                            "扩展包已由用户配置禁用。"));
-                        continue;
-                    }
-                    result.Add(info);
-                }
-                catch (Exception exception) when (!packRoot.Required)
-                {
-                    diagnostics.Add(new ContentLoadDiagnostic("error", string.Empty, directory, exception.Message));
-                }
+                TryAddDiscovered(result, diagnostics, disabled, packRoot.Required, directory, () =>
+                    LoadPack(manifestPath, packRoot.Required));
             }
         }
         return result;
+    }
+
+    private static void TryAddDiscovered(
+        List<ContentPackLoadInfo> result,
+        ICollection<ContentLoadDiagnostic> diagnostics,
+        ISet<string> disabled,
+        bool required,
+        string sourcePath,
+        Func<ContentPackLoadInfo> load)
+    {
+        try
+        {
+            ContentPackLoadInfo info = load();
+            if (disabled.Contains(info.Definition.PackId))
+            {
+                diagnostics.Add(new ContentLoadDiagnostic("info", info.Definition.PackId, sourcePath,
+                    "扩展包已由用户配置禁用。"));
+                return;
+            }
+            result.Add(info);
+        }
+        catch (Exception exception) when (!required)
+        {
+            diagnostics.Add(new ContentLoadDiagnostic("error", string.Empty, sourcePath, exception.Message));
+        }
+    }
+
+    /// <summary>把 .lofepackage 解到缓存目录；文件哈希变了会重新解压。</summary>
+    internal static string ExtractPackage(string packagePath)
+    {
+        if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath))
+            throw new FileNotFoundException("找不到内容包。", packagePath);
+        string hash = ComputeFileSha256(packagePath);
+        string cacheRoot = Path.Combine(Path.GetTempPath(), "LofePackages", hash);
+        string manifestPath = Path.Combine(cacheRoot, ManifestFileName);
+        if (File.Exists(manifestPath)) return cacheRoot;
+        if (Directory.Exists(cacheRoot)) Directory.Delete(cacheRoot, true);
+        Directory.CreateDirectory(cacheRoot);
+        ExtractZipArchive(packagePath, cacheRoot);
+        if (!File.Exists(manifestPath))
+            throw new InvalidDataException($"内容包缺少 {ManifestFileName}：{packagePath}");
+        return cacheRoot;
+    }
+
+    private static void ExtractZipArchive(string packagePath, string destination)
+    {
+        using FileStream stream = File.OpenRead(packagePath);
+        using ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        foreach (ZipArchiveEntry entry in archive.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name)) continue;
+            string relative = entry.FullName.Replace('\\', '/').TrimStart('/');
+            if (string.IsNullOrEmpty(relative) || relative.Contains("..", StringComparison.Ordinal))
+                throw new InvalidDataException($"内容包包含非法路径：{entry.FullName}");
+            string target = Path.GetFullPath(Path.Combine(destination, relative.Replace('/', Path.DirectorySeparatorChar)));
+            string root = Path.GetFullPath(destination).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"内容包路径逃逸：{entry.FullName}");
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            using Stream source = entry.Open();
+            using FileStream destination = File.Create(target);
+            source.CopyTo(destination);
+        }
     }
 
     private static ContentPackLoadInfo LoadPack(string manifestPath, bool required)
@@ -202,7 +274,7 @@ public static class ContentPackLoader
         string directory = Path.GetDirectoryName(Path.GetFullPath(manifestPath));
         ContentPackManifestDto manifest = ContentPackageLoader.ParseJson<ContentPackManifestDto>(
             ContentPackageLoader.ReadRequiredText(manifestPath), manifestPath);
-        if (manifest.formatVersion != SupportedPackFormatVersion)
+        if (manifest.formatVersion < 1 || manifest.formatVersion > SupportedPackFormatVersion)
             throw new InvalidDataException($"扩展包格式版本不支持：{manifest.formatVersion}。");
         if (!ContentId.IsValid(manifest.packId) || string.IsNullOrWhiteSpace(manifest.packVersion))
             throw new InvalidDataException($"扩展包 manifest 的 ID 或版本无效：{manifest.packId}。");
@@ -338,16 +410,14 @@ public static class ContentPackLoader
                     $"扩展包 {pack.Definition.PackId} 资源");
                 if (!File.Exists(path))
                     throw new FileNotFoundException($"扩展包资源不存在：{asset.AssetKey}", path);
-                if (!string.IsNullOrWhiteSpace(asset.Sha256) &&
-                    !string.Equals(ComputeFileSha256(path), asset.Sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException($"扩展包资源校验失败：{asset.AssetKey}。");
                 result[asset.AssetKey] = path;
             }
         }
         return result;
     }
 
-    private static string ComputeFileSha256(string path)
+    /// <summary>构建门禁校验单张资源文件的 SHA-256；运行时启动不再整包哈希，避免闪屏后主线程卡死。</summary>
+    public static string ComputeFileSha256(string path)
     {
         using FileStream stream = File.OpenRead(path);
         using SHA256 algorithm = SHA256.Create();

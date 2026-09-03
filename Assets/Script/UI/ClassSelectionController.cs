@@ -37,8 +37,9 @@ public class ClassSelectionController : MonoBehaviour
     {
         if (!ContentRuntime.IsLoaded)
         {
-            throw new InvalidOperationException(
-                $"职业选择无法读取数据库内容包：{ContentRuntime.LoadError}");
+            Debug.LogError($"职业选择无法读取数据库内容包：{ContentRuntime.LoadError}", this);
+            ContentLoadFailureNotice.Ensure();
+            return;
         }
 
         ClassProfileDefinition[] orderedProfiles = ContentRuntime.Registry.ClassProfiles

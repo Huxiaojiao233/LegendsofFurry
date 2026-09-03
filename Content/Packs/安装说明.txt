@@ -1,0 +1,9 @@
+把 .lofepackage 文件放到游戏目录下的 Content\Packs\ 中即可。
+
+投放位置（任选一个）：
+  1. 游戏安装目录\Content\Packs\lofe_core.lofepackage
+  2. Unity 工程根目录\Content\Packs\*.lofepackage  （编辑器 Play 也会读）
+  3. %USERPROFILE%\AppData\LocalLow\IIESoftware\Legend of Furry\Content\Packs\
+
+不要解压。启动或重新进入游戏后会自动加载。坏包只会跳过这一包，不会清掉基础内容。
+旧版文件夹包已转到 Content\Packs\_converted\，可在确认新包能加载后删除。

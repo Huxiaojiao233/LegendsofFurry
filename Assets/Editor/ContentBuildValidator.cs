@@ -63,6 +63,9 @@ public sealed class ContentBuildValidator : IPreprocessBuildWithReport
         {
             if (!loadResult.TryGetExternalAssetPath(asset.AssetKey, out string path) || !File.Exists(path))
                 throw new FileNotFoundException($"卡面必须来自离线内容包，找不到：{asset.AssetKey} -> {asset.RelativePath}");
+            if (!string.IsNullOrWhiteSpace(asset.Sha256) &&
+                !string.Equals(ContentPackLoader.ComputeFileSha256(path), asset.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"扩展包资源校验失败：{asset.AssetKey}。");
         }
     }
 

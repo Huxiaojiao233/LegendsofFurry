@@ -60,6 +60,11 @@ sysinfo.txt
 *.swp
 ContentSource/Backups/
 Content/Packs/_local/
+Content/Packs/_converted/
+Content/Packs/*.lofepackage
+Assets/StreamingAssets/Content/Packs/
+/LegnedofFurry Beta*/
+/*.zip
 .DS_Store
 Thumbs.db
 

@@ -78,7 +78,7 @@ public static class ContentPackageLoader
         ContentPackage package = dto.ToContract();
         if (package.SchemaVersion != schemaVersion ||
             !string.Equals(package.ContentVersion, contentVersion, StringComparison.Ordinal))
-            throw new InvalidDataException("catalog.json 的 schema 或内容版本与 manifest 不一致。");
+            throw new InvalidDataException("内容目录的 schema 或内容版本与 manifest 不一致。");
         return package;
     }
 

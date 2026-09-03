@@ -7,71 +7,34 @@
   "terrainHeight": 10,
   "startStageId": "start",
   "stages": [
-    {
-      "stageId": "start",
-      "displayName": "营地",
-      "stageType": "start",
-      "gridX": 0,
-      "gridY": 2,
-      "enabled": true
-    },
-    {
-      "stageId": "fight-1",
-      "displayName": "林缘斥候",
-      "stageType": "battle",
-      "gridX": 1,
-      "gridY": 2,
-      "enabled": true
-    },
-    {
-      "stageId": "reward-1",
-      "displayName": "战利品堆",
-      "stageType": "reward",
-      "gridX": 2,
-      "gridY": 2,
-      "enabled": true
-    },
-    {
-      "stageId": "fight-2",
-      "displayName": "河谷巡逻",
-      "stageType": "battle",
-      "gridX": 3,
-      "gridY": 2,
-      "enabled": true
-    },
-    {
-      "stageId": "shop-1",
-      "displayName": "流浪商摊",
-      "stageType": "shop",
-      "gridX": 4,
-      "gridY": 2,
-      "enabled": true
-    },
-    {
-      "stageId": "fight-3",
-      "displayName": "钥匙守卫",
-      "stageType": "battle",
-      "gridX": 4,
-      "gridY": 1,
-      "dropKeyId": "boss-key",
-      "enabled": true
-    },
-    {
-      "stageId": "fight-4",
-      "displayName": "侧翼哨所",
-      "stageType": "battle",
-      "gridX": 2,
-      "gridY": 1,
-      "enabled": true
-    },
-    {
-      "stageId": "boss-1",
-      "displayName": "魔王祭坛",
-      "stageType": "boss",
-      "gridX": 2,
-      "gridY": 3,
-      "requiredKeyId": "boss-key",
-      "enabled": true
-    }
+    { "stageId": "fight-sw", "displayName": "西南斥候", "stageType": "battle", "gridX": 0, "gridY": 0, "enabled": true },
+    { "stageId": "reward-s1", "displayName": "南缘战利品", "stageType": "reward", "gridX": 1, "gridY": 0, "enabled": true },
+    { "stageId": "rest-s2", "displayName": "河湾休息", "stageType": "rest", "gridX": 2, "gridY": 0, "enabled": true },
+    { "stageId": "shop-s1", "displayName": "南路货摊", "stageType": "shop", "gridX": 3, "gridY": 0, "enabled": true },
+    { "stageId": "fight-se", "displayName": "东南哨所", "stageType": "battle", "gridX": 4, "gridY": 0, "enabled": true },
+
+    { "stageId": "rest-s1", "displayName": "南坡歇脚", "stageType": "rest", "gridX": 0, "gridY": 1, "enabled": true },
+    { "stageId": "fight-s1", "displayName": "灌木伏击", "stageType": "battle", "gridX": 1, "gridY": 1, "enabled": true },
+    { "stageId": "fight-4", "displayName": "侧翼哨所", "stageType": "battle", "gridX": 2, "gridY": 1, "enabled": true },
+    { "stageId": "fight-s2", "displayName": "浅滩巡逻", "stageType": "battle", "gridX": 3, "gridY": 1, "enabled": true },
+    { "stageId": "fight-3", "displayName": "钥匙守卫", "stageType": "battle", "gridX": 4, "gridY": 1, "dropKeyId": "boss-key", "enabled": true },
+
+    { "stageId": "start", "displayName": "营地", "stageType": "start", "gridX": 0, "gridY": 2, "enabled": true },
+    { "stageId": "fight-1", "displayName": "林缘斥候", "stageType": "battle", "gridX": 1, "gridY": 2, "enabled": true },
+    { "stageId": "reward-1", "displayName": "战利品堆", "stageType": "reward", "gridX": 2, "gridY": 2, "enabled": true },
+    { "stageId": "fight-2", "displayName": "河谷巡逻", "stageType": "battle", "gridX": 3, "gridY": 2, "enabled": true },
+    { "stageId": "shop-1", "displayName": "流浪商摊", "stageType": "shop", "gridX": 4, "gridY": 2, "enabled": true },
+
+    { "stageId": "fight-w1", "displayName": "西崖伏兵", "stageType": "battle", "gridX": 0, "gridY": 3, "enabled": true },
+    { "stageId": "rest-w1", "displayName": "林间篝火", "stageType": "rest", "gridX": 1, "gridY": 3, "enabled": true },
+    { "stageId": "boss-1", "displayName": "魔王祭坛", "stageType": "boss", "gridX": 2, "gridY": 3, "requiredKeyId": "boss-key", "enabled": true },
+    { "stageId": "rest-e1", "displayName": "祭坛侧廊", "stageType": "rest", "gridX": 3, "gridY": 3, "enabled": true },
+    { "stageId": "fight-e1", "displayName": "东墙弓手", "stageType": "battle", "gridX": 4, "gridY": 3, "enabled": true },
+
+    { "stageId": "rest-n1", "displayName": "北岗营地", "stageType": "rest", "gridX": 0, "gridY": 4, "enabled": true },
+    { "stageId": "fight-n1", "displayName": "北林斥候", "stageType": "battle", "gridX": 1, "gridY": 4, "enabled": true },
+    { "stageId": "reward-n1", "displayName": "北侧战利品", "stageType": "reward", "gridX": 2, "gridY": 4, "enabled": true },
+    { "stageId": "fight-n2", "displayName": "北岭巡逻", "stageType": "battle", "gridX": 3, "gridY": 4, "enabled": true },
+    { "stageId": "rest-n2", "displayName": "北哨休息", "stageType": "rest", "gridX": 4, "gridY": 4, "enabled": true }
   ]
 }
