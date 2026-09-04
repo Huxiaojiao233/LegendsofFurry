@@ -32,7 +32,7 @@ public sealed class ContentCardExecutionContext
         BoardCell selectedCell,
         Vector2Int? direction,
         ICardDrawService hand,
-        BoardClickController actionPoints,
+        IActionPointPool actionPoints,
         CardPlayResult result,
         bool enablePresentation = true,
         int actionPointsBefore = -1,
@@ -88,7 +88,7 @@ public sealed class ContentCardExecutionContext
         BoardCell selectedCell,
         Vector2Int? direction,
         ICardDrawService hand,
-        BoardClickController actionPoints,
+        IActionPointPool actionPoints,
         CardPlayResult result,
         bool enablePresentation = true,
         int actionPointsBefore = -1,
@@ -129,7 +129,7 @@ public sealed class ContentCardExecutionContext
     public Vector2Int? Direction { get; }
     public ICardDrawService Hand { get; }
     public IContentCardZoneService CardZones { get; }
-    public BoardClickController ActionPoints { get; }
+    public IActionPointPool ActionPoints { get; }
     public CardPlayResult Result { get; }
     public bool EnablePresentation { get; }
     public CardPlayResourceSnapshot Resources { get; }
@@ -454,7 +454,7 @@ public static class ContentCardEffectExecutor
         if (node.OperationKey is "end_turn" or "no_op" or "play_vfx" or "play_sfx" or "cancel_query" or
             "transform_owner_status" or "appraise_equipment") return true;
 
-        bool requiresAmount = node.OperationKey is not "remove_status" and not "clear_statuses" and
+        bool requiresAmount = node.OperationKey is not "remove_status" and not "clear_statuses" and not "copy_random_positive_status" and
             not "remove_cards_by_query" and not "move_cards";
         if (requiresAmount && (!TryGetParsedAmount(node.ParametersJson, out object parsedAmount) ||
                                !ValueResolver.CanResolveParsedStructure(parsedAmount))) return false;
@@ -590,7 +590,7 @@ public static class ContentCardEffectExecutor
         int amount = 0;
         bool requiresAmount = node.OperationKey is not "end_turn" and not "no_op" and not "play_vfx" and not "play_sfx" and
             not "remove_status" and not "clear_statuses" and not "remove_cards_by_query" and not "move_cards" and
-            not "cancel_query" and not "transform_owner_status" and not "appraise_equipment";
+            not "cancel_query" and not "transform_owner_status" and not "appraise_equipment" and not "copy_random_positive_status";
         if (requiresAmount && !TryResolveAmount(node.ParametersJson, context, target, out amount)) return false;
         switch (node.OperationKey)
         {
@@ -678,6 +678,14 @@ public static class ContentCardEffectExecutor
                 else if (parameters.mode == "all") target.State.ClearAll();
                 else return false;
                 return true;
+            case "copy_random_positive_status":
+                if (target == null || context.Source == null) return false;
+                RuntimeStatusInstance[] positives = target.State.GetStatusSnapshot()
+                    .Where(item => item.Stacks > 0 && item.Definition?.Category == "positive").ToArray();
+                if (positives.Length == 0) return true;
+                RuntimeStatusInstance copied = positives[context.RandomSource.NextInclusive(0, positives.Length - 1)];
+                context.Source.State.Add(copied.StatusId, copied.Stacks, copied.RemainingTurns, context.Source.InstanceId);
+                return true;
             case "modify_action_points":
                 if (context.ActionPoints == null) return false;
                 if (amount >= 0) context.ActionPoints.GainActionPoints(amount);
@@ -701,8 +709,11 @@ public static class ContentCardEffectExecutor
                 context.Hand.DrawCards(Mathf.Max(0, amount), true);
                 return true;
             case "generate_card":
-                return context.CardZones != null &&
-                       context.CardZones.GenerateCards(parameters.query, Mathf.Max(0, amount),
+                IContentCardZoneService destination = context.CardZones;
+                if (target != null && target != context.Source && CombatCardZoneRegistry.TryGet(target, out IContentCardZoneService targetZones))
+                    destination = targetZones;
+                return destination != null &&
+                       destination.GenerateCards(parameters.query, Mathf.Max(0, amount),
                            parameters.destinationZone ?? ContentCardZoneKeys.Hand);
             case "move_cards":
                 return context.CardZones != null &&

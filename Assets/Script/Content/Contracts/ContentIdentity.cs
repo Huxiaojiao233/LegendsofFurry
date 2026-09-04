@@ -93,13 +93,14 @@ public static class ContentDefinitionKinds
     public const string CardPool = "pool";
     public const string Rarity = "rarity";
     public const string Asset = "asset";
-    public const string Character = "character";
+    public const string Unit = "unit";
+    public const string AiProfile = "ai_profile";
     public const string Equipment = "equipment";
 
     /// <summary>判断该 key 是否对应内容包合成所识别的定义集合。</summary>
     public static bool IsKnown(string kind) => kind == Card || kind == Status || kind == Class ||
         kind == Deck || kind == CardPool || kind == Rarity || kind == Asset ||
-        kind == Character || kind == Equipment;
+        kind == Unit || kind == AiProfile || kind == Equipment;
 
     /// <summary>
     /// 判断该定义类型是否可以拥有行为图。
@@ -110,7 +111,7 @@ public static class ContentDefinitionKinds
     public static bool CanOwnBehavior(string? kind)
     {
         return kind == Card || kind == Status || kind == Class ||
-               kind == Character || kind == Equipment;
+               kind == Unit || kind == Equipment;
     }
 }
 

@@ -1,0 +1,298 @@
+{
+    "position": [
+        0,
+        3
+    ],
+    "id": "fight-w1",
+    "displayName": "西崖伏兵",
+    "stageType": "battle",
+    "enabled": true,
+    "terrainLegend": [
+        {
+            "glyph": "G",
+            "definition": "base.grass"
+        },
+        {
+            "glyph": "W",
+            "definition": "base.water"
+        }
+    ],
+    "terrain": [
+        "GGGGGGGGGG",
+        "GGGGGGGGGG",
+        "GGGGGGGGGG",
+        "GGGGGGGGGG",
+        "GGGGGGGGGG",
+        "GGGGGGGGGG",
+        "GGGGGGGGGG",
+        "WWWWWWWWWW",
+        "WGGGGGGGGG",
+        "GGGGGGGGGG"
+    ],
+    "heights": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ],
+    "objects": [
+        {
+            "id": "deco-fight-w1-0-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 0,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-1-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 1,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-2-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 2,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-3-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 3,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-4-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-5-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 5,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-6-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 6,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-7-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 7,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-8-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 8,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-9-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 9,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-9-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 9,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-8-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 8,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-7-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 7,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-6-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 6,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-5-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 5,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-4-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-3-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 3,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-2-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 2,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-1-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 1,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-1-9",
+            "definition": "hs.tree.redoak.01",
+            "x": 1,
+            "y": 9,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-w1-0-9",
+            "definition": "hs.tree.redoak.01",
+            "x": 0,
+            "y": 9,
+            "rotation": 0
+        }
+    ],
+    "rewardPoolId": "",
+    "requiredKeyId": "",
+    "dropKeyId": "",
+    "unitPlacements": [
+        {
+            "instanceId": "fight-w1-slime-1",
+            "unitId": "slime",
+            "x": 7,
+            "y": 5,
+            "factionOverride": "enemy",
+            "controllerOverride": "ai",
+            "deckIdOverride": "",
+            "enabled": true
+        }
+    ]
+}

@@ -13,7 +13,7 @@ namespace LegendsOfFurry.Content.Runtime
 public static class ContentPackageLoader
 {
     public const int MinimumSchemaVersion = 1;
-    public const int SupportedSchemaVersion = 2;
+    public const int SupportedSchemaVersion = 3;
 
     /// <summary>
     /// 从当前 Unity 应用的 StreamingAssets/Content 目录加载已发布内容包。

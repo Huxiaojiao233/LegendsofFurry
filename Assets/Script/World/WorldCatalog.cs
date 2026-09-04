@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
 using UnityEngine;
 
 /// <summary>
-/// 从 StreamingAssets/Content/Worlds 读取可自定义大地图。没有文件时生成 demo 默认布局。
+/// 从 StreamingAssets/Content/Worlds 读取大地图。优先分块目录 world.json+chunks/，其次旧单文件。
 /// </summary>
 public static class WorldCatalog
 {
@@ -86,26 +85,18 @@ public static class WorldCatalog
         return false;
     }
 
+    public static void Reload()
+    {
+        loaded = false;
+        EnsureLoaded();
+    }
+
     private static void EnsureLoaded()
     {
         if (loaded) return;
         loaded = true;
         worlds.Clear();
-        string folder = Path.Combine(Application.streamingAssetsPath, "Content", "Worlds");
-        if (Directory.Exists(folder))
-        {
-            foreach (string path in Directory.GetFiles(folder, "*.json"))
-            {
-                try
-                {
-                    worlds.Add(ReadWorld(path));
-                }
-                catch (Exception exception)
-                {
-                    Debug.LogError($"世界地图 {path} 读取失败：{exception.Message}");
-                }
-            }
-        }
+        worlds.AddRange(WorldMapIO.LoadAll());
 
         if (worlds.Count == 0)
         {
@@ -120,53 +111,6 @@ public static class WorldCatalog
             for (int i = 0; i < mismatches.Count; i++)
                 Debug.LogError(mismatches[i]);
         }
-    }
-
-    private static WorldDefinition ReadWorld(string path)
-    {
-        WorldFileDto dto = JsonUtility.FromJson<WorldFileDto>(File.ReadAllText(path));
-        if (dto == null || !ContentId.IsValid(dto.worldId))
-            throw new InvalidDataException($"世界 ID 无效：{path}");
-        WorldDefinition world = new WorldDefinition
-        {
-            WorldId = dto.worldId,
-            DisplayName = string.IsNullOrWhiteSpace(dto.displayName) ? dto.worldId : dto.displayName,
-            StageGridWidth = dto.stageGridWidth > 0 ? dto.stageGridWidth : 5,
-            StageGridHeight = dto.stageGridHeight > 0 ? dto.stageGridHeight : 5,
-            TerrainWidth = dto.terrainWidth > 0 ? dto.terrainWidth : 10,
-            TerrainHeight = dto.terrainHeight > 0 ? dto.terrainHeight : 10,
-            StartStageId = dto.startStageId ?? string.Empty
-        };
-        if (dto.stages == null) throw new InvalidDataException($"世界 {dto.worldId} 没有关卡格子。");
-        HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
-        HashSet<(int, int)> cells = new HashSet<(int, int)>();
-        foreach (StageFileDto item in dto.stages)
-        {
-            if (item == null || !item.enabled) continue;
-            if (!ContentId.IsValid(item.stageId) || !ContentStageTypeKeys.IsKnown(item.stageType))
-                throw new InvalidDataException($"关卡 {item.stageId} 的 ID 或类型无效。");
-            if (!ids.Add(item.stageId) || !cells.Add((item.gridX, item.gridY)))
-                throw new InvalidDataException($"关卡 {item.stageId} 的 ID 或坐标重复。");
-            StageDefinition stage = new StageDefinition
-            {
-                StageId = item.stageId,
-                DisplayName = string.IsNullOrWhiteSpace(item.displayName) ? item.stageId : item.displayName,
-                StageType = item.stageType,
-                GridX = item.gridX,
-                GridY = item.gridY,
-                Heights = item.heights ?? Array.Empty<int>(),
-                RewardPoolId = item.rewardPoolId ?? string.Empty,
-                RequiredKeyId = item.requiredKeyId ?? string.Empty,
-                DropKeyId = item.dropKeyId ?? string.Empty,
-                Enabled = true
-            };
-            if (item.enemyCharacterIds != null)
-                stage.EnemyCharacterIds.AddRange(item.enemyCharacterIds);
-            world.Stages.Add(stage);
-        }
-        if (!TryGetStage(world, world.StartStageId, out _))
-            throw new InvalidDataException($"世界 {world.WorldId} 的起始关卡不存在。");
-        return world;
     }
 
     /// <summary>demo 路线：营地→小怪1→奖励→小怪2→商店→小怪3(钥匙)→可探索小怪4→钥匙开魔王。</summary>
@@ -200,33 +144,4 @@ public static class WorldCatalog
 
     private static StageDefinition Stage(string id, string name, string type, int x, int y) =>
         new StageDefinition { StageId = id, DisplayName = name, StageType = type, GridX = x, GridY = y };
-
-    [Serializable]
-    private sealed class WorldFileDto
-    {
-        public string worldId;
-        public string displayName;
-        public int stageGridWidth;
-        public int stageGridHeight;
-        public int terrainWidth;
-        public int terrainHeight;
-        public string startStageId;
-        public StageFileDto[] stages;
-    }
-
-    [Serializable]
-    private sealed class StageFileDto
-    {
-        public string stageId;
-        public string displayName;
-        public string stageType;
-        public int gridX;
-        public int gridY;
-        public int[] heights;
-        public string[] enemyCharacterIds;
-        public string rewardPoolId;
-        public string requiredKeyId;
-        public string dropKeyId;
-        public bool enabled = true;
-    }
 }

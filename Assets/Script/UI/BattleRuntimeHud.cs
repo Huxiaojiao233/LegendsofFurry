@@ -46,7 +46,7 @@ public class BattleRuntimeHud : MonoBehaviour
     private bool lastCombat;
     private Coroutine enemyPanelMotion;
     private Unit boundEnemy;
-    private CharacterDefinition boundSelfDefinition;
+    private UnitDefinition boundSelfDefinition;
 
     /// <summary>场景里的一枚装备图标，只在该槽有装备时显示。</summary>
     private sealed class EquipmentSlotView
@@ -481,9 +481,9 @@ public class BattleRuntimeHud : MonoBehaviour
     private void BindSelfPortrait()
     {
         if (selfAvatar == null) return;
-        CharacterDefinition definition = player != null ? player.Definition : null;
+        UnitDefinition definition = player != null ? player.Definition : null;
         if (definition == null && ContentRuntime.IsLoaded)
-            ContentRuntime.Registry.TryGetCharacter(ContentRuntime.Registry.GameSettings.PlayerCharacterId, out definition);
+            ContentRuntime.Registry.TryGetUnit(ContentRuntime.Registry.GameSettings.PlayerUnitId, out definition);
         if (definition == boundSelfDefinition && selfAvatar.sprite != null) return;
         boundSelfDefinition = definition;
         Sprite portrait = TokenVisualRuntime.LoadPortraitSprite(definition);

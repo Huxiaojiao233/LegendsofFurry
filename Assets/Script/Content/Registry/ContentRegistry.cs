@@ -18,7 +18,8 @@ public sealed class ContentRegistry
     private readonly Dictionary<string, CardPoolDefinition> cardPools;
     private readonly Dictionary<string, RarityDefinition> rarities;
     private readonly Dictionary<string, AssetDefinition> assets;
-    private readonly Dictionary<string, CharacterDefinition> characters;
+    private readonly Dictionary<string, UnitDefinition> units;
+    private readonly Dictionary<string, AiProfileDefinition> aiProfiles;
     private readonly Dictionary<string, EquipmentDefinition> equipment;
 
     /// <summary>
@@ -40,7 +41,8 @@ public sealed class ContentRegistry
         cardPools = BuildIndex(package.CardPools, item => item.Enabled, ContentDefinitionKinds.CardPool);
         rarities = BuildIndex(package.Rarities, _ => true, ContentDefinitionKinds.Rarity);
         assets = BuildIndex(package.Assets, _ => true, ContentDefinitionKinds.Asset);
-        characters = BuildIndex(package.Characters, item => item.Enabled, ContentDefinitionKinds.Character);
+        units = BuildIndex(package.Units, item => item.Enabled, ContentDefinitionKinds.Unit);
+        aiProfiles = BuildIndex(package.AiProfiles, item => item.Enabled, ContentDefinitionKinds.AiProfile);
         equipment = BuildIndex(package.Equipment, item => item.Enabled, ContentDefinitionKinds.Equipment);
     }
 
@@ -52,7 +54,8 @@ public sealed class ContentRegistry
     public IReadOnlyCollection<CardPoolDefinition> CardPools => cardPools.Values;
     public IReadOnlyCollection<RarityDefinition> Rarities => rarities.Values;
     public IReadOnlyCollection<AssetDefinition> Assets => assets.Values;
-    public IReadOnlyCollection<CharacterDefinition> Characters => characters.Values;
+    public IReadOnlyCollection<UnitDefinition> Units => units.Values;
+    public IReadOnlyCollection<AiProfileDefinition> AiProfiles => aiProfiles.Values;
     public IReadOnlyCollection<EquipmentDefinition> Equipment => equipment.Values;
     public GameSettingsDefinition GameSettings => Package.GameSettings;
 
@@ -160,17 +163,20 @@ public sealed class ContentRegistry
         return assets.TryGetValue(assetKey ?? string.Empty, out asset);
     }
 
-    /// <summary>按稳定 ID 查找已启用的数据驱动角色。</summary>
-    public bool TryGetCharacter(string characterId, out CharacterDefinition character) =>
-        characters.TryGetValue(characterId ?? string.Empty, out character);
+    /// <summary>按稳定 ID 查找已启用的数据驱动单位。</summary>
+    public bool TryGetUnit(string unitId, out UnitDefinition unit) =>
+        units.TryGetValue(unitId ?? string.Empty, out unit);
 
-    /// <summary>获取已启用角色；运行时引用损坏时抛出可定位错误。</summary>
-    public CharacterDefinition GetCharacter(string characterId)
+    /// <summary>获取已启用单位；运行时引用损坏时抛出可定位错误。</summary>
+    public UnitDefinition GetUnit(string unitId)
     {
-        if (!TryGetCharacter(characterId, out CharacterDefinition character))
-            throw new KeyNotFoundException($"内容包中不存在启用角色：{characterId}");
-        return character;
+        if (!TryGetUnit(unitId, out UnitDefinition unit))
+            throw new KeyNotFoundException($"内容包中不存在启用单位：{unitId}");
+        return unit;
     }
+
+    public bool TryGetAiProfile(string profileId, out AiProfileDefinition profile) =>
+        aiProfiles.TryGetValue(profileId ?? string.Empty, out profile);
 
     /// <summary>按稳定 ID 查找已启用装备定义。</summary>
     public bool TryGetEquipment(string equipmentId, out EquipmentDefinition definition) =>

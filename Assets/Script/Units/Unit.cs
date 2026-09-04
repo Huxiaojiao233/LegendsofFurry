@@ -9,7 +9,7 @@ using LegendsOfFurry.Content.Runtime;
 /// 棋盘单位组件。保存逻辑坐标、阵营和战斗属性，处理选中脉冲与移动动画。
 /// 行动点由 BoardClickController 统一管理，Unit 只执行已经批准的移动。
 /// </summary>
-public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
+public class Unit : MonoBehaviour, IContentInstance<UnitDefinition>
 {
     [Header("棋盘")]
     [SerializeField] private BoardGenerator board;
@@ -63,7 +63,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
     public string DisplayName => string.IsNullOrEmpty(displayName) ? gameObject.name : displayName;
     public CombatantState State => combatState != null ? combatState : combatState = GetComponent<CombatantState>() ?? gameObject.AddComponent<CombatantState>();
     public string InstanceId { get; private set; }
-    public CharacterDefinition Definition { get; private set; }
+    public UnitDefinition Definition { get; private set; }
 
     public event Action<Unit> Died;
     public event Action<Unit> StatsChanged;
@@ -123,7 +123,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
     }
 
     /// <summary>Binds this scene instance to an authored character and applies its base combat values.</summary>
-    public void ConfigureCombatant(CharacterDefinition definition)
+    public void ConfigureCombatant(UnitDefinition definition)
     {
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
         ConfigureCombatant(definition.DisplayName, definition.InitialHealth, definition.BaseDamage, definition.MoveSteps);
@@ -171,7 +171,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
     }
 
     /// <summary>尝试启动移动动画；目标无效或正在移动时返回 false。</summary>
-    public bool MoveToAnimated(int x, int z)
+    public bool MoveToAnimated(int x, int z, IActionPointPool actionPoints = null)
     {
         Vector2Int targetCoordinate = new Vector2Int(x, z);
 
@@ -190,7 +190,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
         board.SetOccupant(this, Position, isPlaced ? previous : (Vector2Int?)null);
         isPlaced = true;
 
-        moveCoroutine = StartCoroutine(MoveRoutine(targetPosition));
+        moveCoroutine = StartCoroutine(MoveRoutine(targetPosition, previous, targetCoordinate, actionPoints));
         return true;
     }
 
@@ -447,7 +447,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
         moveStepsPerTurn = Mathf.Max(1, moveStepsPerTurn);
     }
 
-    private IEnumerator MoveRoutine(Vector3 targetPosition)
+    private IEnumerator MoveRoutine(Vector3 targetPosition, Vector2Int previous, Vector2Int target, IActionPointPool actionPoints)
     {
         Vector3 startPosition = transform.position;
         float duration = Mathf.Max(0.01f, moveDuration);
@@ -466,6 +466,7 @@ public class Unit : MonoBehaviour, IContentInstance<CharacterDefinition>
 
         transform.position = targetPosition;
         moveCoroutine = null;
+        TerrainMovementRuntime.CompleteMove(this, previous, target, actionPoints);
         Debug.Log($"{gameObject.name} 移动到了 {Position}");
     }
 }

@@ -326,36 +326,10 @@ public class BattleFlow : MonoBehaviour
         }
 
         yield return new WaitForSeconds(0.2f);
-        if (!IsAdjacent(actor.Position, target.Position)) yield return MoveEnemyToward(actor, target);
-        if (phase != BattlePhase.GameOver && target.IsAlive && actor.IsAlive && IsAdjacent(actor.Position, target.Position))
-        {
-            CombatVfx.PlayClaw(actor, target);
-            target.TakeTypedDamage(actor.AttackDamage, DamageType.Normal, actor);
-            yield return new WaitForSeconds(0.35f);
-        }
+        UtilityAiController ai = actor.GetComponent<UtilityAiController>();
+        if (ai != null) yield return ai.RunTurn(enemyStepPause);
         actor.State.EndTurn(actor);
         ContentActorBehaviorRuntime.Execute(actor, ContentTriggerKeys.OnUnitTurnEnd, null);
-    }
-
-    private IEnumerator MoveEnemyToward(Unit actor, Unit target)
-    {
-        BoardGenerator board = actor.Board;
-        if (board == null) yield break;
-        List<Vector2Int> path = new List<Vector2Int>();
-        if (!board.TryFindPath(actor.Position, target.Position, actor, path) || path.Count <= 1) yield break;
-        ContentRuleQuery moveQuery = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
-            ContentRuleQueryKeys.MoveSteps, actor, target, actor.MoveStepsPerTurn));
-        int steps = Mathf.Max(0, moveQuery.Value);
-        if (steps == 0) yield break;
-        int moved = 0;
-        for (int i = 1; i < path.Count && moved < steps; i++)
-        {
-            Vector2Int next = path[i];
-            if (next == target.Position || !actor.MoveToAnimated(next.x, next.y)) break;
-            moved++;
-            while (actor.IsMoving) yield return null;
-            if (enemyStepPause > 0f) yield return new WaitForSeconds(enemyStepPause);
-        }
     }
 
     private void HandleUnitDied(Unit unit)
@@ -509,8 +483,6 @@ public class BattleFlow : MonoBehaviour
         unit.Died += HandleUnitDied;
     }
     private void Unsubscribe(Unit unit) { if (unit != null) unit.Died -= HandleUnitDied; }
-    private static bool IsAdjacent(Vector2Int a, Vector2Int b) => Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y) == 1;
-
     /// <summary>创建战斗结果弹窗使用的深色 TextMeshPro 文字。</summary>
     private static TMP_Text CreateText(string name, Transform parent, float size)
     {

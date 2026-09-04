@@ -1,12 +1,13 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "contentVersion": "engine",
   "generatedAtUtc": "2026-08-31T00:00:00.0000000+00:00",
   "catalogFile": "catalog.json",
-  "catalogSha256": "c7ed028edb4d51adeb373e6b422e5ea9297b40f406d60462fa95b7277a8f4966",
+  "catalogSha256": "40fc7d1a6426d51971f0a44d02fc39a1ee40a23a9edb33b8ab1de5e33530791f",
   "cardCount": 0,
   "statusCount": 0,
   "deckCount": 0,
-  "characterCount": 0,
+  "unitCount": 0,
+  "aiProfileCount": 0,
   "equipmentCount": 0
 }

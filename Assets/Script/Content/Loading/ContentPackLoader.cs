@@ -264,8 +264,8 @@ public static class ContentPackLoader
                 throw new InvalidDataException($"内容包路径逃逸：{entry.FullName}");
             Directory.CreateDirectory(Path.GetDirectoryName(target));
             using Stream source = entry.Open();
-            using FileStream destination = File.Create(target);
-            source.CopyTo(destination);
+            using FileStream output = File.Create(target);
+            source.CopyTo(output);
         }
     }
 

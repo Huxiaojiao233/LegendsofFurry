@@ -92,7 +92,7 @@ public static class ContentRuleQueryRuntime
             sources.Add((ContentBehaviorOwner.FromClass(profile), profile.Behaviors));
 
         if (query.Owner.Definition != null)
-            sources.Add((ContentBehaviorOwner.FromCharacter(query.Owner.Definition, query.Owner),
+            sources.Add((ContentBehaviorOwner.FromUnit(query.Owner.Definition, query.Owner),
                 query.Owner.Definition.Behaviors));
 
         RuntimeEquipmentLoadout loadout = query.Owner.GetComponent<RuntimeEquipmentLoadout>();

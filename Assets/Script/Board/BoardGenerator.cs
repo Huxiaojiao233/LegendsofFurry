@@ -21,7 +21,6 @@ public class BoardGenerator : MonoBehaviour
     [Header("格子设置")]
     [SerializeField] private float cellSize = 1f;
     [SerializeField] private float gap = 0f;
-    [SerializeField] private float heightStep = 0.45f;
 
     [Header("节点")]
     [SerializeField] private Transform gridRoot;
@@ -38,14 +37,36 @@ public class BoardGenerator : MonoBehaviour
     private int[,] boardMap;
     private int[,] cellHeights;
     private string[,] cellStageIds;
+    private string[,] cellTerrainIds;
+    private int originWorldX;
+    private int originWorldZ;
+    private WorldDefinition worldSource;
     private Func<int, int, bool> movementFilter;
     private readonly Dictionary<Vector2Int, Unit> occupants =
         new Dictionary<Vector2Int, Unit>();
+    private readonly List<GameObject> decorations = new List<GameObject>();
 
     public int Width => cells == null ? width : cells.GetLength(0);
     public int Height => cells == null ? height : cells.GetLength(1);
     public float Spacing => cellSize + gap;
-    public float HeightStep => heightStep;
+    public float HeightStep => WorldTerrain.StepY;
+    public int OriginWorldX => originWorldX;
+    public int OriginWorldZ => originWorldZ;
+
+    /// <summary>世界格子中心的世界坐标。棋盘外的格子按同样间距外推，方便云海铺边。</summary>
+    public Vector3 EvaluateTilePosition(int worldX, int worldZ)
+    {
+        if (TryGetCell(worldX, worldZ, out BoardCell cell) && cell != null)
+            return cell.transform.position;
+        float spacing = Spacing;
+        int mapWidth = Width;
+        int mapHeight = Height;
+        float posX = (worldX - (originWorldX + (mapWidth - 1) / 2f)) * spacing;
+        float posZ = (worldZ - (originWorldZ + (mapHeight - 1) / 2f)) * spacing;
+        Transform root = gridRoot != null ? gridRoot : transform;
+        return root.TransformPoint(new Vector3(posX, 0f, posZ));
+    }
+
     public bool IsWorldBoard { get; private set; }
 
     private int[,] GenerateRandomBoardMap()
@@ -81,37 +102,47 @@ public class BoardGenerator : MonoBehaviour
         return true;
     }
 
-    /// <summary>按关卡格子生成连续地形；空洞只出现在没有关卡定义的大地图空位。</summary>
+    /// <summary>按关卡格子生成连续地形；空洞只出现在没有关卡定义或地形为空的格子。</summary>
     public void BuildWorldBoard(WorldDefinition world)
     {
+        worldSource = world;
         int mapWidth = Mathf.Max(1, world.WorldTerrainWidth);
         int mapHeight = Mathf.Max(1, world.WorldTerrainHeight);
         int tw = Mathf.Max(1, world.TerrainWidth);
         int th = Mathf.Max(1, world.TerrainHeight);
+        originWorldX = world.OriginWorldX;
+        originWorldZ = world.OriginWorldY;
         width = mapWidth;
         height = mapHeight;
         boardMap = new int[mapHeight, mapWidth];
         cellHeights = new int[mapWidth, mapHeight];
         cellStageIds = new string[mapWidth, mapHeight];
+        cellTerrainIds = new string[mapWidth, mapHeight];
         for (int i = 0; i < world.Stages.Count; i++)
         {
             StageDefinition stage = world.Stages[i];
             if (stage == null || !stage.Enabled) continue;
+            stage.EnsureGrids(tw, th);
             for (int localY = 0; localY < th; localY++)
             {
                 for (int localX = 0; localX < tw; localX++)
                 {
-                    int x = stage.GridX * tw + localX;
-                    int z = stage.GridY * th + localY;
-                    boardMap[z, x] = 1;
-                    cellHeights[x, z] = stage.HeightAt(localX, localY, tw, th);
-                    cellStageIds[x, z] = stage.StageId;
+                    int worldX = stage.GridX * tw + localX;
+                    int worldZ = stage.GridY * th + localY;
+                    if (!TryMapWorld(worldX, worldZ, out int ix, out int iz)) continue;
+                    string terrainId = stage.TerrainAt(localX, localY, tw, th);
+                    cellHeights[ix, iz] = stage.HeightAt(localX, localY, tw, th);
+                    cellStageIds[ix, iz] = stage.StageId;
+                    cellTerrainIds[ix, iz] = terrainId;
+                    if (terrainId != WorldTerrainCatalog.Void)
+                        boardMap[iz, ix] = 1;
                 }
             }
         }
 
         IsWorldBoard = true;
         GenerateBoard();
+        SpawnDecorations();
     }
 
     public void SetMovementFilter(Func<int, int, bool> filter)
@@ -121,22 +152,25 @@ public class BoardGenerator : MonoBehaviour
 
     public int GetHeight(int x, int z)
     {
-        if (cellHeights == null ||
-            x < 0 || z < 0 ||
-            x >= cellHeights.GetLength(0) ||
-            z >= cellHeights.GetLength(1))
-        {
+        if (!TryMapWorld(x, z, out int ix, out int iz) || cellHeights == null)
             return 0;
-        }
-
-        return cellHeights[x, z];
+        return cellHeights[ix, iz];
     }
 
-    /// <summary>四方向走一步：存在格子、高度差不超过 1、未被占用，并满足当前探索/战斗范围。</summary>
+    public string GetTerrain(int x, int z)
+    {
+        if (!TryMapWorld(x, z, out int ix, out int iz) || cellTerrainIds == null)
+            return WorldTerrainCatalog.Grass;
+        string id = cellTerrainIds[ix, iz];
+        return string.IsNullOrEmpty(id) ? WorldTerrainCatalog.Grass : id;
+    }
+
+    /// <summary>四方向走一步：存在格子、可走地形、高度差不超过 1、未被占用，并满足当前探索/战斗范围。</summary>
     public bool CanStep(Vector2Int from, Vector2Int to, Unit mover, Vector2Int? goal = null)
     {
         if (movementFilter != null && !movementFilter(to.x, to.y)) return false;
         if (!TryGetCell(to.x, to.y, out _)) return false;
+        if (!WorldTerrainCatalog.CanEnter(GetTerrain(to.x, to.y), mover)) return false;
         if (Mathf.Abs(GetHeight(from.x, from.y) - GetHeight(to.x, to.y)) > 1) return false;
         if (goal.HasValue && to == goal.Value) return true;
         return !IsOccupied(to.x, to.y, mover);
@@ -169,17 +203,22 @@ public class BoardGenerator : MonoBehaviour
                 }
 
                 GameObject cellObject = Instantiate(cellPrefab, gridRoot);
-                float posX = (x - (mapWidth - 1) / 2f) * spacing;
-                float posZ = (z - (mapHeight - 1) / 2f) * spacing;
+                int worldX = originWorldX + x;
+                int worldZ = originWorldZ + z;
+                float posX = (worldX - (originWorldX + (mapWidth - 1) / 2f)) * spacing;
+                float posZ = (worldZ - (originWorldZ + (mapHeight - 1) / 2f)) * spacing;
                 int tileHeight = cellHeights != null ? cellHeights[x, z] : 0;
-                cellObject.transform.localPosition = new Vector3(posX, tileHeight * heightStep, posZ);
+                cellObject.transform.localPosition = new Vector3(posX, tileHeight * HeightStep, posZ);
                 cellObject.transform.localRotation = Quaternion.identity;
 
                 BoardCell cell = cellObject.GetComponent<BoardCell>();
                 if (cell == null) cell = cellObject.GetComponentInChildren<BoardCell>();
                 if (cell == null) cell = cellObject.AddComponent<BoardCell>();
                 string stageId = cellStageIds != null ? cellStageIds[x, z] : null;
-                cell.Initialize(x, z, stageId, tileHeight);
+                string terrainId = cellTerrainIds != null ? cellTerrainIds[x, z] : null;
+                cell.Initialize(worldX, worldZ, stageId, tileHeight, terrainId);
+                if (!string.IsNullOrEmpty(terrainId))
+                    cell.SetTerrainIdentity(terrainId, WorldTerrainCatalog.ColorOf(terrainId));
                 cells[x, z] = cell;
             }
         }
@@ -193,21 +232,8 @@ public class BoardGenerator : MonoBehaviour
             return null;
         }
 
-        int mapWidth = cells.GetLength(0);
-        int mapHeight = cells.GetLength(1);
-
-        if (x < 0 || x >= mapWidth || z < 0 || z >= mapHeight)
-        {
-            Debug.LogWarning($"位置 ({x}, {z}) 超出棋盘范围");
-            return null;
-        }
-
-        BoardCell cell = cells[x, z];
-        if (cell == null)
-        {
+        if (!TryGetCell(x, z, out BoardCell cell))
             Debug.LogWarning($"位置 ({x}, {z}) 不存在格子");
-        }
-
         return cell;
     }
 
@@ -215,16 +241,29 @@ public class BoardGenerator : MonoBehaviour
     public bool TryGetCell(int x, int z, out BoardCell cell)
     {
         cell = null;
-
-        if (cells == null ||
-            x < 0 || x >= cells.GetLength(0) ||
-            z < 0 || z >= cells.GetLength(1))
-        {
+        if (cells == null || !TryMapWorld(x, z, out int ix, out int iz))
             return false;
+        cell = cells[ix, iz];
+        return cell != null;
+    }
+
+    private bool TryMapWorld(int worldX, int worldZ, out int indexX, out int indexZ)
+    {
+        indexX = worldX - originWorldX;
+        indexZ = worldZ - originWorldZ;
+        if (cells != null)
+        {
+            return indexX >= 0 && indexZ >= 0 &&
+                   indexX < cells.GetLength(0) && indexZ < cells.GetLength(1);
         }
 
-        cell = cells[x, z];
-        return cell != null;
+        if (cellHeights != null)
+        {
+            return indexX >= 0 && indexZ >= 0 &&
+                   indexX < cellHeights.GetLength(0) && indexZ < cellHeights.GetLength(1);
+        }
+
+        return indexX >= 0 && indexZ >= 0 && indexX < width && indexZ < height;
     }
 
     public bool IsOccupied(int x, int z, Unit ignore = null)
@@ -308,8 +347,6 @@ public class BoardGenerator : MonoBehaviour
             return false;
         }
 
-        int mapWidth = cells.GetLength(0);
-        int mapHeight = cells.GetLength(1);
         if (IsFreeCell(preferred.x, preferred.y, ignore))
         {
             return true;
@@ -326,12 +363,8 @@ public class BoardGenerator : MonoBehaviour
             foreach (Vector2Int direction in FourDirections)
             {
                 Vector2Int next = current + direction;
-                if (next.x < 0 || next.x >= mapWidth ||
-                    next.y < 0 || next.y >= mapHeight ||
-                    !visited.Add(next))
-                {
+                if (!TryMapWorld(next.x, next.y, out _, out _) || !visited.Add(next))
                     continue;
-                }
 
                 if (IsFreeCell(next.x, next.y, ignore))
                 {
@@ -415,4 +448,26 @@ public class BoardGenerator : MonoBehaviour
 
         path.Reverse();
     }
+
+    private void SpawnDecorations()
+    {
+        for (int i = 0; i < decorations.Count; i++)
+            if (decorations[i] != null) Destroy(decorations[i]);
+        decorations.Clear();
+        if (worldSource == null) return;
+        for (int s = 0; s < worldSource.Stages.Count; s++)
+        {
+            StageDefinition stage = worldSource.Stages[s];
+            if (stage == null || !stage.Enabled || stage.Decorations == null) continue;
+            for (int d = 0; d < stage.Decorations.Count; d++)
+            {
+                WorldDecorationDefinition deco = stage.Decorations[d];
+                if (deco == null || string.IsNullOrWhiteSpace(deco.Definition)) continue;
+                Vector2Int world = WorldLayout.ToBoard(stage, deco.LocalX, deco.LocalY, worldSource);
+                if (!TryGetCell(world.x, world.y, out BoardCell cell)) continue;
+                decorations.Add(WorldDecorationCatalog.Spawn(deco, cell.transform));
+            }
+        }
+    }
+
 }

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "contentVersion": "engine",
   "cards": [],
   "cardPools": [],
@@ -8,7 +8,8 @@
   "rarities": [],
   "assets": [],
   "classProfiles": [],
-  "characters": [],
+  "units": [],
+  "aiProfiles": [],
   "equipment": [],
   "gameSettings": {
     "handLimit": 10,
@@ -16,7 +17,6 @@
     "drawPerTurn": 5,
     "baseActionPoints": 3,
     "baseMoveSteps": 2,
-    "playerCharacterId": "",
-    "enemyCharacterId": ""
+    "playerUnitId": ""
   }
 }

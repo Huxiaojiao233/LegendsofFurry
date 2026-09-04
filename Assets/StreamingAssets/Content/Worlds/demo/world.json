@@ -1,0 +1,27 @@
+{
+    "formatVersion": 1,
+    "id": "demo",
+    "displayName": "试炼原野",
+    "mode": "finite",
+    "chunkSize": [
+        10,
+        10
+    ],
+    "startChunk": [
+        0,
+        2
+    ],
+    "startTile": [
+        5,
+        5
+    ],
+    "boundsMin": [
+        0,
+        0
+    ],
+    "boundsMax": [
+        4,
+        4
+    ],
+    "startStageId": "start"
+}

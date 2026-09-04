@@ -1,0 +1,80 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5969972870073468928
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4703094967260488854}
+  - component: {fileID: 8822330367586648895}
+  m_Layer: 0
+  m_Name: FogSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4703094967260488854
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5969972870073468928}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8822330367586648895
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5969972870073468928}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8079037e49c26204f9908861315046f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ContinentalFog.FogSystem
+  mapSize: {x: 40, y: 40}
+  mapCenter: {x: 0, y: 0, z: 0}
+  boundsTarget: {fileID: 0}
+  autoFitBounds: 1
+  boundsPadding: 0
+  atmosphere: 1
+  fogColor: {r: 0.53, g: 0.64, b: 0.7, a: 1}
+  atmosphereMode: 1
+  atmosphereStart: 28
+  atmosphereEnd: 100
+  density: 0.012
+  wallLayers: 4
+  wallHeight: 12
+  wallBelowGround: 3
+  outwardTilt: 10
+  layerSpacing: 1.4
+  wallOpacity: 0.55
+  verticalFalloff: 1.3
+  nearSideOpacity: 0.12
+  innerWidth: 2
+  edgeWidth: 12
+  groundLayers: 3
+  groundLift: 0.12
+  groundLayerSpacing: 0.22
+  groundOpacity: 0.32
+  horizonVeil: 1
+  horizonExtent: 250
+  noiseScale: 0.18
+  speed: {x: 0.025, y: 0.01}
+  noiseStrength: 0.25
+  depthSoftness: 0.6
+  cameraFadeDistance: 0.5
+  softIntersections: 1
+  fogMaterial: {fileID: 2100000, guid: 9649ba11713b3af4db2798ab0cd612d3, type: 2}

@@ -17,17 +17,17 @@ public static class TokenVisualRuntime
     private static readonly Color FallbackFrame = new Color(0.35f, 0.35f, 0.38f, 1f);
 
     /// <summary>给 UI Image 用的头像 Sprite，走内容包 portrait key。</summary>
-    public static Sprite LoadPortraitSprite(CharacterDefinition definition)
+    public static Sprite LoadPortraitSprite(UnitDefinition definition)
     {
         if (definition == null) return null;
         string key = definition.PortraitKey;
-        if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(definition.CharacterId))
-            key = "portrait." + definition.CharacterId;
+        if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(definition.UnitId))
+            key = "portrait." + definition.UnitId;
         return RuntimeCardAdapter.LoadManagedSprite(key, "portrait");
     }
 
     /// <summary>按角色定义刷新棋子顶面贴图和侧面外框颜色。</summary>
-    public static void Apply(Component host, CharacterDefinition definition)
+    public static void Apply(Component host, UnitDefinition definition)
     {
         if (host == null) return;
         Texture2D portrait = LoadPortrait(definition);
@@ -35,19 +35,19 @@ public static class TokenVisualRuntime
         ApplyToMesh(host.gameObject, portrait, frameColor);
     }
 
-    private static Texture2D LoadPortrait(CharacterDefinition definition)
+    private static Texture2D LoadPortrait(UnitDefinition definition)
     {
         if (definition == null) return null;
         string key = definition.PortraitKey;
-        if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(definition.CharacterId))
+        if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(definition.UnitId))
         {
-            key = "portrait." + definition.CharacterId;
+            key = "portrait." + definition.UnitId;
         }
 
         Texture2D texture = LoadTexture(key, "portrait");
         if (texture == null && !string.IsNullOrWhiteSpace(key))
         {
-            Debug.LogWarning($"棋子贴图未加载 [{definition.CharacterId}]：{key}。");
+            Debug.LogWarning($"棋子贴图未加载 [{definition.UnitId}]：{key}。");
         }
 
         return texture;

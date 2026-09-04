@@ -72,6 +72,7 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
     {
         yield return null;
         ResolveReferences();
+        CombatCardZoneRegistry.Register(player, this);
         BuildStartingDeck();
         Shuffle(drawPile);
         bool exploring = WorldPlaySession.Instance != null && WorldPlaySession.Instance.IsExploring;
@@ -108,6 +109,11 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
         drawPile.AddRange(totalDeck);
         Shuffle(drawPile);
         UpdateDeckDisplay();
+    }
+
+    private void OnDestroy()
+    {
+        CombatCardZoneRegistry.Unregister(player, this);
     }
 
     /// <summary>奖励关把一张牌加入本局牌库。</summary>

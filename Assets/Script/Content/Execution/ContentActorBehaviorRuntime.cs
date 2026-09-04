@@ -6,11 +6,11 @@ namespace LegendsOfFurry.Content.Runtime
 /// <summary>通过同一套与归属无关的规则执行器，运行角色和装备行为图。</summary>
 public static class ContentActorBehaviorRuntime
 {
-    public static CardPlayResult Execute(Unit owner, string triggerKey, BoardClickController actionPoints)
+    public static CardPlayResult Execute(Unit owner, string triggerKey, IActionPointPool actionPoints)
     {
         CardPlayResult result = new CardPlayResult { Success = true };
         if (owner?.Definition != null)
-            ExecuteOwner(ContentBehaviorOwner.FromCharacter(owner.Definition, owner), owner.Definition.Behaviors,
+            ExecuteOwner(ContentBehaviorOwner.FromUnit(owner.Definition, owner), owner.Definition.Behaviors,
                 triggerKey, owner, actionPoints, result);
         RuntimeEquipmentLoadout loadout = owner != null ? owner.GetComponent<RuntimeEquipmentLoadout>() : null;
         if (loadout != null)
@@ -25,7 +25,7 @@ public static class ContentActorBehaviorRuntime
         System.Collections.Generic.IReadOnlyCollection<BehaviorDefinition> behaviors,
         string triggerKey,
         Unit unit,
-        BoardClickController actionPoints,
+        IActionPointPool actionPoints,
         CardPlayResult result)
     {
         if (!behaviors.Any(item => item.Enabled && item.TriggerKey == triggerKey)) return;

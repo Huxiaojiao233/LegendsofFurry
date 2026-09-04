@@ -28,7 +28,8 @@ public static class ContentPackageComposer
             Merge(result.Rarities, pack.Content.Rarities, ContentDefinitionKinds.Rarity, overrides);
             Merge(result.Assets, pack.Content.Assets, ContentDefinitionKinds.Asset, overrides);
             Merge(result.ClassProfiles, pack.Content.ClassProfiles, ContentDefinitionKinds.Class, overrides);
-            MergeCharacters(result.Characters, pack.Content.Characters, overrides);
+            MergeUnits(result.Units, pack.Content.Units, overrides);
+            Merge(result.AiProfiles, pack.Content.AiProfiles, ContentDefinitionKinds.AiProfile, overrides);
             Merge(result.Equipment, pack.Content.Equipment, ContentDefinitionKinds.Equipment, overrides);
             if (pack.Content.GameSettings != null && pack.Content.GameSettings.HandLimit > 0)
                 result.GameSettings = OverlayGameSettings(result.GameSettings, pack.Content.GameSettings);
@@ -114,15 +115,15 @@ public static class ContentPackageComposer
         }
     }
 
-    /// <summary>覆盖角色时保留未填写的棋子贴图和外框色，避免后加载包把外观字段抹成空。</summary>
-    private static void MergeCharacters(
-        IList<CharacterDefinition> target,
-        IEnumerable<CharacterDefinition> incoming,
+    /// <summary>覆盖单位时保留未填写的棋子贴图和外框色，避免后加载包把外观字段抹成空。</summary>
+    private static void MergeUnits(
+        IList<UnitDefinition> target,
+        IEnumerable<UnitDefinition> incoming,
         ISet<string> overrides)
     {
         Dictionary<string, int> indexes = target.Select((item, index) => (item, index))
             .ToDictionary(pair => pair.item.GetDefinitionId(), pair => pair.index, StringComparer.Ordinal);
-        foreach (CharacterDefinition definition in incoming ?? Array.Empty<CharacterDefinition>())
+        foreach (UnitDefinition definition in incoming ?? Array.Empty<UnitDefinition>())
         {
             string id = ContentId.Require(definition.GetDefinitionId(), nameof(incoming));
             if (!indexes.TryGetValue(id, out int index))
@@ -131,13 +132,13 @@ public static class ContentPackageComposer
                 target.Add(definition);
                 continue;
             }
-            if (!overrides.Contains(ContentDefinitionKinds.Character + ":" + id))
-                throw new InvalidDataException($"扩展包发生未声明的内容冲突：character:{id}。");
-            target[index] = OverlayCharacter(target[index], definition);
+            if (!overrides.Contains(ContentDefinitionKinds.Unit + ":" + id))
+                throw new InvalidDataException($"扩展包发生未声明的内容冲突：unit:{id}。");
+            target[index] = OverlayUnit(target[index], definition);
         }
     }
 
-    private static CharacterDefinition OverlayCharacter(CharacterDefinition current, CharacterDefinition incoming)
+    private static UnitDefinition OverlayUnit(UnitDefinition current, UnitDefinition incoming)
     {
         if (current == null) return incoming;
         if (incoming == null) return current;
@@ -159,7 +160,8 @@ public static class ContentPackageComposer
         Rarities = new List<RarityDefinition>(source.Rarities),
         Assets = new List<AssetDefinition>(source.Assets),
         ClassProfiles = new List<ClassProfileDefinition>(source.ClassProfiles),
-        Characters = new List<CharacterDefinition>(source.Characters),
+        Units = new List<UnitDefinition>(source.Units),
+        AiProfiles = new List<AiProfileDefinition>(source.AiProfiles),
         Equipment = new List<EquipmentDefinition>(source.Equipment),
         GameSettings = source.GameSettings
     };
@@ -176,8 +178,7 @@ public static class ContentPackageComposer
             DrawPerTurn = incoming.DrawPerTurn > 0 ? incoming.DrawPerTurn : current.DrawPerTurn,
             BaseActionPoints = incoming.BaseActionPoints > 0 ? incoming.BaseActionPoints : current.BaseActionPoints,
             BaseMoveSteps = incoming.BaseMoveSteps > 0 ? incoming.BaseMoveSteps : current.BaseMoveSteps,
-            PlayerCharacterId = FirstNonEmpty(incoming.PlayerCharacterId, current.PlayerCharacterId),
-            EnemyCharacterId = FirstNonEmpty(incoming.EnemyCharacterId, current.EnemyCharacterId),
+            PlayerUnitId = FirstNonEmpty(incoming.PlayerUnitId, current.PlayerUnitId),
             DefaultWorldId = FirstNonEmpty(incoming.DefaultWorldId, current.DefaultWorldId)
         };
     }

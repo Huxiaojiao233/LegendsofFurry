@@ -23,7 +23,9 @@ internal sealed class ContentPackageDto
     public RarityDefinitionDto[] rarities;
     public AssetDefinitionDto[] assets;
     public ClassProfileDefinitionDto[] classProfiles;
-    public CharacterDefinitionDto[] characters;
+    public UnitDefinitionDto[] units;
+    public UnitDefinitionDto[] characters;
+    public AiProfileDefinitionDto[] aiProfiles;
     public EquipmentDefinitionDto[] equipment;
     public GameSettingsDefinitionDto gameSettings;
 
@@ -45,7 +47,8 @@ internal sealed class ContentPackageDto
         ConvertItems(rarities, package.Rarities, item => item.ToContract());
         ConvertItems(assets, package.Assets, item => item.ToContract());
         ConvertItems(classProfiles, package.ClassProfiles, item => item.ToContract());
-        ConvertItems(characters, package.Characters, item => item.ToContract());
+        ConvertItems(units ?? characters, package.Units, item => item.ToContract());
+        ConvertItems(aiProfiles, package.AiProfiles, item => item.ToContract());
         ConvertItems(equipment, package.Equipment, item => item.ToContract());
         package.GameSettings = gameSettings == null ? new GameSettingsDefinition() : gameSettings.ToContract();
         return package;
@@ -93,6 +96,7 @@ internal sealed class CardDefinitionDto
     public bool unplayable;
     public bool enabled;
     public int sortOrder;
+    public float aiBaseScore;
     public CardCostDefinitionDto cost;
     public CardTargetRuleDto target;
     public string[] tags;
@@ -120,6 +124,7 @@ internal sealed class CardDefinitionDto
             Unplayable = unplayable,
             Enabled = enabled,
             SortOrder = sortOrder,
+            AiBaseScore = aiBaseScore,
             Cost = cost == null ? new CardCostDefinition() : cost.ToContract(),
             Target = target == null ? new CardTargetRule() : target.ToContract()
         };
@@ -506,6 +511,7 @@ internal sealed class GameSettingsDefinitionDto
     public int baseMoveSteps;
     public string playerCharacterId;
     public string enemyCharacterId;
+    public string playerUnitId;
     public string defaultWorldId;
 
     /// <summary>将基础战斗参数映射到共享合同。</summary>
@@ -513,16 +519,16 @@ internal sealed class GameSettingsDefinitionDto
     {
         HandLimit = handLimit, StartingHandSize = startingHandSize, DrawPerTurn = drawPerTurn,
         BaseActionPoints = baseActionPoints, BaseMoveSteps = baseMoveSteps,
-        PlayerCharacterId = playerCharacterId ?? string.Empty,
-        EnemyCharacterId = enemyCharacterId ?? string.Empty,
+        PlayerUnitId = string.IsNullOrWhiteSpace(playerUnitId) ? playerCharacterId ?? string.Empty : playerUnitId,
         DefaultWorldId = string.IsNullOrWhiteSpace(defaultWorldId) ? "demo" : defaultWorldId
     };
 }
 
 /// <summary>发布 JSON 中的数据驱动战斗单位。</summary>
 [Serializable]
-internal sealed class CharacterDefinitionDto
+internal sealed class UnitDefinitionDto
 {
+    public string unitId;
     public string characterId;
     public string displayName;
     public string description;
@@ -531,26 +537,115 @@ internal sealed class CharacterDefinitionDto
     public int moveSteps;
     public string tokenFrameColor;
     public string portraitKey;
+    public string unitKind;
+    public string defaultFaction;
+    public string controller;
+    public bool isBoss;
+    public bool recruitable;
+    public bool canJoinParty;
+    public int initialActionPoints;
+    public int startingHandSize;
+    public int drawPerTurn;
+    public string deckId;
+    public string aiProfileId;
+    public UnitAiTuningDefinitionDto aiOverrides;
+    public BossPhaseDefinitionDto[] bossPhases;
+    public string[] capabilities;
     public bool enabled;
     public int sortOrder;
     public string[] tags;
     public BehaviorDefinitionDto[] behaviors;
 
-    public CharacterDefinition ToContract()
+    public UnitDefinition ToContract()
     {
-        CharacterDefinition definition = new CharacterDefinition
+        UnitDefinition definition = new UnitDefinition
         {
-            CharacterId = characterId ?? string.Empty, DisplayName = displayName ?? string.Empty,
+            UnitId = string.IsNullOrWhiteSpace(unitId) ? characterId ?? string.Empty : unitId,
+            DisplayName = displayName ?? string.Empty,
             Description = description ?? string.Empty, InitialHealth = initialHealth,
             BaseDamage = baseDamage, MoveSteps = moveSteps,
+            UnitKind = string.IsNullOrWhiteSpace(unitKind) ? "character" : unitKind,
+            DefaultFaction = string.IsNullOrWhiteSpace(defaultFaction) ? "neutral" : defaultFaction,
+            Controller = string.IsNullOrWhiteSpace(controller) ? "player" : controller,
+            IsBoss = isBoss, Recruitable = recruitable, CanJoinParty = canJoinParty,
+            InitialActionPoints = initialActionPoints > 0 ? initialActionPoints : 3,
+            StartingHandSize = startingHandSize > 0 ? startingHandSize : 5,
+            DrawPerTurn = drawPerTurn > 0 ? drawPerTurn : 5,
+            DeckId = deckId ?? string.Empty, AiProfileId = aiProfileId ?? string.Empty,
+            AiOverrides = aiOverrides == null ? new UnitAiTuningDefinition() : aiOverrides.ToContract(),
             TokenFrameColor = tokenFrameColor ?? string.Empty, PortraitKey = portraitKey ?? string.Empty,
             Enabled = enabled, SortOrder = sortOrder
         };
         if (tags != null) definition.Tags.AddRange(tags);
+        if (capabilities != null) definition.Capabilities.AddRange(capabilities);
+        if (bossPhases != null) foreach (BossPhaseDefinitionDto phase in bossPhases)
+            if (phase != null) definition.BossPhases.Add(phase.ToContract());
         if (behaviors != null) foreach (BehaviorDefinitionDto behavior in behaviors)
             if (behavior != null) definition.Behaviors.Add(behavior.ToContract());
         return definition;
     }
+}
+
+[Serializable]
+internal sealed class UnitAiTuningDefinitionDto
+{
+    public float attackWeight = float.NaN;
+    public float defenseWeight = float.NaN;
+    public float healingWeight = float.NaN;
+    public float approachWeight = float.NaN;
+    public float retreatWeight = float.NaN;
+    public float killWeight = float.NaN;
+    public float preferredRange = float.NaN;
+    public float lowHealthThreshold = float.NaN;
+
+    public UnitAiTuningDefinition ToContract() => new UnitAiTuningDefinition
+    {
+        AttackWeight = attackWeight, DefenseWeight = defenseWeight, HealingWeight = healingWeight,
+        ApproachWeight = approachWeight, RetreatWeight = retreatWeight, KillWeight = killWeight,
+        PreferredRange = preferredRange, LowHealthThreshold = lowHealthThreshold
+    };
+}
+
+[Serializable]
+internal sealed class BossPhaseDefinitionDto
+{
+    public float maximumHealthRatio = 1f;
+    public string aiProfileId;
+    public UnitAiTuningDefinitionDto aiOverrides;
+
+    public BossPhaseDefinition ToContract() => new BossPhaseDefinition
+    {
+        MaximumHealthRatio = maximumHealthRatio,
+        AiProfileId = aiProfileId ?? string.Empty,
+        AiOverrides = aiOverrides == null ? new UnitAiTuningDefinition() : aiOverrides.ToContract()
+    };
+}
+
+[Serializable]
+internal sealed class AiProfileDefinitionDto
+{
+    public string aiProfileId;
+    public string displayName;
+    public string description;
+    public float attackWeight;
+    public float defenseWeight;
+    public float healingWeight;
+    public float approachWeight;
+    public float retreatWeight;
+    public float killWeight;
+    public float preferredRange;
+    public float lowHealthThreshold;
+    public bool enabled;
+    public int sortOrder;
+
+    public AiProfileDefinition ToContract() => new AiProfileDefinition
+    {
+        AiProfileId = aiProfileId ?? string.Empty, DisplayName = displayName ?? string.Empty,
+        Description = description ?? string.Empty, AttackWeight = attackWeight,
+        DefenseWeight = defenseWeight, HealingWeight = healingWeight, ApproachWeight = approachWeight,
+        RetreatWeight = retreatWeight, KillWeight = killWeight, PreferredRange = preferredRange,
+        LowHealthThreshold = lowHealthThreshold, Enabled = enabled, SortOrder = sortOrder
+    };
 }
 
 /// <summary>发布 JSON 中的一件可装备内容。</summary>
@@ -602,6 +697,9 @@ internal sealed class ContentManifestDto
     public int cardCount;
     public int statusCount;
     public int deckCount;
+    public int unitCount;
+    public int aiProfileCount;
+    // schema 2 兼容字段。
     public int characterCount;
     public int equipmentCount;
 }

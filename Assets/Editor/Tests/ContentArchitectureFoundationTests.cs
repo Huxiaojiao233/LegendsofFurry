@@ -155,20 +155,20 @@ public sealed class ContentArchitectureFoundationTests
     public void ContentPackComposerRequiresExplicitOverride()
     {
         ContentPackage basePackage = new ContentPackage();
-        basePackage.Characters.Add(new CharacterDefinition { CharacterId = "hero", DisplayName = "Base" });
+        basePackage.Units.Add(new UnitDefinition { UnitId = "hero", DisplayName = "Base" });
         ContentPackDefinition pack = new ContentPackDefinition { PackId = "expansion" };
-        pack.Content.Characters.Add(new CharacterDefinition { CharacterId = "hero", DisplayName = "Expansion" });
+        pack.Content.Units.Add(new UnitDefinition { UnitId = "hero", DisplayName = "Expansion" });
 
         Assert.Throws<InvalidDataException>(() => ContentPackageComposer.Compose(basePackage, new[] { pack }));
 
         pack.Overrides.Add(new ContentOverrideDefinition
         {
-            DefinitionKind = ContentDefinitionKinds.Character,
+            DefinitionKind = ContentDefinitionKinds.Unit,
             DefinitionId = "hero"
         });
         ContentPackage composed = ContentPackageComposer.Compose(basePackage, new[] { pack });
-        Assert.That(composed.Characters[0].DisplayName, Is.EqualTo("Expansion"));
-        Assert.That(basePackage.Characters[0].DisplayName, Is.EqualTo("Base"));
+        Assert.That(composed.Units[0].DisplayName, Is.EqualTo("Expansion"));
+        Assert.That(basePackage.Units[0].DisplayName, Is.EqualTo("Base"));
     }
 
     /// <summary>Ensures dependencies take precedence over numeric load order and cycles are rejected.</summary>
@@ -176,18 +176,18 @@ public sealed class ContentArchitectureFoundationTests
     public void ContentPackComposerUsesDependencyTopologyBeforeLoadOrder()
     {
         ContentPackDefinition dependency = new ContentPackDefinition { PackId = "dependency", LoadOrder = 500 };
-        dependency.Content.Characters.Add(new CharacterDefinition { CharacterId = "hero", DisplayName = "Dependency" });
+        dependency.Content.Units.Add(new UnitDefinition { UnitId = "hero", DisplayName = "Dependency" });
         ContentPackDefinition consumer = new ContentPackDefinition { PackId = "consumer", LoadOrder = 1 };
         consumer.Dependencies.Add(dependency.PackId);
         consumer.Overrides.Add(new ContentOverrideDefinition
         {
-            DefinitionKind = ContentDefinitionKinds.Character, DefinitionId = "hero"
+            DefinitionKind = ContentDefinitionKinds.Unit, DefinitionId = "hero"
         });
-        consumer.Content.Characters.Add(new CharacterDefinition { CharacterId = "hero", DisplayName = "Consumer" });
+        consumer.Content.Units.Add(new UnitDefinition { UnitId = "hero", DisplayName = "Consumer" });
 
         ContentPackage composed = ContentPackageComposer.Compose(new ContentPackage(), new[] { consumer, dependency });
 
-        Assert.That(composed.Characters.Single().DisplayName, Is.EqualTo("Consumer"));
+        Assert.That(composed.Units.Single().DisplayName, Is.EqualTo("Consumer"));
         dependency.Dependencies.Add(consumer.PackId);
         Assert.Throws<InvalidDataException>(() =>
             ContentPackageComposer.Compose(new ContentPackage(), new[] { consumer, dependency }));
@@ -200,9 +200,9 @@ public sealed class ContentArchitectureFoundationTests
         GameObject host = GameObject.CreatePrimitive(PrimitiveType.Cube);
         try
         {
-            CharacterDefinition definition = new CharacterDefinition
+            UnitDefinition definition = new UnitDefinition
             {
-                CharacterId = "token_visual_host",
+                UnitId = "token_visual_host",
                 DisplayName = "Token",
                 TokenFrameColor = "#C15254",
                 PortraitKey = string.Empty
@@ -229,46 +229,43 @@ public sealed class ContentArchitectureFoundationTests
     {
         ContentPackage basePackage = new ContentPackage
         {
-            GameSettings = new GameSettingsDefinition { HandLimit = 10, PlayerCharacterId = "" }
+            GameSettings = new GameSettingsDefinition { HandLimit = 10, PlayerUnitId = "" }
         };
         ContentPackDefinition pack = new ContentPackDefinition { PackId = "core" };
         pack.Content.GameSettings = new GameSettingsDefinition
         {
             HandLimit = 12,
-            PlayerCharacterId = "hero"
+            PlayerUnitId = "hero"
         };
-        pack.Content.Characters.Add(new CharacterDefinition { CharacterId = "hero", DisplayName = "Hero", Enabled = true });
+        pack.Content.Units.Add(new UnitDefinition { UnitId = "hero", DisplayName = "Hero", Enabled = true });
 
         ContentPackage composed = ContentPackageComposer.Compose(basePackage, new[] { pack });
         Assert.That(composed.GameSettings.HandLimit, Is.EqualTo(12));
-        Assert.That(composed.GameSettings.PlayerCharacterId, Is.EqualTo("hero"));
+        Assert.That(composed.GameSettings.PlayerUnitId, Is.EqualTo("hero"));
     }
 
     /// <summary>A later pack with blank character IDs must keep earlier authored encounter characters.</summary>
     [Test]
-    public void ContentPackComposerKeepsCharacterIdsWhenLaterPackOmitsThem()
+    public void ContentPackComposerKeepsPlayerUnitIdWhenLaterPackOmitsIt()
     {
         ContentPackage basePackage = new ContentPackage();
         ContentPackDefinition core = new ContentPackDefinition { PackId = "core", LoadOrder = 0 };
         core.Content.GameSettings = new GameSettingsDefinition
         {
             HandLimit = 10,
-            PlayerCharacterId = "hongye",
-            EnemyCharacterId = "taigao"
+            PlayerUnitId = "hongye"
         };
-        core.Content.Characters.Add(new CharacterDefinition { CharacterId = "hongye", Enabled = true });
-        core.Content.Characters.Add(new CharacterDefinition { CharacterId = "taigao", Enabled = true });
+        core.Content.Units.Add(new UnitDefinition { UnitId = "hongye", Enabled = true });
+        core.Content.Units.Add(new UnitDefinition { UnitId = "taigao", Enabled = true });
         ContentPackDefinition overlay = new ContentPackDefinition { PackId = "planner_pack", LoadOrder = 1000 };
         overlay.Content.GameSettings = new GameSettingsDefinition
         {
             HandLimit = 10,
-            PlayerCharacterId = "",
-            EnemyCharacterId = ""
+            PlayerUnitId = ""
         };
 
         ContentPackage composed = ContentPackageComposer.Compose(basePackage, new[] { core, overlay });
-        Assert.That(composed.GameSettings.PlayerCharacterId, Is.EqualTo("hongye"));
-        Assert.That(composed.GameSettings.EnemyCharacterId, Is.EqualTo("taigao"));
+        Assert.That(composed.GameSettings.PlayerUnitId, Is.EqualTo("hongye"));
     }
 
     /// <summary>Later character overrides without portrait keys keep earlier token art fields.</summary>
@@ -277,9 +274,9 @@ public sealed class ContentArchitectureFoundationTests
     {
         ContentPackage basePackage = new ContentPackage();
         ContentPackDefinition core = new ContentPackDefinition { PackId = "core", LoadOrder = 0 };
-        core.Content.Characters.Add(new CharacterDefinition
+        core.Content.Units.Add(new UnitDefinition
         {
-            CharacterId = "hongye",
+            UnitId = "hongye",
             DisplayName = "鸿叶",
             PortraitKey = "portrait.hongye",
             TokenFrameColor = "#9AB041",
@@ -288,21 +285,21 @@ public sealed class ContentArchitectureFoundationTests
         ContentPackDefinition overlay = new ContentPackDefinition { PackId = "planner_pack", LoadOrder = 1000 };
         overlay.Overrides.Add(new ContentOverrideDefinition
         {
-            DefinitionKind = ContentDefinitionKinds.Character,
+            DefinitionKind = ContentDefinitionKinds.Unit,
             DefinitionId = "hongye"
         });
-        overlay.Content.Characters.Add(new CharacterDefinition
+        overlay.Content.Units.Add(new UnitDefinition
         {
-            CharacterId = "hongye",
+            UnitId = "hongye",
             DisplayName = "鸿叶",
             InitialHealth = 30,
             Enabled = true
         });
 
         ContentPackage composed = ContentPackageComposer.Compose(basePackage, new[] { core, overlay });
-        Assert.That(composed.Characters[0].PortraitKey, Is.EqualTo("portrait.hongye"));
-        Assert.That(composed.Characters[0].TokenFrameColor, Is.EqualTo("#9AB041"));
-        Assert.That(composed.Characters[0].InitialHealth, Is.EqualTo(30));
+        Assert.That(composed.Units[0].PortraitKey, Is.EqualTo("portrait.hongye"));
+        Assert.That(composed.Units[0].TokenFrameColor, Is.EqualTo("#9AB041"));
+        Assert.That(composed.Units[0].InitialHealth, Is.EqualTo(30));
     }
     [Test]
     public void GameDirectoryPacksRootIsBesideProjectOrPlayer()
@@ -336,7 +333,7 @@ public sealed class ContentArchitectureFoundationTests
             ContentLoadResult result = ContentPackLoader.Load(baseRoot, new[] { packRoot });
 
             Assert.That(result.LoadedPacks.Single().Definition.PackId, Is.EqualTo("sample_pack"));
-            Assert.That(result.Package.Characters.Any(item => item.CharacterId == "external_hero"), Is.True);
+            Assert.That(result.Package.Units.Any(item => item.UnitId == "external_hero"), Is.True);
             Assert.That(result.TryGetExternalAssetPath("external.art", out string resolved), Is.True);
             Assert.That(resolved, Is.EqualTo(Path.GetFullPath(assetPath)));
         }
@@ -374,7 +371,7 @@ public sealed class ContentArchitectureFoundationTests
             ContentLoadResult result = ContentPackLoader.Load(baseRoot, new[] { packRoot });
 
             Assert.That(result.LoadedPacks.Single().Definition.PackId, Is.EqualTo("zip_pack"));
-            Assert.That(result.Package.Characters.Any(item => item.CharacterId == "zip_hero"), Is.True);
+            Assert.That(result.Package.Units.Any(item => item.UnitId == "zip_hero"), Is.True);
             Assert.That(result.TryGetExternalAssetPath("zip.art", out string resolved), Is.True);
             Assert.That(File.Exists(resolved), Is.True);
         }

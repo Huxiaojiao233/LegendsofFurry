@@ -69,7 +69,7 @@ public sealed class ContentBehaviorOwner
     }
 
     /// <summary>为角色定义及其场景单位实例创建归属描述。</summary>
-    public static ContentBehaviorOwner FromCharacter(CharacterDefinition definition, Unit instance) =>
+    public static ContentBehaviorOwner FromUnit(UnitDefinition definition, Unit instance) =>
         new ContentBehaviorOwner(definition, definition?.DisplayName, instance);
 
     /// <summary>为已装备物品实例创建归属描述。</summary>

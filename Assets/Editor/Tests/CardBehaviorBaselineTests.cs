@@ -20,7 +20,7 @@ public sealed class CardBehaviorBaselineTests
     public void CurrentPublishedContentPassesBuildGate()
     {
         ContentPackage package = ContentBuildValidator.ValidatePublishedContent();
-        Assert.That(package.Cards, Has.Count.EqualTo(69));
+        Assert.That(package.Cards, Has.Count.EqualTo(79));
         Assert.That(package.ClassProfiles, Has.Count.EqualTo(5));
     }
 
@@ -90,9 +90,19 @@ public sealed class CardBehaviorBaselineTests
         Assert.That(package.SchemaVersion, Is.EqualTo(ContentPackageLoader.SupportedSchemaVersion));
         Assert.That(package.ContentVersion, Is.Not.Empty);
         Assert.That(registry.GetCard("hit_01").DisplayName, Is.EqualTo("爪击"));
-        Assert.That(registry.Cards, Has.Count.EqualTo(69));
+        Assert.That(registry.Cards, Has.Count.EqualTo(79));
         Assert.That(registry.GetDeck("planner_test").IsTestDeck, Is.True);
-        Assert.That(registry.Statuses, Has.Count.EqualTo(20));
+        Assert.That(registry.Statuses, Has.Count.EqualTo(24));
+        Assert.That(registry.AiProfiles.Select(item => item.AiProfileId), Is.EquivalentTo(
+            new[] { "general", "aggressive", "cautious", "kiting", "desperate" }));
+        UnitDefinition slime = registry.GetUnit("slime");
+        Assert.That(slime.UnitKind, Is.EqualTo("monster"));
+        Assert.That(slime.InitialHealth, Is.EqualTo(20));
+        Assert.That(slime.DeckId, Is.EqualTo("slime_standard"));
+        Assert.That(slime.Capabilities, Does.Contain("wading"));
+        UnitDefinition taigao = registry.GetUnit("taigao");
+        Assert.That(taigao.IsBoss && taigao.Recruitable && taigao.CanJoinParty, Is.True);
+        Assert.That(registry.Statuses.Single(item => item.StatusId == "wet").DisplayName, Is.EqualTo("潮湿"));
         Assert.That(registry.ClassProfiles, Has.Count.EqualTo(5));
         Assert.That(registry.GameSettings.HandLimit, Is.EqualTo(10));
         Assert.That(registry.ClassProfiles.Single(item => item.ClassId == "ranger").Behaviors
@@ -141,7 +151,7 @@ public sealed class CardBehaviorBaselineTests
         ContentPackage package = ContentRuntime.LoadComposedSnapshot().Package;
 
         Assert.DoesNotThrow(() => ContentRuntimeCapabilityValidator.ValidateOrThrow(package));
-        Assert.That(package.Cards, Has.Count.EqualTo(69));
+        Assert.That(package.Cards, Has.Count.EqualTo(79));
         foreach (CardDefinition card in package.Cards.Where(card => card.Enabled && !card.Unplayable))
         {
             Assert.That(ContentCardEffectExecutor.CanExecuteOnPlay(card), Is.True,

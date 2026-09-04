@@ -4,7 +4,7 @@ using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
 
 /// <summary>
-/// 本场战斗的己方与敌人编制。场景里不放棋子，由该对象在运行时生成。
+/// 本场战斗的己方与敌人编制。敌人只从关卡的显式单位部署记录加载。
 /// </summary>
 [DefaultExecutionOrder(-50)]
 public sealed class BattleRoster : MonoBehaviour
@@ -30,7 +30,7 @@ public sealed class BattleRoster : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    /// <summary>按内容包与可选场景编制生成棋子并放到棋盘上。</summary>
+    /// <summary>无大地图的调试场景只生成己方；敌对单位必须由世界关卡部署。</summary>
     public void SpawnEncounter()
     {
         if (!ContentRuntime.IsLoaded)
@@ -47,17 +47,14 @@ public sealed class BattleRoster : MonoBehaviour
         }
 
         ClearScenePlaceholders();
-        BattleEncounterConfig config = FindAnyObjectByType<BattleEncounterConfig>();
         GameSettingsDefinition settings = ContentRuntime.Registry.GameSettings;
-        string[] runEnemies = ResolveRunEnemyIds();
-        SpawnSide(true, ResolveIds(true, config != null ? config.AllyCharacterIds : null, settings.PlayerCharacterId, MaximumAllies),
+        BattleEncounterConfig config = FindAnyObjectByType<BattleEncounterConfig>();
+        SpawnSide(true, ResolveIds(config != null ? config.AllyUnitIds : null, settings.PlayerUnitId, MaximumAllies),
             config != null ? config.AllySpawnCells : null, new Vector2Int(3, 2), board);
-        SpawnSide(false, ResolveIds(false, runEnemies ?? (config != null ? config.EnemyCharacterIds : null), settings.EnemyCharacterId, 8),
-            config != null ? config.EnemySpawnCells : null, new Vector2Int(5, 6), board);
     }
 
-    /// <summary>大地图冒险：己方放在当前关卡中心，仅在需要开战时刷敌人。</summary>
-    public void SpawnRunParty(Vector2Int allyCell, bool spawnEnemies, Vector2Int enemyCell)
+    /// <summary>大地图冒险：己方放在当前关卡中心，敌人按当前关卡部署坐标加载。</summary>
+    public void SpawnRunParty(Vector2Int allyCell, bool spawnEnemies)
     {
         if (!ContentRuntime.IsLoaded)
         {
@@ -74,22 +71,25 @@ public sealed class BattleRoster : MonoBehaviour
 
         ClearScenePlaceholders();
         GameSettingsDefinition settings = ContentRuntime.Registry.GameSettings;
-        SpawnSide(true, ResolveIds(true, null, settings.PlayerCharacterId, MaximumAllies),
+        SpawnSide(true, ResolveIds(null, settings.PlayerUnitId, MaximumAllies),
             null, allyCell, board);
         if (spawnEnemies)
-            SpawnEnemiesAt(enemyCell);
+            SpawnDeployedEnemies(ResolveCurrentStage());
     }
 
-    /// <summary>走进战斗关后在当前 10x10 里生成敌人。</summary>
-    public void SpawnEnemiesAt(Vector2Int enemyCell)
+    /// <summary>按世界编辑器保存的实例坐标加载当前关卡全部敌对单位。</summary>
+    public void SpawnDeployedEnemies(StageDefinition stage)
     {
         BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
-        if (board == null || !ContentRuntime.IsLoaded) return;
+        if (board == null || !ContentRuntime.IsLoaded || stage == null) return;
         ClearEnemies();
-        GameSettingsDefinition settings = ContentRuntime.Registry.GameSettings;
-        string[] runEnemies = ResolveRunEnemyIds();
-        SpawnSide(false, ResolveIds(false, runEnemies, settings.EnemyCharacterId, 8),
-            null, enemyCell, board);
+        WorldDefinition world = ResolveCurrentWorld();
+        if (world == null) return;
+        foreach (WorldUnitPlacementDefinition placement in stage.UnitPlacements)
+        {
+            if (placement == null || !placement.Enabled) continue;
+            SpawnPlacement(placement, stage, world, board);
+        }
     }
 
     /// <summary>战斗结束后清掉敌人棋子，玩家留在原格。</summary>
@@ -145,9 +145,9 @@ public sealed class BattleRoster : MonoBehaviour
         UnitFaction faction = ally ? UnitFaction.Player : UnitFaction.Enemy;
         for (int i = 0; i < ids.Count; i++)
         {
-            if (!ContentRuntime.Registry.TryGetCharacter(ids[i], out CharacterDefinition definition))
+            if (!ContentRuntime.Registry.TryGetUnit(ids[i], out UnitDefinition definition))
             {
-                Debug.LogWarning($"内容包没有角色 {ids[i]}，跳过生成。", this);
+                Debug.LogWarning($"内容包没有单位 {ids[i]}，跳过加载。", this);
                 continue;
             }
 
@@ -171,7 +171,35 @@ public sealed class BattleRoster : MonoBehaviour
         }
     }
 
-    private static List<string> ResolveIds(bool ally, string[] authored, string fallbackId, int cap)
+    private void SpawnPlacement(WorldUnitPlacementDefinition placement, StageDefinition stage,
+        WorldDefinition world, BoardGenerator board)
+    {
+        if (!ContentRuntime.Registry.TryGetUnit(placement.UnitId, out UnitDefinition definition))
+        {
+            Debug.LogWarning($"关卡 {stage.StageId} 部署了不存在的单位 {placement.UnitId}。", this);
+            return;
+        }
+        string factionKey = string.IsNullOrWhiteSpace(placement.FactionOverride)
+            ? definition.DefaultFaction : placement.FactionOverride;
+        if (factionKey != "enemy") return;
+        Unit unit = CombatantTokenFactory.Spawn(definition, UnitFaction.Enemy,
+            string.IsNullOrWhiteSpace(placement.InstanceId) ? definition.UnitId : placement.InstanceId);
+        unit.SetBoard(board);
+        Vector2Int preferred = WorldLayout.ToBoard(stage, placement.LocalX, placement.LocalY, world);
+        if (!board.TryFindNearestFreeCell(preferred, unit, out Vector2Int cell))
+        {
+            Debug.LogWarning($"部署实例 {placement.InstanceId} 找不到可放置格子。", unit);
+            Destroy(unit.gameObject);
+            return;
+        }
+        unit.MoveTo(cell.x, cell.y);
+        enemies.Add(unit);
+        if ((string.IsNullOrWhiteSpace(placement.ControllerOverride) ? definition.Controller : placement.ControllerOverride) == "ai")
+            (unit.GetComponent<UtilityAiController>() ?? unit.gameObject.AddComponent<UtilityAiController>())
+                .Configure(string.IsNullOrWhiteSpace(placement.DeckIdOverride) ? definition.DeckId : placement.DeckIdOverride);
+    }
+
+    private static List<string> ResolveIds(string[] authored, string fallbackId, int cap)
     {
         List<string> ids = new List<string>();
         if (authored != null)
@@ -185,29 +213,33 @@ public sealed class BattleRoster : MonoBehaviour
         if (ids.Count == 0 && !string.IsNullOrWhiteSpace(fallbackId)) ids.Add(fallbackId.Trim());
         if (ids.Count == 0)
         {
-            List<CharacterDefinition> ordered = new List<CharacterDefinition>(ContentRuntime.Registry.Characters);
+            List<UnitDefinition> ordered = new List<UnitDefinition>(ContentRuntime.Registry.Units);
+            ordered.RemoveAll(item => !item.CanJoinParty && item.DefaultFaction != "player");
             ordered.Sort((left, right) =>
             {
                 int byOrder = left.SortOrder.CompareTo(right.SortOrder);
-                return byOrder != 0 ? byOrder : string.CompareOrdinal(left.CharacterId, right.CharacterId);
+                return byOrder != 0 ? byOrder : string.CompareOrdinal(left.UnitId, right.UnitId);
             });
-            if (ally && ordered.Count > 0) ids.Add(ordered[0].CharacterId);
-            else if (!ally && ordered.Count > 1) ids.Add(ordered[1].CharacterId);
-            else if (!ally && ordered.Count == 1) ids.Add(ordered[0].CharacterId);
+            if (ordered.Count > 0) ids.Add(ordered[0].UnitId);
         }
 
         return ids;
     }
 
-    private static string[] ResolveRunEnemyIds()
+    private static WorldDefinition ResolveCurrentWorld()
     {
         if (!RunSession.HasActive) return null;
         if (!WorldCatalog.TryGet(RunSession.Current.worldId, out WorldDefinition world) &&
             (world = WorldCatalog.Default) == null) return null;
-        if (!WorldCatalog.TryGetStage(world, RunSession.Current.currentStageId, out StageDefinition stage))
+        return world;
+    }
+
+    private static StageDefinition ResolveCurrentStage()
+    {
+        WorldDefinition world = ResolveCurrentWorld();
+        if (world == null || !WorldCatalog.TryGetStage(world, RunSession.Current.currentStageId, out StageDefinition stage))
             return null;
-        if (stage.EnemyCharacterIds == null || stage.EnemyCharacterIds.Count == 0) return null;
-        return stage.EnemyCharacterIds.ToArray();
+        return stage;
     }
 
     private static bool HasLiving(List<Unit> units)

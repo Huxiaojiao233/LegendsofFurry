@@ -116,6 +116,12 @@ public class CombatantState : MonoBehaviour
         Changed?.Invoke();
         PublishStatusChanged(statusId, previousStacks, Get(statusId));
         ContentStatusBehaviorRuntime.ExecuteStatus(GetComponent<Unit>(), instance, ContentTriggerKeys.OnStatusChanged);
+        if (previousStacks == 0 && instance.Stacks > 0)
+        {
+            CombatEventBus.Shared.Publish(new StatusGainedEvent(GetComponent<Unit>(), statusId, instance.Stacks));
+            ContentStatusBehaviorRuntime.ExecuteStatus(GetComponent<Unit>(), instance, ContentTriggerKeys.OnStatusGained);
+            ContentActorBehaviorRuntime.Execute(GetComponent<Unit>(), ContentTriggerKeys.OnStatusGained, null);
+        }
     }
 
     /// <summary>把字符串状态设置为精确层数，并更新持续时间和来源。</summary>

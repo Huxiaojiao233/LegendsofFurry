@@ -41,8 +41,8 @@ public static class WorldLayout
         if (world == null) return false;
         int tw = Mathf.Max(1, world.TerrainWidth);
         int th = Mathf.Max(1, world.TerrainHeight);
-        if (boardX < 0 || boardZ < 0) return false;
-        return WorldCatalog.TryGetStageAt(world, boardX / tw, boardZ / th, out stage);
+        WorldCoords.ToChunk(boardX, boardZ, tw, th, out ChunkPosition chunk, out _, out _);
+        return WorldCatalog.TryGetStageAt(world, chunk.X, chunk.Y, out stage);
     }
 
     public static bool IsOrthogonalNeighbor(StageDefinition a, StageDefinition b)

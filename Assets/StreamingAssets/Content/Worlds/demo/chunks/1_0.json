@@ -1,0 +1,270 @@
+{
+    "position": [
+        1,
+        0
+    ],
+    "id": "reward-s1",
+    "displayName": "南缘战利品",
+    "stageType": "reward",
+    "enabled": true,
+    "terrainLegend": [
+        {
+            "glyph": "W",
+            "definition": "base.water"
+        },
+        {
+            "glyph": "G",
+            "definition": "base.grass"
+        },
+        {
+            "glyph": "D",
+            "definition": "base.dirt"
+        }
+    ],
+    "terrain": [
+        "WWWWWWWWWW",
+        "WWWWWWWWWW",
+        "WWWWWWWWWW",
+        "WWWWWWWWWW",
+        "GWWWGGGGGW",
+        "GWWWGGGGGD",
+        "GWWWGGGGDD",
+        "GGWWGGGDDD",
+        "GGWWGGGDDD",
+        "GGWWGGDDDD"
+    ],
+    "heights": [
+        -1,
+        -1,
+        -1,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -1,
+        -1,
+        -1,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -1,
+        -1,
+        -1,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -1,
+        -1,
+        -1,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+    ],
+    "objects": [
+        {
+            "id": "deco-reward-s1-1-9",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 9,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-1-8",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-1-7",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 7,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-0-7",
+            "definition": "hs.tree.maple.01",
+            "x": 0,
+            "y": 7,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-0-6",
+            "definition": "hs.tree.maple.01",
+            "x": 0,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-0-5",
+            "definition": "hs.tree.maple.01",
+            "x": 0,
+            "y": 5,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-0-4",
+            "definition": "hs.tree.maple.01",
+            "x": 0,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-4-9",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 9,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-4-8",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-4-7",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 7,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-4-6",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-4-5",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 5,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-4-4",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-5-4",
+            "definition": "hs.tree.maple.01",
+            "x": 5,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-6-4",
+            "definition": "hs.tree.maple.01",
+            "x": 6,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-7-4",
+            "definition": "hs.tree.maple.01",
+            "x": 7,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-8-4",
+            "definition": "hs.tree.maple.01",
+            "x": 8,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-reward-s1-8-5",
+            "definition": "hs.tree.maple.01",
+            "x": 8,
+            "y": 5,
+            "rotation": 0
+        }
+    ],
+    "rewardPoolId": "",
+    "requiredKeyId": "",
+    "dropKeyId": "",
+    "unitPlacements": []
+}

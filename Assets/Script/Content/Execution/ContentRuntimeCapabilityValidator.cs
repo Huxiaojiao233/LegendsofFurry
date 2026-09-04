@@ -31,15 +31,15 @@ public static class ContentRuntimeCapabilityValidator
         foreach (StatusDefinition status in package.Statuses)
         {
             ValidateOwnerBehaviors(runtime, "状态", status, status?.Enabled == true, status?.Behaviors,
-                ActorTriggerKeys().Append(ContentTriggerKeys.OnStatusChanged));
+                ActorTriggerKeys().Append(ContentTriggerKeys.OnStatusChanged).Append(ContentTriggerKeys.OnStatusGained));
         }
         foreach (ClassProfileDefinition profile in package.ClassProfiles)
         {
             ValidateOwnerBehaviors(runtime, "职业", profile, profile?.Enabled == true, profile?.Behaviors,
                 ActorTriggerKeys());
         }
-        foreach (CharacterDefinition character in package.Characters)
-            ValidateOwnerBehaviors(runtime, "角色", character, character?.Enabled == true, character?.Behaviors,
+        foreach (UnitDefinition unit in package.Units)
+            ValidateOwnerBehaviors(runtime, "单位", unit, unit?.Enabled == true, unit?.Behaviors,
                 ActorTriggerKeys());
         foreach (EquipmentDefinition item in package.Equipment)
             ValidateOwnerBehaviors(runtime, "装备", item, item?.Enabled == true, item?.Behaviors,
@@ -52,7 +52,8 @@ public static class ContentRuntimeCapabilityValidator
     }
 
     private static System.Collections.Generic.IEnumerable<string> ActorTriggerKeys() =>
-        new[] { ContentTriggerKeys.OnUnitTurnStart, ContentTriggerKeys.OnUnitTurnEnd, ContentTriggerKeys.OnActivatedAbility }
+        new[] { ContentTriggerKeys.OnUnitTurnStart, ContentTriggerKeys.OnUnitTurnEnd, ContentTriggerKeys.OnActivatedAbility,
+            ContentTriggerKeys.OnStatusGained, ContentTriggerKeys.OnEnteredTerrain, ContentTriggerKeys.OnMoveCompleted }
             .Concat(ContentRuleQueryKeys.All);
 
     /// <summary>合成基础内容和全部扩展层之后，校验跨定义引用。</summary>
@@ -68,8 +69,12 @@ public static class ContentRuntimeCapabilityValidator
             .ToHashSet(StringComparer.Ordinal);
         System.Collections.Generic.Dictionary<string, EquipmentDefinition> equipment = package.Equipment
             .Where(item => item.Enabled).ToDictionary(item => item.EquipmentId, StringComparer.Ordinal);
-        System.Collections.Generic.HashSet<string> characterIds = package.Characters.Where(item => item.Enabled)
-            .Select(item => item.CharacterId).ToHashSet(StringComparer.Ordinal);
+        System.Collections.Generic.HashSet<string> unitIds = package.Units.Where(item => item.Enabled)
+            .Select(item => item.UnitId).ToHashSet(StringComparer.Ordinal);
+        System.Collections.Generic.HashSet<string> deckIds = package.Decks.Where(item => item.Enabled)
+            .Select(item => item.DeckId).ToHashSet(StringComparer.Ordinal);
+        System.Collections.Generic.HashSet<string> aiProfileIds = package.AiProfiles.Where(item => item.Enabled)
+            .Select(item => item.AiProfileId).ToHashSet(StringComparer.Ordinal);
 
         foreach (CardDefinition card in package.Cards.Where(item => item.Enabled))
         {
@@ -100,11 +105,15 @@ public static class ContentRuntimeCapabilityValidator
         foreach (EquipmentDefinition item in package.Equipment.Where(item => item.Enabled))
             if (!ContentEquipmentSlotKeys.IsValid(item.SlotKey) || !poolIds.Contains(item.CardPoolId))
                 throw new InvalidDataException($"装备 {item.EquipmentId} 的槽位或卡池引用无效。");
-        if ((!string.IsNullOrEmpty(package.GameSettings.PlayerCharacterId) &&
-             !characterIds.Contains(package.GameSettings.PlayerCharacterId)) ||
-            (!string.IsNullOrEmpty(package.GameSettings.EnemyCharacterId) &&
-             !characterIds.Contains(package.GameSettings.EnemyCharacterId)))
-            throw new InvalidDataException("基础战斗设置引用了不存在或未启用的角色。");
+        foreach (UnitDefinition unit in package.Units.Where(item => item.Enabled))
+        {
+            if (!string.IsNullOrEmpty(unit.DeckId) && !deckIds.Contains(unit.DeckId))
+                throw new InvalidDataException($"单位 {unit.UnitId} 引用了不存在或未启用的牌库：{unit.DeckId}。");
+            if (!string.IsNullOrEmpty(unit.AiProfileId) && !aiProfileIds.Contains(unit.AiProfileId))
+                throw new InvalidDataException($"单位 {unit.UnitId} 引用了不存在或未启用的 AI 模板：{unit.AiProfileId}。");
+        }
+        if (!string.IsNullOrEmpty(package.GameSettings.PlayerUnitId) && !unitIds.Contains(package.GameSettings.PlayerUnitId))
+            throw new InvalidDataException("基础战斗设置引用了不存在或未启用的玩家单位。");
     }
 
     /// <summary>校验稳定身份、行为归属、触发器支持和行为图能力。</summary>

@@ -64,7 +64,7 @@ public class BattleBootstrap : MonoBehaviour
             BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
             worldSession = GetComponent<WorldPlaySession>() ?? gameObject.AddComponent<WorldPlaySession>();
             worldSession.Bind(board);
-            roster.SpawnRunParty(worldSession.AllySpawnCell, worldSession.ShouldStartCombat, worldSession.EnemySpawnCell);
+            roster.SpawnRunParty(worldSession.AllySpawnCell, worldSession.ShouldStartCombat);
         }
         else
         {

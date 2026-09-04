@@ -1,0 +1,302 @@
+{
+    "position": [
+        1,
+        1
+    ],
+    "id": "fight-s1",
+    "displayName": "灌木伏击",
+    "stageType": "battle",
+    "enabled": true,
+    "terrainLegend": [
+        {
+            "glyph": "G",
+            "definition": "base.grass"
+        },
+        {
+            "glyph": "W",
+            "definition": "base.water"
+        },
+        {
+            "glyph": "D",
+            "definition": "base.dirt"
+        }
+    ],
+    "terrain": [
+        "GGWWGDDDDD",
+        "GGWWGDDDDD",
+        "GGWWGDDDDD",
+        "GGWWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD"
+    ],
+    "heights": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+    ],
+    "objects": [
+        {
+            "id": "deco-fight-s1-2-9",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 9,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-2-8",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-2-7",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 7,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-2-6",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-2-5",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 5,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-2-4",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-1-4",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-1-3",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 3,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-1-2",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 2,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-1-1",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 1,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-1-0",
+            "definition": "hs.tree.maple.01",
+            "x": 1,
+            "y": 0,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-9",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 9,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-8",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-7",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 7,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-6",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-5",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 5,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-4",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-3",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 3,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-2",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 2,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-1",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 1,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-s1-4-0",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 0,
+            "rotation": 0
+        }
+    ],
+    "rewardPoolId": "",
+    "requiredKeyId": "",
+    "dropKeyId": "",
+    "unitPlacements": [
+        {
+            "instanceId": "fight-s1-slime-1",
+            "unitId": "slime",
+            "x": 7,
+            "y": 5,
+            "factionOverride": "enemy",
+            "controllerOverride": "ai",
+            "deckIdOverride": "",
+            "enabled": true
+        }
+    ]
+}

@@ -18,7 +18,8 @@ public sealed class ContentPackage
     public List<RarityDefinition> Rarities { get; set; } = new List<RarityDefinition>();
     public List<AssetDefinition> Assets { get; set; } = new List<AssetDefinition>();
     public List<ClassProfileDefinition> ClassProfiles { get; set; } = new List<ClassProfileDefinition>();
-    public List<CharacterDefinition> Characters { get; set; } = new List<CharacterDefinition>();
+    public List<UnitDefinition> Units { get; set; } = new List<UnitDefinition>();
+    public List<AiProfileDefinition> AiProfiles { get; set; } = new List<AiProfileDefinition>();
     public List<EquipmentDefinition> Equipment { get; set; } = new List<EquipmentDefinition>();
     public GameSettingsDefinition GameSettings { get; set; } = new GameSettingsDefinition();
 }
@@ -165,20 +166,33 @@ public sealed class GameSettingsDefinition
     public int DrawPerTurn { get; set; } = 5;
     public int BaseActionPoints { get; set; } = 3;
     public int BaseMoveSteps { get; set; } = 2;
-    public string PlayerCharacterId { get; set; } = string.Empty;
-    public string EnemyCharacterId { get; set; } = string.Empty;
+    public string PlayerUnitId { get; set; } = string.Empty;
     public string DefaultWorldId { get; set; } = "demo";
 }
 
-/// <summary>描述一个由数据驱动、不依赖场景物体的战斗单位。</summary>
-public sealed class CharacterDefinition : IContentDefinition
+/// <summary>描述一个统一的数据驱动单位。角色、魔物和 Boss 通过字段区分而不是拆表。</summary>
+public sealed class UnitDefinition : IContentDefinition
 {
-    public string CharacterId { get; set; } = string.Empty;
+    public string UnitId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string UnitKind { get; set; } = "character";
+    public string DefaultFaction { get; set; } = "neutral";
+    public string Controller { get; set; } = "player";
+    public bool IsBoss { get; set; }
+    public bool Recruitable { get; set; }
+    public bool CanJoinParty { get; set; }
     public int InitialHealth { get; set; } = 10;
     public int BaseDamage { get; set; } = 3;
     public int MoveSteps { get; set; } = 2;
+    public int InitialActionPoints { get; set; } = 3;
+    public int StartingHandSize { get; set; } = 5;
+    public int DrawPerTurn { get; set; } = 5;
+    public string DeckId { get; set; } = string.Empty;
+    public string AiProfileId { get; set; } = string.Empty;
+    public UnitAiTuningDefinition AiOverrides { get; set; } = new UnitAiTuningDefinition();
+    public List<BossPhaseDefinition> BossPhases { get; set; } = new List<BossPhaseDefinition>();
+    public List<string> Capabilities { get; set; } = new List<string>();
     public string TokenFrameColor { get; set; } = string.Empty;
     public string PortraitKey { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
@@ -186,8 +200,52 @@ public sealed class CharacterDefinition : IContentDefinition
     public List<string> Tags { get; set; } = new List<string>();
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
 
-    public string GetDefinitionKind() => ContentDefinitionKinds.Character;
-    public string GetDefinitionId() => CharacterId;
+    public bool IsHostile => DefaultFaction == "enemy";
+
+    public string GetDefinitionKind() => ContentDefinitionKinds.Unit;
+    public string GetDefinitionId() => UnitId;
+}
+
+/// <summary>单位对 AI 模板的可选数值覆盖；NaN 表示继续使用模板值。</summary>
+public sealed class UnitAiTuningDefinition
+{
+    public float AttackWeight { get; set; } = float.NaN;
+    public float DefenseWeight { get; set; } = float.NaN;
+    public float HealingWeight { get; set; } = float.NaN;
+    public float ApproachWeight { get; set; } = float.NaN;
+    public float RetreatWeight { get; set; } = float.NaN;
+    public float KillWeight { get; set; } = float.NaN;
+    public float PreferredRange { get; set; } = float.NaN;
+    public float LowHealthThreshold { get; set; } = float.NaN;
+}
+
+/// <summary>Boss 在血量阈值内叠加的阶段规则；基础决策器保持不变。</summary>
+public sealed class BossPhaseDefinition
+{
+    public float MaximumHealthRatio { get; set; } = 1f;
+    public string AiProfileId { get; set; } = string.Empty;
+    public UnitAiTuningDefinition AiOverrides { get; set; } = new UnitAiTuningDefinition();
+}
+
+/// <summary>可复用的 Utility AI 权重模板。</summary>
+public sealed class AiProfileDefinition : IContentDefinition
+{
+    public string AiProfileId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public float AttackWeight { get; set; } = 1f;
+    public float DefenseWeight { get; set; } = 1f;
+    public float HealingWeight { get; set; } = 1f;
+    public float ApproachWeight { get; set; } = 1f;
+    public float RetreatWeight { get; set; } = 1f;
+    public float KillWeight { get; set; } = 1f;
+    public float PreferredRange { get; set; } = 1f;
+    public float LowHealthThreshold { get; set; } = 0.3f;
+    public bool Enabled { get; set; } = true;
+    public int SortOrder { get; set; }
+
+    public string GetDefinitionKind() => ContentDefinitionKinds.AiProfile;
+    public string GetDefinitionId() => AiProfileId;
 }
 
 /// <summary>描述一件可装备内容及其贡献的卡池。</summary>

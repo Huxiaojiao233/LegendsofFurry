@@ -48,6 +48,33 @@ public sealed class StatusChangedEvent : ICombatEvent
     public int CurrentStacks { get; }
 }
 
+public sealed class StatusGainedEvent : ICombatEvent
+{
+    public StatusGainedEvent(Unit unit, string statusId, int stacks) { Unit = unit; StatusId = statusId ?? string.Empty; Stacks = stacks; }
+    public Unit Unit { get; }
+    public string StatusId { get; }
+    public int Stacks { get; }
+}
+
+public sealed class TerrainEnteredEvent : ICombatEvent
+{
+    public TerrainEnteredEvent(Unit unit, string terrainId, UnityEngine.Vector2Int from, UnityEngine.Vector2Int to)
+    { Unit = unit; TerrainId = terrainId ?? string.Empty; From = from; To = to; }
+    public Unit Unit { get; }
+    public string TerrainId { get; }
+    public UnityEngine.Vector2Int From { get; }
+    public UnityEngine.Vector2Int To { get; }
+}
+
+public sealed class UnitMoveCompletedEvent : ICombatEvent
+{
+    public UnitMoveCompletedEvent(Unit unit, UnityEngine.Vector2Int from, UnityEngine.Vector2Int to)
+    { Unit = unit; From = from; To = to; }
+    public Unit Unit { get; }
+    public UnityEngine.Vector2Int From { get; }
+    public UnityEngine.Vector2Int To { get; }
+}
+
 /// <summary>Notification describing a card instance moving between stable card zones.</summary>
 public sealed class CardZoneChangedEvent : ICombatEvent
 {

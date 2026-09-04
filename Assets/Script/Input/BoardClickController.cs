@@ -10,7 +10,7 @@ using LegendsOfFurry.Content.Runtime;
 /// 棋盘交互总控制器。
 /// 负责己方单位选中、四方向可达范围、行动点消耗、格子点击与悬浮消耗提示。
 /// </summary>
-public class BoardClickController : MonoBehaviour
+public class BoardClickController : MonoBehaviour, IActionPointPool
 {
     private static readonly Vector2Int[] FourDirections =
     {
@@ -385,7 +385,7 @@ public class BoardClickController : MonoBehaviour
         }
 
         Vector2Int coordinate = cell.Coordinate;
-        if (!selectedUnit.MoveToAnimated(coordinate.x, coordinate.y))
+        if (!selectedUnit.MoveToAnimated(coordinate.x, coordinate.y, this))
         {
             return;
         }
@@ -443,10 +443,14 @@ public class BoardClickController : MonoBehaviour
                     continue;
                 }
 
+                string nextTerrain = board.GetTerrain(next.x, next.y);
                 int nextStepDistance = currentCost + 1;
                 costs[next] = nextStepDistance;
-                frontier.Enqueue(next);
-                int payableCost = Mathf.Max(0, nextStepDistance + movementPenalty - nextMoveDiscount);
+                if (!WorldTerrainCatalog.EndsActionOnEnter(nextTerrain)) frontier.Enqueue(next);
+                int payableCost = WorldTerrainCatalog.EndsActionOnEnter(nextTerrain)
+                    ? currentActionPoints
+                    : Mathf.Max(0, nextStepDistance + movementPenalty - nextMoveDiscount);
+                if (payableCost > currentActionPoints) continue;
                 movableCells[cell] = payableCost;
 
                 float fade = maxActionPoints <= 1
@@ -493,7 +497,7 @@ public class BoardClickController : MonoBehaviour
         if (!TryRaycastPointer(out RaycastHit hit)) return;
         BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
         if (cell == null || !movableCells.ContainsKey(cell) || selectedUnit == null) return;
-        if (!selectedUnit.MoveToAnimated(cell.Coordinate.x, cell.Coordinate.y)) return;
+        if (!selectedUnit.MoveToAnimated(cell.Coordinate.x, cell.Coordinate.y, this)) return;
         CompleteFreeMove();
     }
 

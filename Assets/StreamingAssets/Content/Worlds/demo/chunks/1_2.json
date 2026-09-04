@@ -1,0 +1,285 @@
+{
+    "position": [
+        1,
+        2
+    ],
+    "id": "fight-1",
+    "displayName": "林缘斥候",
+    "stageType": "battle",
+    "enabled": true,
+    "terrainLegend": [
+        {
+            "glyph": "G",
+            "definition": "base.grass"
+        },
+        {
+            "glyph": "W",
+            "definition": "base.water"
+        },
+        {
+            "glyph": "D",
+            "definition": "base.dirt"
+        },
+        {
+            "glyph": "R",
+            "definition": "base.road"
+        }
+    ],
+    "terrain": [
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "RRRRRRRRRR",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD",
+        "GGGWGDDDDD"
+    ],
+    "heights": [
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+    ],
+    "objects": [
+        {
+            "id": "deco-fight-1-2-9",
+            "definition": "hs.tree.redoak.01",
+            "x": 2,
+            "y": 9,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 2,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-7",
+            "definition": "hs.tree.redoak.01",
+            "x": 2,
+            "y": 7,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 2,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-6",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 6,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-7",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 7,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-8",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 8,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-9",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 9,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-4",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-3",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 3,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-2",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 2,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-1",
+            "definition": "hs.tree.redoak.01",
+            "x": 4,
+            "y": 1,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-4-0",
+            "definition": "hs.tree.maple.01",
+            "x": 4,
+            "y": 0,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-4",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 4,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-3",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 3,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-2",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 2,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-1",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 1,
+            "rotation": 0
+        },
+        {
+            "id": "deco-fight-1-2-0",
+            "definition": "hs.tree.maple.01",
+            "x": 2,
+            "y": 0,
+            "rotation": 0
+        }
+    ],
+    "rewardPoolId": "",
+    "requiredKeyId": "",
+    "dropKeyId": "",
+    "unitPlacements": [
+        {
+            "instanceId": "fight-1-slime-1",
+            "unitId": "slime",
+            "x": 7,
+            "y": 5,
+            "factionOverride": "enemy",
+            "controllerOverride": "ai",
+            "deckIdOverride": "",
+            "enabled": true
+        }
+    ]
+}

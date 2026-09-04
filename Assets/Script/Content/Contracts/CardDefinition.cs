@@ -22,6 +22,7 @@ public sealed class CardDefinition : IContentDefinition
     public bool Unplayable { get; set; }
     public bool Enabled { get; set; } = true;
     public int SortOrder { get; set; }
+    public float AiBaseScore { get; set; }
     public CardCostDefinition Cost { get; set; } = new CardCostDefinition();
     public CardTargetRule Target { get; set; } = new CardTargetRule();
     public List<string> Tags { get; set; } = new List<string>();

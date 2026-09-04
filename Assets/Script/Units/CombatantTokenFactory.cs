@@ -12,14 +12,14 @@ public static class CombatantTokenFactory
     public const string FallbackPrefabResourcePath = "Prefabs/CombatantToken";
 
     /// <summary>生成一枚已绑定角色定义的棋子。</summary>
-    public static Unit Spawn(CharacterDefinition definition, UnitFaction faction, string objectName)
+    public static Unit Spawn(UnitDefinition definition, UnitFaction faction, string objectName)
     {
         GameObject prefab = Resources.Load<GameObject>(PrefabResourcePath)
             ?? Resources.Load<GameObject>(FallbackPrefabResourcePath)
             ?? Resources.Load<GameObject>("CombatantToken");
         string resolvedName = !string.IsNullOrWhiteSpace(objectName)
             ? objectName
-            : definition != null ? definition.CharacterId : "Combatant";
+            : definition != null ? definition.UnitId : "Combatant";
         GameObject instance = prefab != null
             ? Object.Instantiate(prefab)
             : new GameObject(resolvedName);

@@ -49,6 +49,7 @@ public sealed class WorldPlaySession : MonoBehaviour
     private GameObject currentFence;
     private Canvas hud;
     private TMP_Text statusText;
+    private WorldCloudCover cloudCover;
     private bool walking;
     private bool transitioning;
     private string pendingMessage = string.Empty;
@@ -60,7 +61,6 @@ public sealed class WorldPlaySession : MonoBehaviour
     public bool IsExploring { get; private set; } = true;
     public bool IsCombat => !IsExploring;
     public Vector2Int AllySpawnCell { get; private set; }
-    public Vector2Int EnemySpawnCell { get; private set; }
     public bool ShouldStartCombat { get; private set; }
 
     public void Bind(BoardGenerator worldBoard)
@@ -80,9 +80,11 @@ public sealed class WorldPlaySession : MonoBehaviour
         IsExploring = !ShouldStartCombat;
         board.SetMovementFilter(CanWalkBoardCell);
         CacheCells();
-        ApplyFog();
+        RevealAdjacent(CurrentStage);
+        EnsureCloudCover();
         BuildStageIcons();
         BuildStageLinks();
+        ApplyFog();
     }
 
     private void OnDestroy()
@@ -118,9 +120,24 @@ public sealed class WorldPlaySession : MonoBehaviour
         if (mainCamera == null) return;
         Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
         if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+        WorldCloudPatch cloud = WorldCloudCover.FromHit(hit);
+        if (cloud != null)
+        {
+            TryWalkIntoCloudPatch(cloud);
+            return;
+        }
+
         BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
         if (cell == null) return;
         TryWalkTo(cell.Coordinate);
+    }
+
+    private void TryWalkIntoCloudPatch(WorldCloudPatch cloud)
+    {
+        if (cloud == null || !cloud.HasStage || world == null) return;
+        if (!WorldCatalog.TryGetStage(world, cloud.StageId, out StageDefinition stage) || stage == null)
+            return;
+        TryWalkTo(WorldLayout.StageCenterCell(stage, world));
     }
 
     private void LateUpdate()
@@ -175,13 +192,14 @@ public sealed class WorldPlaySession : MonoBehaviour
         ClearPathDots();
         RefreshSpawnCells();
         board.SetMovementFilter(CanWalkBoardCell);
+        ApplyFog();
         SetCombatUiVisible(true);
         FitCombatCamera();
         CenterOnPlayer(PlaySize);
         yield return CollapseForeignStages();
 
         BattleRoster roster = BattleRoster.Instance;
-        roster?.SpawnEnemiesAt(EnemySpawnCell);
+        roster?.SpawnDeployedEnemies(CurrentStage);
         CardEffectResolver resolver = FindAnyObjectByType<CardEffectResolver>();
         resolver?.Bind(FindAnyObjectByType<BoardClickController>(), roster?.PrimaryAlly, roster?.PrimaryEnemy);
         BattleFlow.Instance?.BeginWorldCombat();
@@ -252,6 +270,7 @@ public sealed class WorldPlaySession : MonoBehaviour
         }
 
         RunSession.MoveTo(stage.StageId);
+        RevealAdjacent(stage);
         RefreshSpawnCells();
         ApplyFog();
         RefreshStageLinks();
@@ -371,7 +390,7 @@ public sealed class WorldPlaySession : MonoBehaviour
         if (stage == null || RunSession.IsCompleted(stage.StageId)) return false;
         if (stage.StageType != ContentStageTypeKeys.Battle && stage.StageType != ContentStageTypeKeys.Boss)
             return false;
-        return !RunSession.IsLocked(stage);
+        return !RunSession.IsLocked(stage) && stage.UnitPlacements.Exists(item => item != null && item.Enabled);
     }
 
     private void RefreshSpawnCells()
@@ -379,8 +398,6 @@ public sealed class WorldPlaySession : MonoBehaviour
         StageDefinition stage = CurrentStage;
         if (stage == null || world == null) return;
         AllySpawnCell = WorldLayout.StageCenterCell(stage, world);
-        Vector2Int origin = WorldLayout.StageOrigin(stage, world);
-        EnemySpawnCell = new Vector2Int(origin.x + world.TerrainWidth - 3, origin.y + world.TerrainHeight / 2);
     }
 
     private void ApplyFog()
@@ -409,8 +426,9 @@ public sealed class WorldPlaySession : MonoBehaviour
 
             if (stageIcons.TryGetValue(stage.StageId, out TextMeshPro icon) && icon != null)
             {
+                bool cloudy = WorldCloudRules.HasCloudOver(current, stage, explored, IsCombat);
                 Color color = IconColor(stage);
-                if (!explored) color = Color.Lerp(color, Color.black, 0.65f);
+                if (!explored) color = Color.Lerp(color, cloudy ? Color.white : Color.black, cloudy ? 0.08f : 0.65f);
                 bool currentStage = current != null && stage.StageId == current.StageId;
                 if (IsCombat && !currentStage)
                     color.a = 0.15f;
@@ -418,8 +436,22 @@ public sealed class WorldPlaySession : MonoBehaviour
                     color.a = 1f;
                 icon.color = color;
                 icon.transform.localScale = Vector3.one * (currentStage ? 1.35f : 1f);
+                Vector3 p = icon.transform.position;
+                p.y = cloudy && cloudCover != null
+                    ? cloudCover.DeckY + 0.22f
+                    : cell.transform.position.y + 1.8f;
+                icon.transform.position = p;
             }
         }
+
+        cloudCover?.Refresh(world, current, IsCombat);
+    }
+
+    private void EnsureCloudCover()
+    {
+        if (cloudCover == null)
+            cloudCover = gameObject.GetComponent<WorldCloudCover>() ?? gameObject.AddComponent<WorldCloudCover>();
+        cloudCover.Bind(world, board);
     }
 
     private void BuildStageIcons()
@@ -674,8 +706,8 @@ public sealed class WorldPlaySession : MonoBehaviour
 
     private float OneTerrainCellHeight()
     {
-        if (board != null && board.HeightStep > 0.01f) return Mathf.Max(0.5f, board.HeightStep);
-        return 0.5f;
+        if (board != null && board.HeightStep > 0.01f) return board.HeightStep;
+        return WorldTerrain.StepY;
     }
 
     private bool TryGetStageBounds(StageDefinition stage, out Bounds bounds)
@@ -1001,10 +1033,44 @@ public sealed class WorldPlaySession : MonoBehaviour
         if (statusText == null || mainCamera == null || Mouse.current == null) return;
         Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
         if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+        WorldCloudPatch cloud = WorldCloudCover.FromHit(hit);
+        if (cloud != null)
+        {
+            RefreshCloudHoverHud(cloud);
+            return;
+        }
+
         BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
         if (cell == null || !WorldLayout.TryGetStage(world, cell.Coordinate.x, cell.Coordinate.y, out StageDefinition stage))
             return;
         RefreshHud(stage);
+    }
+
+    private void RefreshCloudHoverHud(WorldCloudPatch cloud)
+    {
+        if (statusText == null || !RunSession.HasActive) return;
+        if (cloud == null || !cloud.HasStage ||
+            !WorldCatalog.TryGetStage(world, cloud.StageId, out StageDefinition stage) || stage == null)
+        {
+            statusText.text = "云海之外。";
+            return;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        bool explored = RunSession.IsExplored(stage.StageId);
+        builder.Append(explored ? "迷雾外缘 · " : "未解锁 · ");
+        builder.Append(string.IsNullOrWhiteSpace(stage.DisplayName) ? stage.StageId : stage.DisplayName);
+        builder.Append(" · ").Append(TypeLabel(stage));
+        builder.Append("    (").Append(stage.GridX).Append(", ").Append(stage.GridY).Append(")");
+        if (RunSession.IsLocked(stage))
+        {
+            builder.Append("    [锁定]");
+            if (!string.IsNullOrWhiteSpace(stage.RequiredKeyId))
+                builder.Append(" 需要 ").Append(stage.RequiredKeyId);
+        }
+
+        if (!string.IsNullOrEmpty(pendingMessage)) builder.Append("    ").Append(pendingMessage);
+        statusText.text = builder.ToString();
     }
 
     private void EnsureHud()

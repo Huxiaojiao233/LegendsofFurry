@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using LegendsOfFurry.Content.Contracts;
 using NUnit.Framework;
@@ -62,6 +63,174 @@ public sealed class WorldMapFoundationTests
         StageDefinition reward = world.Stages.Single(item => item.StageId == "reward-1");
         List<string> ids = WorldLayout.OrthogonalNeighbors(world, reward).ConvertAll(item => item.StageId);
         Assert.That(ids, Is.EquivalentTo(new[] { "fight-1", "fight-2", "fight-4", "boss-1" }));
+    }
+
+    [Test]
+    public void NegativeWorldTilesUseFloorDivision()
+    {
+        Assert.That(WorldCoords.FloorDiv(-1, 10), Is.EqualTo(-1));
+        Assert.That(WorldCoords.FloorMod(-1, 10), Is.EqualTo(9));
+        WorldCoords.ToChunk(-1, 0, 10, 10, out ChunkPosition chunk, out int localX, out int localY);
+        Assert.That(chunk.X, Is.EqualTo(-1));
+        Assert.That(localX, Is.EqualTo(9));
+        Assert.That(localY, Is.EqualTo(0));
+        Vector2Int world = WorldCoords.ToWorldTile(chunk, localX, localY, 10, 10);
+        Assert.That(world, Is.EqualTo(new Vector2Int(-1, 0)));
+    }
+
+    [Test]
+    public void FiniteProviderServesAuthoredChunksOnly()
+    {
+        WorldDefinition world = WorldCatalog.CreateDemoWorld();
+        FiniteChunkProvider provider = new FiniteChunkProvider(world);
+        Assert.That(provider.CanProvide(new ChunkPosition(0, 2)), Is.True);
+        Assert.That(provider.TryGetChunk(new ChunkPosition(0, 2), out StageDefinition start), Is.True);
+        Assert.That(start.StageId, Is.EqualTo("start"));
+        Assert.That(provider.CanProvide(new ChunkPosition(9, 9)), Is.False);
+    }
+
+    [Test]
+    public void OneHeightLevelIsHalfAWorldUnit()
+    {
+        Assert.That(WorldTerrain.StepY, Is.EqualTo(0.5f));
+        Assert.That(WorldTerrain.MaxHeight * WorldTerrain.StepY, Is.EqualTo(1f));
+    }
+
+    [Test]
+    public void ChunkedWorldRoundTripKeepsTerrainAndStart()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "lofe-world-map-test");
+        if (Directory.Exists(folder)) Directory.Delete(folder, true);
+        WorldDefinition source = WorldMapIO.CreateBlank("roundtrip", "往返测试", 2, 2, 10);
+        StageDefinition start = source.Stages[0];
+        start.SetTerrain(1, 1, 10, 10, WorldTerrainCatalog.Water);
+        start.SetHeight(1, 1, 10, 10, -1);
+        start.Decorations.Add(new WorldDecorationDefinition
+        {
+            Id = "tree-01",
+            Definition = WorldTerrainCatalog.Tree,
+            LocalX = 2,
+            LocalY = 3
+        });
+        start.UnitPlacements.Add(new WorldUnitPlacementDefinition
+        {
+            InstanceId = "roundtrip-slime-1",
+            UnitId = "slime",
+            LocalX = 7,
+            LocalY = 5,
+            FactionOverride = "enemy",
+            ControllerOverride = "ai",
+            Enabled = true
+        });
+        WorldMapIO.SaveChunked(source, folder);
+        WorldDefinition loaded = WorldMapIO.LoadChunked(folder);
+        Assert.That(loaded.WorldId, Is.EqualTo("roundtrip"));
+        Assert.That(loaded.Stages.Count, Is.EqualTo(4));
+        Assert.That(WorldMapIO.Validate(loaded), Is.Empty);
+        WorldCatalog.TryGetStageAt(loaded, 0, 0, out StageDefinition loadedStart);
+        Assert.That(loadedStart.TerrainAt(1, 1, 10, 10), Is.EqualTo(WorldTerrainCatalog.Water));
+        Assert.That(loadedStart.HeightAt(1, 1, 10, 10), Is.EqualTo(-1));
+        Assert.That(loadedStart.Decorations, Has.Count.EqualTo(1));
+        Assert.That(loadedStart.Decorations[0].Definition, Is.EqualTo(WorldTerrainCatalog.Tree));
+        Assert.That(loadedStart.UnitPlacements, Has.Count.EqualTo(1));
+        Assert.That(loadedStart.UnitPlacements[0].UnitId, Is.EqualTo("slime"));
+        Assert.That(loadedStart.UnitPlacements[0].LocalX, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void WorldValidationRejectsOverlappingOrOutOfBoundsUnitPlacements()
+    {
+        WorldDefinition world = WorldMapIO.CreateBlank("badplacements", "错误部署", 1, 1, 10);
+        StageDefinition stage = world.Stages[0];
+        stage.UnitPlacements.Add(new WorldUnitPlacementDefinition
+        {
+            InstanceId = "same", UnitId = "slime", LocalX = 1, LocalY = 1, Enabled = true
+        });
+        stage.UnitPlacements.Add(new WorldUnitPlacementDefinition
+        {
+            InstanceId = "same", UnitId = "taigao", LocalX = 1, LocalY = 1, Enabled = true
+        });
+        stage.UnitPlacements.Add(new WorldUnitPlacementDefinition
+        {
+            InstanceId = "outside", UnitId = "slime", LocalX = 10, LocalY = 0, Enabled = true
+        });
+
+        List<string> issues = WorldMapIO.Validate(world);
+        Assert.That(issues.Any(item => item.Contains("实例 ID")), Is.True);
+        Assert.That(issues.Any(item => item.Contains("重叠部署")), Is.True);
+        Assert.That(issues.Any(item => item.Contains("超出区块范围")), Is.True);
+    }
+
+    [Test]
+    public void FiniteWorldRejectsMissingChunkFile()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "lofe-world-missing-chunk");
+        if (Directory.Exists(folder)) Directory.Delete(folder, true);
+        WorldDefinition source = WorldMapIO.CreateBlank("missingchunk", "缺块", 2, 1, 10);
+        WorldMapIO.SaveChunked(source, folder);
+        File.Delete(Path.Combine(folder, "chunks", "1_0.json"));
+        Assert.Throws<InvalidDataException>(() => WorldMapIO.LoadChunked(folder));
+    }
+
+    [Test]
+    public void DemoWorldHasWalkableTerrainAtStart()
+    {
+        WorldDefinition world = WorldCatalog.CreateDemoWorld();
+        WorldCatalog.TryGetStage(world, "start", out StageDefinition start);
+        Assert.That(start.TerrainIds.Length, Is.EqualTo(100));
+        Assert.That(WorldTerrainCatalog.IsWalkable(start.TerrainAt(5, 5, 10, 10)), Is.True);
+    }
+
+    [Test]
+    public void ForestPrefabNamesBecomeValidContentIds()
+    {
+        Assert.That(WorldDecorationCatalog.IdFromPrefabName("P_HS_LP_Tree_Oak_01"), Is.EqualTo("hs.tree.oak.01"));
+        Assert.That(WorldDecorationCatalog.IdFromPrefabName("P_HS_LP_Bush_Berry_Blue_01"),
+            Is.EqualTo("hs.bush.berry.blue.01"));
+        Assert.That(ContentId.IsValid(WorldDecorationCatalog.IdFromPrefabName("P_HS_LP_Bush_Berry_Blue_01")));
+        Assert.That(WorldDecorationCatalog.CanonicalId(WorldTerrainCatalog.Tree), Is.EqualTo("hs.tree.oak.01"));
+        Assert.That(WorldDecorationCatalog.CanonicalId(WorldTerrainCatalog.Rock), Is.EqualTo("hs.rock.medium.01"));
+    }
+
+    [Test]
+    public void ForestEssentialsPrefabsAreDecorationResources()
+    {
+        WorldDecorationCatalog.Refresh();
+        Assert.That(WorldDecorationCatalog.All.Count, Is.GreaterThan(100));
+        Assert.That(WorldDecorationCatalog.TryGet(WorldTerrainCatalog.Tree, out WorldDecorationEntry tree));
+        Assert.That(tree.Id, Is.EqualTo("hs.tree.oak.01"));
+        Assert.That(WorldDecorationCatalog.LoadPrefab(WorldTerrainCatalog.Tree), Is.Not.Null);
+        Assert.That(WorldDecorationCatalog.LoadPrefab("hs.rock.medium.01"), Is.Not.Null);
+    }
+
+    [Test]
+    public void CloudSeaCoversUnexploredOnly()
+    {
+        StageDefinition current = new StageDefinition { StageId = "here", GridX = 1, GridY = 1 };
+        StageDefinition east = new StageDefinition { StageId = "east", GridX = 2, GridY = 1 };
+        StageDefinition far = new StageDefinition { StageId = "far", GridX = 3, GridY = 1 };
+        Assert.That(WorldCloudRules.HasCloudOver(current, current, true, false), Is.False);
+        Assert.That(WorldCloudRules.HasCloudOver(current, east, true, false), Is.False);
+        Assert.That(WorldCloudRules.HasCloudOver(current, east, false, false), Is.True);
+        Assert.That(WorldCloudRules.HasCloudOver(current, far, true, false), Is.False);
+        Assert.That(WorldCloudRules.HasCloudOver(current, far, false, false), Is.True);
+        Assert.That(WorldCloudRules.HasCloudOver(current, null, false, false), Is.True);
+        Assert.That(WorldCloudRules.HasCloudOver(current, east, true, true), Is.False);
+    }
+
+    [Test]
+    public void AuthoredDemoFolderLoadsTwentyFiveChunks()
+    {
+        string folder = Path.Combine(Application.streamingAssetsPath, "Content", "Worlds", "demo");
+        if (!File.Exists(Path.Combine(folder, "world.json")))
+            Assert.Ignore("demo 分块目录还没写到 StreamingAssets。");
+        WorldDefinition world = WorldMapIO.LoadChunked(folder);
+        Assert.That(world.Stages.Count, Is.EqualTo(25));
+        Assert.That(world.StartStageId, Is.EqualTo("start"));
+        Assert.That(WorldMapIO.Validate(world), Is.Empty);
+        WorldCatalog.TryGetStage(world, "start", out StageDefinition start);
+        Assert.That(start.TerrainAt(0, 5, 10, 10), Is.EqualTo(WorldTerrainCatalog.Road));
+        Assert.That(start.Decorations, Has.Count.EqualTo(3));
     }
 
     private static void AssertPath(WorldDefinition world, string fromId, string toId)

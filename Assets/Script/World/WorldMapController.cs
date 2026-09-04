@@ -15,7 +15,6 @@ using UnityEngine.UI;
 public sealed class WorldMapController : MonoBehaviour
 {
     private const float CellSize = 1f;
-    private const float HeightStep = 0.45f;
     private const float WorldOverviewSize = 22f;
     private const float StageViewSize = 7.5f;
 
@@ -247,9 +246,9 @@ public sealed class WorldMapController : MonoBehaviour
                 cube.transform.SetParent(root, false);
                 float worldX = (stage.GridX * tw + x) * CellSize;
                 float worldZ = (stage.GridY * th + y) * CellSize;
-                float worldY = height * HeightStep;
+                float worldY = height * WorldTerrain.StepY;
                 cube.transform.position = new Vector3(worldX, worldY, worldZ);
-                cube.transform.localScale = new Vector3(0.92f, Mathf.Max(0.2f, HeightStep), 0.92f);
+                cube.transform.localScale = new Vector3(0.92f, Mathf.Max(0.2f, WorldTerrain.StepY), 0.92f);
                 cube.GetComponent<MeshRenderer>().material.color = TileColor(stage, height, current);
                 WorldMapTile tile = cube.AddComponent<WorldMapTile>();
                 tile.StageId = stage.StageId;

@@ -22,16 +22,28 @@ public class BoardCell : MonoBehaviour
     public Vector2Int Coordinate { get; private set; }
     public string StageId { get; private set; }
     public int Height { get; private set; }
+    public string TerrainId { get; private set; }
 
-    public void Initialize(int x, int y, string stageId = null, int height = 0)
+    public void Initialize(int x, int y, string stageId = null, int height = 0, string terrainId = null)
     {
         Coordinate = new Vector2Int(x, y);
         StageId = stageId ?? string.Empty;
         Height = height;
+        TerrainId = terrainId ?? string.Empty;
         name = string.IsNullOrEmpty(StageId) ? $"Cell_{x}_{y}" : $"Cell_{StageId}_{x}_{y}";
         CaptureBaseColor();
         RestLocalPosition = transform.localPosition;
         RestLocalScale = transform.localScale;
+    }
+
+    public void SetTerrainIdentity(string terrainId, Color terrainColor)
+    {
+        TerrainId = terrainId ?? string.Empty;
+        EnsureTerrainRenderers();
+        if (baseColors == null) return;
+        for (int i = 0; i < baseColors.Length; i++)
+            baseColors[i] = terrainColor;
+        SetTerrainTint(Color.white);
     }
 
     public Vector3 RestLocalPosition { get; private set; }

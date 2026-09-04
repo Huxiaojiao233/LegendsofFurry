@@ -14,6 +14,9 @@ public static class ContentTriggerKeys
     public const string OnUnitTurnStart = "on_unit_turn_start";
     public const string OnUnitTurnEnd = "on_unit_turn_end";
     public const string OnStatusChanged = "on_status_changed";
+    public const string OnStatusGained = "on_status_gained";
+    public const string OnEnteredTerrain = "on_entered_terrain";
+    public const string OnMoveCompleted = "on_move_completed";
     public const string OnActivatedAbility = "on_activated_ability";
 }
 
@@ -45,7 +48,8 @@ public static class ContentCapabilityCatalog
     public static IReadOnlyList<string> Phase5ExecutableTriggerKeys { get; } = Array.AsReadOnly(new[]
     {
         ContentTriggerKeys.OnPlay, ContentTriggerKeys.OnDraw, ContentTriggerKeys.OnAddedToHand,
-        ContentTriggerKeys.OnTurnEndInHand, ContentTriggerKeys.OnUnitTurnStart, ContentTriggerKeys.OnUnitTurnEnd
+        ContentTriggerKeys.OnTurnEndInHand, ContentTriggerKeys.OnUnitTurnStart, ContentTriggerKeys.OnUnitTurnEnd,
+        ContentTriggerKeys.OnStatusGained, ContentTriggerKeys.OnEnteredTerrain, ContentTriggerKeys.OnMoveCompleted
     });
 
     /// <summary>获取阶段 2 已能由 WPF 创建并在 Unity 同步执行的效果 key。</summary>
@@ -64,7 +68,7 @@ public static class ContentCapabilityCatalog
         "modify_card_runtime_value", "reveal_top_cards_and_choose_discard",
         "play_top_cards_for_free", "begin_free_move", "end_turn", "no_op", "play_vfx", "play_sfx",
         "modify_query_value", "cancel_query", "consume_owner_status", "transform_owner_status",
-        "appraise_equipment"
+        "appraise_equipment", "copy_random_positive_status"
     });
 
     /// <summary>获取阶段 2 基础效果能够直接解析的目标选择器 key。</summary>

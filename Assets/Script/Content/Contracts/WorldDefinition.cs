@@ -22,18 +22,28 @@ public static class ContentStageTypeKeys
 /// <summary>一张大地图：由关卡格子拼成，每个关卡格子再由地形单位格子拼成。</summary>
 public sealed class WorldDefinition : IContentDefinition
 {
+    public int FormatVersion { get; set; } = 1;
     public string WorldId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public string Mode { get; set; } = "finite";
+    public int BoundsMinX { get; set; }
+    public int BoundsMinY { get; set; }
     public int StageGridWidth { get; set; } = 5;
     public int StageGridHeight { get; set; } = 5;
     public int TerrainWidth { get; set; } = 10;
     public int TerrainHeight { get; set; } = 10;
     public string StartStageId { get; set; } = string.Empty;
+    public int StartTileX { get; set; } = 5;
+    public int StartTileY { get; set; } = 5;
     public List<StageDefinition> Stages { get; set; } = new List<StageDefinition>();
 
     public string GetDefinitionKind() => "world";
     public string GetDefinitionId() => WorldId;
 
+    public int BoundsMaxX => BoundsMinX + StageGridWidth - 1;
+    public int BoundsMaxY => BoundsMinY + StageGridHeight - 1;
+    public int OriginWorldX => BoundsMinX * TerrainWidth;
+    public int OriginWorldY => BoundsMinY * TerrainHeight;
     public int WorldTerrainWidth => StageGridWidth * TerrainWidth;
     public int WorldTerrainHeight => StageGridHeight * TerrainHeight;
 }
@@ -47,7 +57,9 @@ public sealed class StageDefinition
     public int GridX { get; set; }
     public int GridY { get; set; }
     public int[] Heights { get; set; } = Array.Empty<int>();
-    public List<string> EnemyCharacterIds { get; set; } = new List<string>();
+    public string[] TerrainIds { get; set; } = Array.Empty<string>();
+    public List<WorldDecorationDefinition> Decorations { get; set; } = new List<WorldDecorationDefinition>();
+    public List<WorldUnitPlacementDefinition> UnitPlacements { get; set; } = new List<WorldUnitPlacementDefinition>();
     public string RewardPoolId { get; set; } = string.Empty;
     public string RequiredKeyId { get; set; } = string.Empty;
     public string DropKeyId { get; set; } = string.Empty;
@@ -59,6 +71,81 @@ public sealed class StageDefinition
         if (localX < 0 || localY < 0 || localX >= terrainWidth || localY >= terrainHeight) return 0;
         return Heights[localY * terrainWidth + localX];
     }
+
+    public string TerrainAt(int localX, int localY, int terrainWidth, int terrainHeight)
+    {
+        if (TerrainIds == null || TerrainIds.Length != terrainWidth * terrainHeight)
+            return WorldTerrainCatalog.Grass;
+        if (localX < 0 || localY < 0 || localX >= terrainWidth || localY >= terrainHeight)
+            return WorldTerrainCatalog.Grass;
+        string id = TerrainIds[localY * terrainWidth + localX];
+        return string.IsNullOrEmpty(id) ? WorldTerrainCatalog.Grass : id;
+    }
+
+    public void SetHeight(int localX, int localY, int terrainWidth, int terrainHeight, int height)
+    {
+        EnsureGrids(terrainWidth, terrainHeight);
+        if (localX < 0 || localY < 0 || localX >= terrainWidth || localY >= terrainHeight) return;
+        Heights[localY * terrainWidth + localX] = MathfClampHeight(height);
+    }
+
+    public void SetTerrain(int localX, int localY, int terrainWidth, int terrainHeight, string terrainId)
+    {
+        EnsureGrids(terrainWidth, terrainHeight);
+        if (localX < 0 || localY < 0 || localX >= terrainWidth || localY >= terrainHeight) return;
+        TerrainIds[localY * terrainWidth + localX] = string.IsNullOrEmpty(terrainId)
+            ? WorldTerrainCatalog.Grass
+            : terrainId;
+    }
+
+    public void EnsureGrids(int terrainWidth, int terrainHeight)
+    {
+        int length = Math.Max(1, terrainWidth) * Math.Max(1, terrainHeight);
+        int[] heights = Heights ?? Array.Empty<int>();
+        if (heights.Length != length)
+        {
+            heights = new int[length];
+            Heights = heights;
+        }
+
+        if (TerrainIds == null || TerrainIds.Length != length)
+        {
+            string[] ids = new string[length];
+            for (int i = 0; i < length; i++)
+                ids[i] = WorldTerrainCatalog.FromHeight(heights[i]);
+            TerrainIds = ids;
+        }
+    }
+
+    private static int MathfClampHeight(int height)
+    {
+        if (height < WorldTerrain.MinHeight) return WorldTerrain.MinHeight;
+        if (height > WorldTerrain.MaxHeight) return WorldTerrain.MaxHeight;
+        return height;
+    }
+}
+
+/// <summary>关卡只保存单位实例的部署信息，静态数值始终引用内容包 Unit。</summary>
+public sealed class WorldUnitPlacementDefinition
+{
+    public string InstanceId { get; set; } = string.Empty;
+    public string UnitId { get; set; } = string.Empty;
+    public int LocalX { get; set; }
+    public int LocalY { get; set; }
+    public string FactionOverride { get; set; } = string.Empty;
+    public string ControllerOverride { get; set; } = string.Empty;
+    public string DeckIdOverride { get; set; } = string.Empty;
+    public bool Enabled { get; set; } = true;
+}
+
+/// <summary>块内稀疏装饰。运行时用简单几何体占位，不引入美术资源。</summary>
+public sealed class WorldDecorationDefinition
+{
+    public string Id { get; set; } = string.Empty;
+    public string Definition { get; set; } = string.Empty;
+    public int LocalX { get; set; }
+    public int LocalY { get; set; }
+    public int Rotation { get; set; }
 }
 
 /// <summary>按大世界坐标生成高度，保证相邻关卡接缝处高度连续。</summary>
@@ -66,6 +153,8 @@ public static class WorldTerrain
 {
     public const int MinHeight = -1;
     public const int MaxHeight = 2;
+    /// <summary>一层高度对应的世界 Y。地形方块高度是 0.5，抬高/降低一格就移动这么多。</summary>
+    public const float StepY = 0.5f;
 
     /// <summary>为缺高度的关卡按同一张大世界坡度填 10x10，使边界必然相接。</summary>
     public static void FillMissingHeights(WorldDefinition world)
@@ -87,6 +176,9 @@ public static class WorldTerrain
                 }
             }
         }
+
+        foreach (StageDefinition stage in world.Stages)
+            stage.EnsureGrids(tw, th);
     }
 
     /// <summary>西低东高、南侧略降一层，范围夹在 -1 到 2。</summary>
