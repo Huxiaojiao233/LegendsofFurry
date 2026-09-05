@@ -50,7 +50,6 @@ public class BoardGenerator : MonoBehaviour
         new Dictionary<Vector2Int, Unit>();
     private readonly List<GameObject> decorations = new List<GameObject>();
     private Dictionary<string, GameObject> terrainPrefabLookup;
-    private WorldChunkManager chunkManager;
 
     public int Width => cells == null ? width : cells.GetLength(0);
     public int Height => cells == null ? height : cells.GetLength(1);
@@ -179,7 +178,6 @@ public class BoardGenerator : MonoBehaviour
         IsWorldBoard = true;
         GenerateBoard();
         SpawnDecorations();
-        EnsureChunkManager().Rebuild(this);
     }
 
     public void SetMovementFilter(Func<int, int, bool> filter)
@@ -542,15 +540,6 @@ public class BoardGenerator : MonoBehaviour
                 decorations.Add(WorldDecorationCatalog.Spawn(deco, cell.transform));
             }
         }
-    }
-
-    private WorldChunkManager EnsureChunkManager()
-    {
-        if (chunkManager == null)
-            chunkManager = GetComponent<WorldChunkManager>();
-        if (chunkManager == null)
-            chunkManager = gameObject.AddComponent<WorldChunkManager>();
-        return chunkManager;
     }
 
     [Serializable]

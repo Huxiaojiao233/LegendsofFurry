@@ -112,7 +112,6 @@ public sealed class WorldPlaySession : MonoBehaviour
         if (RunSession.HasActive && Keyboard.current != null && Keyboard.current.uKey.wasPressedThisFrame)
         {
             RunSession.DebugUnlockAllStages(world);
-            RestoreAllCellsForDebug();
             RevealAdjacent(CurrentStage);
             ApplyFog();
             pendingMessage = "测试：已解锁并揭示全部关卡（U）。";
@@ -477,23 +476,6 @@ public sealed class WorldPlaySession : MonoBehaviour
         }
 
         cloudCover?.Refresh(world, current, IsCombat);
-        board.GetComponent<WorldChunkManager>()?.RefreshNow();
-    }
-
-    private void RestoreAllCellsForDebug()
-    {
-        if (board == null) return;
-        BoardCell[] cells = board.GetComponentsInChildren<BoardCell>(true);
-        for (int i = 0; i < cells.Length; i++)
-        {
-            BoardCell cell = cells[i];
-            if (cell == null) continue;
-            cell.gameObject.SetActive(true);
-            cell.transform.localPosition = cell.RestLocalPosition;
-            cell.transform.localScale = cell.RestLocalScale;
-        }
-
-        board.RebuildFoundationWalls(false);
     }
 
     private void EnsureCloudCover()
