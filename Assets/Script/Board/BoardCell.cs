@@ -23,6 +23,8 @@ public class BoardCell : MonoBehaviour
     public string StageId { get; private set; }
     public int Height { get; private set; }
     public string TerrainId { get; private set; }
+    /// <summary>由世界迷雾/关卡状态决定的基础地形可见性。Chunk LOD 不会覆盖这个状态。</summary>
+    public bool BaseTerrainVisible { get; private set; } = true;
 
     public void Initialize(int x, int y, string stageId = null, int height = 0, string terrainId = null)
     {
@@ -30,6 +32,7 @@ public class BoardCell : MonoBehaviour
         StageId = stageId ?? string.Empty;
         Height = height;
         TerrainId = terrainId ?? string.Empty;
+        BaseTerrainVisible = true;
         name = string.IsNullOrEmpty(StageId) ? $"Cell_{x}_{y}" : $"Cell_{StageId}_{x}_{y}";
         terrainRenderers = null;
         RestLocalPosition = transform.localPosition;
@@ -42,12 +45,49 @@ public class BoardCell : MonoBehaviour
     /// <summary>开关地形网格显示（迷雾/战外关卡隐藏），不改材质颜色。</summary>
     public void SetTerrainVisible(bool visible)
     {
+        BaseTerrainVisible = visible;
         EnsureTerrainRenderers();
         if (terrainRenderers == null) return;
         for (int i = 0; i < terrainRenderers.Length; i++)
         {
             if (terrainRenderers[i] != null)
                 terrainRenderers[i].enabled = visible;
+        }
+    }
+
+    /// <summary>Chunk LOD 用：切换地形之外的小型装饰，不影响逻辑格和碰撞体。</summary>
+    public void SetSmallDecorationsVisible(bool visible)
+    {
+        EnsureTerrainRenderers();
+        Renderer[] all = GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < all.Length; i++)
+        {
+            Renderer renderer = all[i];
+            if (renderer == null || IsTerrainRenderer(renderer)) continue;
+            renderer.enabled = visible;
+        }
+    }
+
+    /// <summary>Chunk LOD 用：在基础可见性之上隐藏/恢复所有地形渲染器。</summary>
+    public void SetChunkTerrainVisible(bool visible)
+    {
+        EnsureTerrainRenderers();
+        if (terrainRenderers == null) return;
+        bool shouldShow = visible && BaseTerrainVisible;
+        for (int i = 0; i < terrainRenderers.Length; i++)
+            if (terrainRenderers[i] != null) terrainRenderers[i].enabled = shouldShow;
+    }
+
+    /// <summary>远景 Chunk 不参与鼠标射线，逻辑寻路仍使用 BoardCell 数据。</summary>
+    public void SetChunkColliderEnabled(bool enabled)
+    {
+        Collider[] colliders = GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider collider = colliders[i];
+            if (collider == null || collider.GetComponentInParent<WorldDecorationVisual>() != null)
+                continue;
+            collider.enabled = enabled;
         }
     }
 
@@ -129,6 +169,7 @@ public class BoardCell : MonoBehaviour
     private static bool IsTerrainRenderer(Renderer renderer)
     {
         if (renderer == null || renderer is LineRenderer) return false;
+        if (renderer.GetComponentInParent<WorldDecorationVisual>() != null) return false;
         string objectName = renderer.gameObject.name;
         return objectName != HighlightName &&
                objectName != "HoverHighlight" &&

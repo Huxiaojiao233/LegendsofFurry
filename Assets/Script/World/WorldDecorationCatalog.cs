@@ -142,6 +142,8 @@ public static class WorldDecorationCatalog
             obj = SpawnFallback(deco, parent);
         }
 
+        if (obj.GetComponent<WorldDecorationVisual>() == null)
+            obj.AddComponent<WorldDecorationVisual>();
         DisableColliders(obj);
         return obj;
     }
