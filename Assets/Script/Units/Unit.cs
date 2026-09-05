@@ -17,8 +17,8 @@ public class Unit : MonoBehaviour, IContentInstance<UnitDefinition>
     [Header("阵营")]
     [SerializeField] private UnitFaction faction = UnitFaction.Player;
 
-    [Header("棋子高度")]
-    [SerializeField] private float heightOffset = 0f;
+    /// <summary>静止单位相对格子地形高度的抬升。</summary>
+    private const float StandAboveTerrain = 0.5f;
 
     [Header("移动动画")]
     [SerializeField] private float moveDuration = 0.35f;
@@ -122,7 +122,7 @@ public class Unit : MonoBehaviour, IContentInstance<UnitDefinition>
         NotifyStatsChanged();
     }
 
-    /// <summary>Binds this scene instance to an authored character and applies its base combat values.</summary>
+    /// <summary>Binds this scene instance to an authored unit and applies its base combat values.</summary>
     public void ConfigureCombatant(UnitDefinition definition)
     {
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
@@ -211,8 +211,12 @@ public class Unit : MonoBehaviour, IContentInstance<UnitDefinition>
             return;
         }
 
+        int before = currentHealth;
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
+        int gained = currentHealth - before;
         NotifyStatsChanged();
+        if (gained > 0)
+            CombatEventBus.Shared.Publish(new HealResolvedEvent(null, this, gained));
     }
 
     public void AddArmor(int amount)
@@ -226,6 +230,7 @@ public class Unit : MonoBehaviour, IContentInstance<UnitDefinition>
         }
         armor += amount;
         NotifyStatsChanged();
+        CombatEventBus.Shared.Publish(new ArmorGainedEvent(null, this, amount));
     }
 
     /// <summary>承受伤害。护甲会优先吸收伤害，返回实际损失的生命值。</summary>
@@ -277,7 +282,7 @@ public class Unit : MonoBehaviour, IContentInstance<UnitDefinition>
             }
         }
 
-        bool bypassArmor = damageType == DamageType.Dark || damageType == DamageType.Poison || damageType == DamageType.True;
+        bool bypassArmor = damageType == DamageType.Dark || damageType == DamageType.Poison || damageType == DamageType.Direct;
         int absorbed = bypassArmor ? 0 : Mathf.Min(armor, amount);
         resolution.FinalDamage = amount;
         resolution.AbsorbedByArmor = absorbed;
@@ -427,14 +432,11 @@ public class Unit : MonoBehaviour, IContentInstance<UnitDefinition>
         }
     }
 
-    /// <summary>棋子轴心在底部中心，站到格子渲染包围盒顶面。</summary>
+    /// <summary>静止站立：地形高度（格子世界 Y）+ StandAboveTerrain。</summary>
     private Vector3 StandPositionOn(BoardCell cell)
     {
         Vector3 position = cell.transform.position;
-        Renderer renderer = cell.GetComponent<Renderer>();
-        if (renderer == null) renderer = cell.GetComponentInChildren<Renderer>();
-        position.y = renderer != null ? renderer.bounds.max.y : position.y;
-        position.y += heightOffset;
+        position.y = cell.transform.position.y + StandAboveTerrain;
         return position;
     }
 

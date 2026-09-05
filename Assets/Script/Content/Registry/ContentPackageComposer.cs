@@ -166,7 +166,7 @@ public static class ContentPackageComposer
         GameSettings = source.GameSettings
     };
 
-    /// <summary>后加载的包只覆盖已填写的战斗参数；空角色 ID 不得清掉前一层编制。</summary>
+    /// <summary>后加载的包只覆盖已填写的战斗参数；空单位 ID 不得清掉前一层编制。</summary>
     private static GameSettingsDefinition OverlayGameSettings(GameSettingsDefinition current, GameSettingsDefinition incoming)
     {
         current ??= new GameSettingsDefinition();

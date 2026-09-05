@@ -360,7 +360,7 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
 
         if (forcedCard != null && view != forcedCard) return;
         if (targetingCard == view) { CancelTargeting(); return; }
-        if (IsTargeting) CancelTargeting();
+        if (IsTargeting) CancelTargeting(false);
 
         if (view.Data.unplayable)
         {
@@ -386,6 +386,9 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
             Action<Unit> completed = pendingUnitSelection;
             ClearPendingUnitSelection();
             completed(target);
+            if (BattleFlow.CanPlayerAct &&
+                (boardClickController == null || !boardClickController.IsResolvingFreeMove))
+                boardClickController?.ResumeSuspendedFreeMove();
             return true;
         }
 
@@ -409,12 +412,14 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
     }
 
     /// <summary>取消卡牌或独立棋子选择，并清除卡牌待命状态及全部攻击范围高亮。</summary>
-    public void CancelTargeting()
+    public void CancelTargeting(bool resumeFreeMove = true)
     {
         ClearPendingUnitSelection();
         if (targetingCard == null)
         {
             boardClickController?.ClearAttackRange();
+            if (resumeFreeMove && BattleFlow.CanPlayerAct)
+                boardClickController?.ResumeSuspendedFreeMove();
             return;
         }
 
@@ -429,6 +434,8 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
             PresentNextForcedCard();
         }
         LayoutHand();
+        if (resumeFreeMove && BattleFlow.CanPlayerAct)
+            boardClickController?.ResumeSuspendedFreeMove();
     }
 
     /// <summary>
@@ -708,7 +715,11 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
             result.ExecutionContext?.CompletePendingInteraction();
             continuation();
         });
-        else continuation();
+        else
+        {
+            if (BattleFlow.CanPlayerAct) boardClickController?.ResumeSuspendedFreeMove();
+            continuation();
+        }
         return true;
     }
 
@@ -718,6 +729,7 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
         Unit caster = ResolveActingUnit();
         targetingCard = view;
         view.SetAwaitingTarget(true);
+        boardClickController.SuspendFreeMove();
         boardClickController.ClearSelection();
         ContentRuleQuery rangeQuery = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
             ContentRuleQueryKeys.TargetRange, caster, null, view.Data.range, view.Instance.Definition));
@@ -808,10 +820,11 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
     /// <summary>在棋盘上进入统一棋子选择模式，成功点击后自动清理所有范围高亮。</summary>
     private void BeginBoardUnitSelection(Func<Unit, bool> validator, Action<Unit> completed, int range)
     {
-        CancelTargeting();
+        CancelTargeting(false);
         pendingUnitValidator = validator;
         pendingUnitSelection = completed;
         Unit caster = ResolveActingUnit();
+        boardClickController?.SuspendFreeMove();
         boardClickController?.ClearSelection();
         boardClickController?.ShowAttackRange(caster, Mathf.Max(0, range));
         Debug.Log("请直接点击棋盘上的目标棋子；右键可以取消。", this);
@@ -984,7 +997,9 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
         rect.pivot = new Vector2(1f, 0.5f);
         rect.anchoredPosition = new Vector2(-24f, 0f);
         rect.sizeDelta = new Vector2(360f, 230f);
-        detailPanel.GetComponent<Image>().color = Color.white;
+        Image panelImage = detailPanel.GetComponent<Image>();
+        panelImage.sprite = WhiteUiSprite();
+        panelImage.color = Color.white;
         detailTitle = CreateText("Title", detailPanel.transform, 26f);
         detailDescription = CreateText("Description", detailPanel.transform, 20f);
         SetRect(detailTitle.rectTransform, new Vector2(0f, 0.72f), Vector2.one, new Vector2(14f, 0f), new Vector2(-14f, -8f));
@@ -1006,7 +1021,9 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
         RectTransform panelRect = (RectTransform)panel.transform;
         panelRect.anchorMin = panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.sizeDelta = new Vector2(560f, 560f);
-        panel.GetComponent<Image>().color = Color.white;
+        Image panelImage = panel.GetComponent<Image>();
+        panelImage.sprite = WhiteUiSprite();
+        panelImage.color = Color.white;
         TMP_Text heading = CreateText("Heading", panel.transform, 28f);
         SetRect(heading.rectTransform, new Vector2(0f, 0.88f), Vector2.one, new Vector2(18f, 0f), new Vector2(-18f, -10f));
         heading.text = title;
@@ -1059,6 +1076,21 @@ public class HandCardSystem : MonoBehaviour, IContentCardZoneService, IContentTa
     {
         return ContentRuntime.IsLoaded && ContentRuntime.Registry.TryGetRarity(rarityId, out RarityDefinition rarity)
             ? rarity.DisplayName : rarityId;
+    }
+
+    private static Sprite whiteUiSprite;
+
+    private static Sprite WhiteUiSprite()
+    {
+        if (whiteUiSprite != null) return whiteUiSprite;
+        Texture2D texture = Texture2D.whiteTexture;
+        whiteUiSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        whiteUiSprite.name = "HandCardWhiteUi";
+        return whiteUiSprite;
     }
 
     private static Canvas FindScreenCanvas()

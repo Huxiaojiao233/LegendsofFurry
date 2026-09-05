@@ -54,6 +54,7 @@ public sealed class StatusDefinition : IContentDefinition
     public string StackingPolicy { get; set; } = "add";
     public string DurationPolicy { get; set; } = "none";
     public bool Enabled { get; set; } = true;
+    public List<string> ApplyOnTerrainIds { get; set; } = new List<string>();
     public List<BehaviorDefinition> Behaviors { get; set; } = new List<BehaviorDefinition>();
 
     /// <summary>返回状态在注册表和行为归属中的类型。</summary>

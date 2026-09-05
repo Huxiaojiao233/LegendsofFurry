@@ -58,6 +58,9 @@ public sealed class CardBehaviorBaselineTests
     [Test]
     public void StatusStackCapsAndColdConversionStayStable()
     {
+        if (!ContentRuntime.IsLoaded)
+            ContentRuntime.BindComposedSnapshotForEditorTests();
+
         UnityEngine.GameObject owner = new UnityEngine.GameObject("CombatantStateBaselineOwner");
         try
         {
@@ -102,7 +105,15 @@ public sealed class CardBehaviorBaselineTests
         Assert.That(slime.Capabilities, Does.Contain("wading"));
         UnitDefinition taigao = registry.GetUnit("taigao");
         Assert.That(taigao.IsBoss && taigao.Recruitable && taigao.CanJoinParty, Is.True);
+        Assert.That(taigao.BossPhases, Has.Count.EqualTo(2));
+        Assert.That(taigao.BossPhases[1].AiProfileId, Is.EqualTo("desperate"));
+        Assert.That(taigao.BossPhases[1].AiOverrides.KillWeight, Is.EqualTo(2f));
+        Assert.That(float.IsNaN(taigao.BossPhases[1].AiOverrides.AttackWeight), Is.True);
         Assert.That(registry.Statuses.Single(item => item.StatusId == "wet").DisplayName, Is.EqualTo("潮湿"));
+        Assert.That(registry.Statuses.Single(item => item.StatusId == "wet").ApplyOnTerrainIds,
+            Does.Contain("base.water"));
+        Assert.That(registry.GetDeck("slime_standard").Entries.Sum(item => item.Amount), Is.EqualTo(18));
+        Assert.That(registry.GetCard("slime_charge").Tags, Does.Contain("attack"));
         Assert.That(registry.ClassProfiles, Has.Count.EqualTo(5));
         Assert.That(registry.GameSettings.HandLimit, Is.EqualTo(10));
         Assert.That(registry.ClassProfiles.Single(item => item.ClassId == "ranger").Behaviors
@@ -332,7 +343,7 @@ public sealed class CardBehaviorBaselineTests
             Unit target = targetObject.AddComponent<Unit>();
             source.ConfigureCombatant("来源", 20, 1, 1);
             target.ConfigureCombatant("目标", 20, 1, 1);
-            target.TakeTypedDamage(5, DamageType.True, source, false);
+            target.TakeTypedDamage(5, DamageType.Direct, source, false);
             RecordingCardDrawService drawService = new RecordingCardDrawService();
             CardDefinition definition = CreatePhaseTwoEffectSequenceCard();
             CardPlayResult result = new CardPlayResult();

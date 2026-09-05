@@ -14,7 +14,7 @@ public static class DamageTypeIds
     public const string Light = "light";
     public const string Dark = "dark";
     public const string Poison = "poison";
-    public const string True = "true";
+    public const string Direct = "direct";
 
     /// <summary>Converts a compatibility enum value to its authored stable ID.</summary>
     public static string FromLegacy(DamageType value) => value.ToString().ToLowerInvariant();

@@ -53,6 +53,13 @@ public sealed class UtilityAiController : MonoBehaviour, IActionPointPool, ICont
                     yield return MoveToward(best.Target ?? NearestOpponent(), result.FreeMoveSteps, 0, stepPause);
                 if (result.EndTurn) break;
             }
+            else if (best.Destination.HasValue)
+            {
+                Vector2Int dest = best.Destination.Value;
+                if (!TrySpendActionPoints(1)) break;
+                if (!owner.MoveToAnimated(dest.x, dest.y, this)) break;
+                while (owner.IsMoving) yield return null;
+            }
             else
             {
                 yield return MoveToward(best.Target, 1, 1, stepPause);
@@ -62,6 +69,75 @@ public sealed class UtilityAiController : MonoBehaviour, IActionPointPool, ICont
 
         discard.AddRange(hand);
         hand.Clear();
+        CachedIntent = default;
+    }
+
+    /// <summary>最近一次 PeekIntent 的缓存，供 HUD 与标记读取。</summary>
+    public EnemyIntentPreview CachedIntent { get; private set; }
+
+    /// <summary>在不改动真实牌区的前提下，预览下一回合最优先行动。</summary>
+    public bool TryPeekIntent(out EnemyIntentPreview preview)
+    {
+        preview = default;
+        EnsureDeck();
+        if (owner == null || !owner.IsAlive) return false;
+
+        List<CardInstance> handSnap = new List<CardInstance>(hand);
+        List<CardInstance> drawSnap = new List<CardInstance>(draw);
+        List<CardInstance> discardSnap = new List<CardInstance>(discard);
+        List<CardInstance> exhaustSnap = new List<CardInstance>(exhaust);
+        int actionSnap = CurrentActionPoints;
+        int maxSnap = maximumActionPoints;
+
+        maximumActionPoints = owner.State.EffectiveActionPointMaximum(
+            Mathf.Max(0, owner.Definition?.InitialActionPoints ?? 3));
+        CurrentActionPoints = maximumActionPoints;
+        if (hand.Count == 0)
+            DrawCards(owner.Definition?.DrawPerTurn ?? 5, true);
+
+        AiCandidate best = BuildCandidates().OrderByDescending(item => item.Score)
+            .ThenBy(item => item.StableKey, StringComparer.Ordinal).FirstOrDefault();
+        preview = ToIntent(best);
+        CachedIntent = preview;
+
+        hand.Clear();
+        hand.AddRange(handSnap);
+        draw.Clear();
+        draw.AddRange(drawSnap);
+        discard.Clear();
+        discard.AddRange(discardSnap);
+        exhaust.Clear();
+        exhaust.AddRange(exhaustSnap);
+        CurrentActionPoints = actionSnap;
+        maximumActionPoints = maxSnap;
+        return preview.HasValue;
+    }
+
+    private EnemyIntentPreview ToIntent(AiCandidate best)
+    {
+        if (best == null || best.Score <= 0f || owner == null)
+            return new EnemyIntentPreview(EnemyIntentPreview.Kind.None, string.Empty, string.Empty, string.Empty,
+                null, null, owner != null ? owner.Position : Vector2Int.zero);
+
+        if (best.Card != null)
+        {
+            string cardName = best.Card.Data != null ? best.Card.Data.cardName : best.Card.Definition.CardId;
+            string targetName = best.Target != null ? best.Target.DisplayName : "自身";
+            string label = $"{cardName} → {targetName}";
+            return new EnemyIntentPreview(EnemyIntentPreview.Kind.PlayCard, label, best.Card.Definition.CardId,
+                cardName, best.Target, null, owner.Position);
+        }
+
+        if (best.Destination.HasValue)
+        {
+            string label = best.Target != null ? $"后撤 / 拉开与 {best.Target.DisplayName}" : "后撤";
+            return new EnemyIntentPreview(EnemyIntentPreview.Kind.Retreat, label, string.Empty, string.Empty,
+                best.Target, best.Destination, owner.Position);
+        }
+
+        string approach = best.Target != null ? $"靠近 {best.Target.DisplayName}" : "移动";
+        return new EnemyIntentPreview(EnemyIntentPreview.Kind.Approach, approach, string.Empty, string.Empty,
+            best.Target, null, owner.Position);
     }
 
     private IEnumerable<AiCandidate> BuildCandidates()
@@ -86,11 +162,24 @@ public sealed class UtilityAiController : MonoBehaviour, IActionPointPool, ICont
         }
 
         Unit opponent = NearestOpponent();
-        if (opponent != null && CanMoveToward(opponent))
+        if (opponent != null && CurrentActionPoints > 0)
         {
             int distance = Manhattan(owner, opponent);
-            float score = weights.Approach * Mathf.Max(0.1f, distance - weights.PreferredRange + 1f);
-            yield return new AiCandidate(null, opponent, score);
+            if (distance > weights.PreferredRange && CanMoveToward(opponent))
+            {
+                float score = weights.Approach * Mathf.Max(0.1f, distance - weights.PreferredRange + 1f);
+                yield return new AiCandidate(null, opponent, score);
+            }
+            Vector2Int? away = FindStepAwayFrom(opponent);
+            float healthRatio = owner.CurrentHealth / (float)Mathf.Max(1, owner.MaxHealth);
+            bool wantSpace = distance < weights.PreferredRange;
+            bool wantSafety = healthRatio <= weights.LowHealthThreshold;
+            if (away.HasValue && weights.Retreat > 0f && (wantSpace || wantSafety))
+            {
+                float score = weights.Retreat * (wantSafety ? 1.4f : 1f) *
+                              Mathf.Max(0.1f, weights.PreferredRange - distance + 1f);
+                yield return new AiCandidate(null, opponent, score, away);
+            }
         }
     }
 
@@ -109,6 +198,8 @@ public sealed class UtilityAiController : MonoBehaviour, IActionPointPool, ICont
         result.Success = ContentCardEffectExecutor.TryExecuteOnPlay(context);
         hand.Remove(card);
         (card.Definition.ExhaustOnPlay || card.Data.exhaust ? exhaust : discard).Add(card);
+        if (result.Success)
+            CombatEventBus.Shared.Publish(new CardPlayedEvent(owner, card, target));
         return result.Success;
     }
 
@@ -192,6 +283,24 @@ public sealed class UtilityAiController : MonoBehaviour, IActionPointPool, ICont
     private static int Manhattan(Unit a, Unit b) => a == null || b == null ? int.MaxValue :
         Mathf.Abs(a.Position.x - b.Position.x) + Mathf.Abs(a.Position.y - b.Position.y);
 
+    private Vector2Int? FindStepAwayFrom(Unit opponent)
+    {
+        if (owner?.Board == null || opponent == null) return null;
+        Vector2Int[] directions = { Vector2Int.up, Vector2Int.right, Vector2Int.down, Vector2Int.left };
+        Vector2Int best = owner.Position;
+        int bestDistance = Manhattan(owner, opponent);
+        foreach (Vector2Int direction in directions)
+        {
+            Vector2Int next = owner.Position + direction;
+            if (!owner.Board.CanStep(owner.Position, next, owner)) continue;
+            int distance = Mathf.Abs(next.x - opponent.Position.x) + Mathf.Abs(next.y - opponent.Position.y);
+            if (distance <= bestDistance) continue;
+            bestDistance = distance;
+            best = next;
+        }
+        return best == owner.Position ? (Vector2Int?)null : best;
+    }
+
     private Unit NearestOpponent()
     {
         return BattleRoster.Instance?.FindNearestLivingOpponent(owner) ?? GetUnits()
@@ -201,6 +310,28 @@ public sealed class UtilityAiController : MonoBehaviour, IActionPointPool, ICont
 
     private bool CanPay(CardInstance card) => card?.Definition != null && ContentCardPlayRules.TryCalculateCost(
         card.Definition, CurrentActionPoints, owner.State.Mana, card.FreePlay, out _, out _);
+
+    public void EnsureDeckPublic() => EnsureDeck();
+
+    /// <summary>复制下回合将会抽到的手牌预览，不永久改动牌区。</summary>
+    public List<CardInstance> CopyUpcomingHandPreview()
+    {
+        EnsureDeck();
+        if (hand.Count > 0) return new List<CardInstance>(hand);
+
+        List<CardInstance> handSnap = new List<CardInstance>(hand);
+        List<CardInstance> drawSnap = new List<CardInstance>(draw);
+        List<CardInstance> discardSnap = new List<CardInstance>(discard);
+        DrawCards(owner?.Definition?.DrawPerTurn ?? 5, true);
+        List<CardInstance> preview = new List<CardInstance>(hand);
+        hand.Clear();
+        hand.AddRange(handSnap);
+        draw.Clear();
+        draw.AddRange(drawSnap);
+        discard.Clear();
+        discard.AddRange(discardSnap);
+        return preview;
+    }
 
     private void EnsureDeck()
     {
@@ -324,11 +455,14 @@ public sealed class UtilityAiController : MonoBehaviour, IActionPointPool, ICont
 
     private sealed class AiCandidate
     {
-        public AiCandidate(CardInstance card, Unit target, float score)
-        { Card = card; Target = target; Score = score; StableKey = (card?.Definition.CardId ?? "move") + ":" + (target?.InstanceId ?? ""); }
+        public AiCandidate(CardInstance card, Unit target, float score, Vector2Int? destination = null)
+        { Card = card; Target = target; Score = score; Destination = destination;
+            StableKey = (card?.Definition.CardId ?? (destination.HasValue ? "retreat" : "move")) + ":" +
+                        (destination.HasValue ? destination.Value.x + "," + destination.Value.y : target?.InstanceId ?? ""); }
         public CardInstance Card { get; }
         public Unit Target { get; }
         public float Score { get; }
+        public Vector2Int? Destination { get; }
         public string StableKey { get; }
     }
 

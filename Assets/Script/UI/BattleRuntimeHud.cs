@@ -38,6 +38,8 @@ public class BattleRuntimeHud : MonoBehaviour
     private TMP_Text enemyNameText;
     private TMP_Text enemyHealthText;
     private TMP_Text enemyArmorText;
+    private TMP_Text enemyIntentText;
+    private TMP_Text enemyStatusText;
     private RectTransform enemyPanel;
     private CanvasGroup enemyPanelGroup;
     private Vector2 enemyPanelRest;
@@ -69,6 +71,10 @@ public class BattleRuntimeHud : MonoBehaviour
         CreateClassAbilityButton();
         BindPlayerAndEquipment();
         BindSelfPortrait();
+        if (GetComponent<BattleCombatLogView>() == null &&
+            (FindDescendant(transform, "BattleInfomation") != null ||
+             FindDescendant(transform, "BattleInformation") != null))
+            gameObject.AddComponent<BattleCombatLogView>();
         lastCombat = IsInCombat();
         if (lastCombat) SetEnemyPanelVisible(true, false);
         RefreshInterface();
@@ -361,9 +367,12 @@ public class BattleRuntimeHud : MonoBehaviour
         equipmentTooltipRect.pivot = new Vector2(0f, 0f);
         equipmentTooltipRect.sizeDelta = new Vector2(280f, 140f);
         Image background = panel.GetComponent<Image>();
-        background.color = new Color(0.08f, 0.09f, 0.12f, 0.94f);
+        // 无 Sprite 时 Image 不绘制，深色底+深色字会叠在暗 UI 上完全看不清。
+        background.sprite = WhiteUiSprite();
+        background.color = new Color(0.96f, 0.96f, 0.97f, 0.98f);
         background.raycastTarget = false;
         equipmentTooltipText = CreateText("Body", panel.transform, 18f);
+        equipmentTooltipText.color = new Color(0.12f, 0.12f, 0.14f, 1f);
         equipmentTooltipText.richText = true;
         equipmentTooltipText.alignment = TextAlignmentOptions.TopLeft;
         equipmentTooltipText.rectTransform.anchorMin = Vector2.zero;
@@ -371,6 +380,21 @@ public class BattleRuntimeHud : MonoBehaviour
         equipmentTooltipText.rectTransform.offsetMin = new Vector2(12f, 10f);
         equipmentTooltipText.rectTransform.offsetMax = new Vector2(-12f, -10f);
         panel.SetActive(false);
+    }
+
+    private static Sprite whiteUiSprite;
+
+    private static Sprite WhiteUiSprite()
+    {
+        if (whiteUiSprite != null) return whiteUiSprite;
+        Texture2D texture = Texture2D.whiteTexture;
+        whiteUiSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        whiteUiSprite.name = "BattleHudWhiteUi";
+        return whiteUiSprite;
     }
 
     private static string FormatEquipmentTooltip(EquipmentDefinition item)
@@ -522,6 +546,8 @@ public class BattleRuntimeHud : MonoBehaviour
         enemyNameText ??= FindChildText(enemyPanel, "T_Enemy_Name", "T_Name");
         enemyHealthText ??= FindChildText(enemyPanel, "T_Enemy_HP", "T_HP");
         enemyArmorText ??= FindChildText(enemyPanel, "T_Enemy_Armor", "T_Armor");
+        enemyIntentText ??= FindChildText(enemyPanel, "T_Want");
+        enemyStatusText ??= FindChildText(enemyPanel, "T_Status");
     }
 
     private static Image FindChildImage(Transform root, params string[] names)
@@ -604,31 +630,72 @@ public class BattleRuntimeHud : MonoBehaviour
     private void RefreshEnemyCombatant()
     {
         Unit enemy = BattleUnits.PrimaryEnemy;
-        if (enemy == boundEnemy && enemy != null)
+        if (enemy != boundEnemy)
         {
-            WriteUnitVitals(enemy, enemyHealthText, enemyArmorText);
-            return;
+            boundEnemy = enemy;
+            if (enemy == null)
+            {
+                if (enemyNameText != null) enemyNameText.text = string.Empty;
+                WriteUnitVitals(null, enemyHealthText, enemyArmorText);
+                WriteEnemyIntent(null);
+                WriteEnemyStatus(null);
+                return;
+            }
+
+            Sprite portrait = TokenVisualRuntime.LoadPortraitSprite(enemy.Definition);
+            if (enemyAvatar != null && portrait != null)
+            {
+                enemyAvatar.sprite = portrait;
+                enemyAvatar.preserveAspect = true;
+                enemyAvatar.color = Color.white;
+            }
+
+            enemy.BindCombatUI(enemyHealthText, enemyArmorText);
         }
 
-        boundEnemy = enemy;
         if (enemy == null)
         {
             if (enemyNameText != null) enemyNameText.text = string.Empty;
             WriteUnitVitals(null, enemyHealthText, enemyArmorText);
+            WriteEnemyIntent(null);
+            WriteEnemyStatus(null);
             return;
         }
 
         if (enemyNameText != null) enemyNameText.text = enemy.DisplayName;
-        Sprite portrait = TokenVisualRuntime.LoadPortraitSprite(enemy.Definition);
-        if (enemyAvatar != null && portrait != null)
+        WriteEnemyIntent(enemy);
+        WriteEnemyStatus(enemy);
+        WriteUnitVitals(enemy, enemyHealthText, enemyArmorText);
+    }
+
+    private void WriteEnemyIntent(Unit enemy)
+    {
+        if (enemyIntentText == null) return;
+        if (enemy == null)
         {
-            enemyAvatar.sprite = portrait;
-            enemyAvatar.preserveAspect = true;
-            enemyAvatar.color = Color.white;
+            enemyIntentText.text = string.Empty;
+            return;
         }
 
-        enemy.BindCombatUI(enemyHealthText, enemyArmorText);
-        WriteUnitVitals(enemy, enemyHealthText, enemyArmorText);
+        UtilityAiController ai = enemy.GetComponent<UtilityAiController>();
+        enemyIntentText.text = ai != null && ai.CachedIntent.HasValue
+            ? ai.CachedIntent.Label
+            : "暂无";
+    }
+
+    private void WriteEnemyStatus(Unit enemy)
+    {
+        if (enemyStatusText == null) return;
+        if (enemy == null)
+        {
+            enemyStatusText.text = string.Empty;
+            return;
+        }
+
+        string summary = enemy.State != null ? enemy.State.GetSummary() : string.Empty;
+        enemyStatusText.text = string.IsNullOrWhiteSpace(summary) || summary == "暂无"
+            ? "暂无"
+            : summary;
     }
 
     private static void WriteUnitVitals(Unit unit, TMP_Text health, TMP_Text armor)

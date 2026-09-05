@@ -8,7 +8,7 @@
         10
     ],
     "startChunk": [
-        0,
+        2,
         2
     ],
     "startTile": [
@@ -23,5 +23,7 @@
         4,
         4
     ],
-    "startStageId": "start"
+    "startStageId": "start",
+    "seed": 559774,
+    "generatorId": "perlin.v1"
 }

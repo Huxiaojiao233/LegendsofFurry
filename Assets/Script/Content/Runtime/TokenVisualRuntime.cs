@@ -37,19 +37,10 @@ public static class TokenVisualRuntime
 
     private static Texture2D LoadPortrait(UnitDefinition definition)
     {
-        if (definition == null) return null;
-        string key = definition.PortraitKey;
-        if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(definition.UnitId))
-        {
-            key = "portrait." + definition.UnitId;
-        }
-
-        Texture2D texture = LoadTexture(key, "portrait");
-        if (texture == null && !string.IsNullOrWhiteSpace(key))
-        {
-            Debug.LogWarning($"棋子贴图未加载 [{definition.UnitId}]：{key}。");
-        }
-
+        if (definition == null || string.IsNullOrWhiteSpace(definition.PortraitKey)) return null;
+        Texture2D texture = LoadTexture(definition.PortraitKey, "portrait");
+        if (texture == null)
+            Debug.LogWarning($"棋子贴图未加载 [{definition.UnitId}]：{definition.PortraitKey}。");
         return texture;
     }
 

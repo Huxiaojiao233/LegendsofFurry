@@ -5,7 +5,7 @@ using LegendsOfFurry.Content.Runtime;
 using UnityEngine;
 
 /// <summary>
-/// 从 StreamingAssets/Content/Worlds 读取大地图。优先分块目录 world.json+chunks/，其次旧单文件。
+/// 从内容包 worlds/ 与 StreamingAssets/Content/Worlds 读取大地图。同 ID 时内容包覆盖本地。
 /// </summary>
 public static class WorldCatalog
 {

@@ -139,6 +139,7 @@ public sealed class ContentCardExecutionContext
     public IContentTargetQueryService TargetQueryService { get; }
     public ContentRuleQuery RuleQuery { get; }
     public ContentRuleQuerySession RuleQuerySession { get; }
+    public string EnteredTerrainId { get; set; } = string.Empty;
     public bool IsAwaitingInteraction { get; private set; }
     public string PendingInteractionNodeId { get; private set; }
     public string PendingInteractionKind { get; private set; }
@@ -836,7 +837,7 @@ public static class ContentCardEffectExecutor
     /// <summary>
     /// 将内容中的稳定伤害类型字符串映射到现有伤害管线枚举。
     /// </summary>
-    /// <param name="damageType">例如 normal、fire 或 true。</param>
+    /// <param name="damageType">例如 normal、fire 或 direct。</param>
     /// <returns>现有 Unit.TakeTypedDamage 使用的伤害类型。</returns>
     private static DamageType ParseDamageType(string damageType)
     {

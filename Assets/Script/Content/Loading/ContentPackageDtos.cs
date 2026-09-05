@@ -24,9 +24,9 @@ internal sealed class ContentPackageDto
     public AssetDefinitionDto[] assets;
     public ClassProfileDefinitionDto[] classProfiles;
     public UnitDefinitionDto[] units;
-    public UnitDefinitionDto[] characters;
     public AiProfileDefinitionDto[] aiProfiles;
     public EquipmentDefinitionDto[] equipment;
+    public WorldIndexDefinitionDto[] worlds;
     public GameSettingsDefinitionDto gameSettings;
 
     /// <summary>
@@ -47,7 +47,7 @@ internal sealed class ContentPackageDto
         ConvertItems(rarities, package.Rarities, item => item.ToContract());
         ConvertItems(assets, package.Assets, item => item.ToContract());
         ConvertItems(classProfiles, package.ClassProfiles, item => item.ToContract());
-        ConvertItems(units ?? characters, package.Units, item => item.ToContract());
+        ConvertItems(units, package.Units, item => item.ToContract());
         ConvertItems(aiProfiles, package.AiProfiles, item => item.ToContract());
         ConvertItems(equipment, package.Equipment, item => item.ToContract());
         package.GameSettings = gameSettings == null ? new GameSettingsDefinition() : gameSettings.ToContract();
@@ -310,6 +310,7 @@ internal sealed class StatusDefinitionDto
     public string stackingPolicy;
     public string durationPolicy;
     public bool enabled;
+    public string[] applyOnTerrainIds;
     public BehaviorDefinitionDto[] behaviors;
 
     /// <summary>将状态字段和状态行为映射为共享合同。</summary>
@@ -327,6 +328,7 @@ internal sealed class StatusDefinitionDto
             DurationPolicy = durationPolicy ?? "none",
             Enabled = enabled
         };
+        if (applyOnTerrainIds != null) status.ApplyOnTerrainIds.AddRange(applyOnTerrainIds);
         if (behaviors != null)
         {
             foreach (BehaviorDefinitionDto behavior in behaviors)
@@ -500,6 +502,17 @@ internal sealed class ClassTraitDefinitionDto
     };
 }
 
+/// <summary>表示发布 JSON 中的世界索引条目（完整地图在包内 worlds/ 目录）。</summary>
+[Serializable]
+internal sealed class WorldIndexDefinitionDto
+{
+    public string worldId;
+    public string displayName;
+    public string relativePath;
+    public int formatVersion;
+    public string mode;
+}
+
 /// <summary>表示发布 JSON 中的基础战斗参数。</summary>
 [Serializable]
 internal sealed class GameSettingsDefinitionDto
@@ -509,8 +522,6 @@ internal sealed class GameSettingsDefinitionDto
     public int drawPerTurn;
     public int baseActionPoints;
     public int baseMoveSteps;
-    public string playerCharacterId;
-    public string enemyCharacterId;
     public string playerUnitId;
     public string defaultWorldId;
 
@@ -519,7 +530,7 @@ internal sealed class GameSettingsDefinitionDto
     {
         HandLimit = handLimit, StartingHandSize = startingHandSize, DrawPerTurn = drawPerTurn,
         BaseActionPoints = baseActionPoints, BaseMoveSteps = baseMoveSteps,
-        PlayerUnitId = string.IsNullOrWhiteSpace(playerUnitId) ? playerCharacterId ?? string.Empty : playerUnitId,
+        PlayerUnitId = playerUnitId ?? string.Empty,
         DefaultWorldId = string.IsNullOrWhiteSpace(defaultWorldId) ? "demo" : defaultWorldId
     };
 }
@@ -529,7 +540,6 @@ internal sealed class GameSettingsDefinitionDto
 internal sealed class UnitDefinitionDto
 {
     public string unitId;
-    public string characterId;
     public string displayName;
     public string description;
     public int initialHealth;
@@ -548,7 +558,7 @@ internal sealed class UnitDefinitionDto
     public int drawPerTurn;
     public string deckId;
     public string aiProfileId;
-    public UnitAiTuningDefinitionDto aiOverrides;
+    public AiWeightOverrideDto[] aiOverrides;
     public BossPhaseDefinitionDto[] bossPhases;
     public string[] capabilities;
     public bool enabled;
@@ -560,7 +570,7 @@ internal sealed class UnitDefinitionDto
     {
         UnitDefinition definition = new UnitDefinition
         {
-            UnitId = string.IsNullOrWhiteSpace(unitId) ? characterId ?? string.Empty : unitId,
+            UnitId = unitId ?? string.Empty,
             DisplayName = displayName ?? string.Empty,
             Description = description ?? string.Empty, InitialHealth = initialHealth,
             BaseDamage = baseDamage, MoveSteps = moveSteps,
@@ -572,7 +582,7 @@ internal sealed class UnitDefinitionDto
             StartingHandSize = startingHandSize > 0 ? startingHandSize : 5,
             DrawPerTurn = drawPerTurn > 0 ? drawPerTurn : 5,
             DeckId = deckId ?? string.Empty, AiProfileId = aiProfileId ?? string.Empty,
-            AiOverrides = aiOverrides == null ? new UnitAiTuningDefinition() : aiOverrides.ToContract(),
+            AiOverrides = AiWeightOverrideDto.ToContract(aiOverrides),
             TokenFrameColor = tokenFrameColor ?? string.Empty, PortraitKey = portraitKey ?? string.Empty,
             Enabled = enabled, SortOrder = sortOrder
         };
@@ -586,24 +596,36 @@ internal sealed class UnitDefinitionDto
     }
 }
 
+/// <summary>
+/// JsonUtility 不能表达“缺省的 float”，稀疏覆盖必须写成键值数组，0 才能作为合法权重。
+/// </summary>
 [Serializable]
-internal sealed class UnitAiTuningDefinitionDto
+internal sealed class AiWeightOverrideDto
 {
-    public float attackWeight = float.NaN;
-    public float defenseWeight = float.NaN;
-    public float healingWeight = float.NaN;
-    public float approachWeight = float.NaN;
-    public float retreatWeight = float.NaN;
-    public float killWeight = float.NaN;
-    public float preferredRange = float.NaN;
-    public float lowHealthThreshold = float.NaN;
+    public string key;
+    public float value;
 
-    public UnitAiTuningDefinition ToContract() => new UnitAiTuningDefinition
+    public static UnitAiTuningDefinition ToContract(AiWeightOverrideDto[] entries)
     {
-        AttackWeight = attackWeight, DefenseWeight = defenseWeight, HealingWeight = healingWeight,
-        ApproachWeight = approachWeight, RetreatWeight = retreatWeight, KillWeight = killWeight,
-        PreferredRange = preferredRange, LowHealthThreshold = lowHealthThreshold
-    };
+        UnitAiTuningDefinition tuning = new UnitAiTuningDefinition();
+        if (entries == null) return tuning;
+        foreach (AiWeightOverrideDto entry in entries)
+        {
+            if (entry == null || string.IsNullOrWhiteSpace(entry.key)) continue;
+            switch (entry.key)
+            {
+                case "attackWeight": tuning.AttackWeight = entry.value; break;
+                case "defenseWeight": tuning.DefenseWeight = entry.value; break;
+                case "healingWeight": tuning.HealingWeight = entry.value; break;
+                case "approachWeight": tuning.ApproachWeight = entry.value; break;
+                case "retreatWeight": tuning.RetreatWeight = entry.value; break;
+                case "killWeight": tuning.KillWeight = entry.value; break;
+                case "preferredRange": tuning.PreferredRange = entry.value; break;
+                case "lowHealthThreshold": tuning.LowHealthThreshold = entry.value; break;
+            }
+        }
+        return tuning;
+    }
 }
 
 [Serializable]
@@ -611,13 +633,13 @@ internal sealed class BossPhaseDefinitionDto
 {
     public float maximumHealthRatio = 1f;
     public string aiProfileId;
-    public UnitAiTuningDefinitionDto aiOverrides;
+    public AiWeightOverrideDto[] aiOverrides;
 
     public BossPhaseDefinition ToContract() => new BossPhaseDefinition
     {
         MaximumHealthRatio = maximumHealthRatio,
         AiProfileId = aiProfileId ?? string.Empty,
-        AiOverrides = aiOverrides == null ? new UnitAiTuningDefinition() : aiOverrides.ToContract()
+        AiOverrides = AiWeightOverrideDto.ToContract(aiOverrides)
     };
 }
 
@@ -699,8 +721,6 @@ internal sealed class ContentManifestDto
     public int deckCount;
     public int unitCount;
     public int aiProfileCount;
-    // schema 2 兼容字段。
-    public int characterCount;
     public int equipmentCount;
 }
 

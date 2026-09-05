@@ -14,6 +14,8 @@ public class WorldHealthBar : MonoBehaviour
     private static readonly Quaternion BarRotation =
         Quaternion.LookRotation(Vector3.back, Vector3.up) * Quaternion.Euler(-90f, 0f, 0f);
 
+    private const float FixedWorldOffsetZ = -0.5f;
+
     [SerializeField] private Vector3 worldOffset = Vector3.zero;
 
     private Unit owner;
@@ -69,7 +71,10 @@ public class WorldHealthBar : MonoBehaviour
         }
 
         Transform displayTransform = displayObject.transform;
-        displayTransform.position = owner.transform.position + Vector3.up * BarLift() + worldOffset;
+        displayTransform.position = owner.transform.position
+            + Vector3.up * BarLift()
+            + new Vector3(0f, 0f, FixedWorldOffsetZ)
+            + worldOffset;
         displayTransform.rotation = BarRotation;
     }
 

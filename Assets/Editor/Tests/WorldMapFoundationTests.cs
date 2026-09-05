@@ -93,7 +93,48 @@ public sealed class WorldMapFoundationTests
     public void OneHeightLevelIsHalfAWorldUnit()
     {
         Assert.That(WorldTerrain.StepY, Is.EqualTo(0.5f));
-        Assert.That(WorldTerrain.MaxHeight * WorldTerrain.StepY, Is.EqualTo(1f));
+        Assert.That(WorldTerrain.MinHeight, Is.EqualTo(-5));
+        Assert.That(WorldTerrain.MaxHeight, Is.EqualTo(10));
+        Assert.That(WorldTerrain.MaxHeight * WorldTerrain.StepY, Is.EqualTo(5f));
+    }
+
+    [Test]
+    public void PerlinNoiseGenerationIsDeterministicForSameSeed()
+    {
+        WorldDefinition first = WorldMapIO.CreateBlank("noise-a", "噪声A", 2, 2, 10);
+        WorldDefinition second = WorldMapIO.CreateBlank("noise-b", "噪声B", 2, 2, 10);
+        WorldNoiseSettings settings = new WorldNoiseSettings { Seed = 4242 };
+        WorldNoiseGenerator.Generate(first, settings);
+        WorldNoiseGenerator.Generate(second, settings);
+        Assert.That(first.GeneratorId, Is.EqualTo(WorldNoiseGenerator.GeneratorId));
+        Assert.That(first.Seed, Is.EqualTo(4242));
+        Assert.That(WorldMapIO.Validate(first), Is.Empty);
+        Assert.That(first.Stages.Count, Is.EqualTo(second.Stages.Count));
+        for (int i = 0; i < first.Stages.Count; i++)
+        {
+            StageDefinition a = first.Stages[i];
+            StageDefinition b = second.Stages[i];
+            Assert.That(a.Heights, Is.EqualTo(b.Heights));
+            Assert.That(a.TerrainIds, Is.EqualTo(b.TerrainIds));
+            Assert.That(a.StageType, Is.EqualTo(b.StageType));
+            Assert.That(a.Decorations.Count, Is.EqualTo(b.Decorations.Count));
+            Assert.That(a.UnitPlacements.Count, Is.EqualTo(b.UnitPlacements.Count));
+        }
+
+        Assert.That(first.StartTileX, Is.EqualTo(second.StartTileX));
+        Assert.That(first.StartTileY, Is.EqualTo(second.StartTileY));
+        Assert.That(WorldTerrain.FindBorderMismatches(first), Is.Empty);
+    }
+
+    [Test]
+    public void HeightRangeClampsToEditorLimits()
+    {
+        WorldDefinition world = WorldMapIO.CreateBlank("height-clamp", "高度夹紧", 1, 1, 4);
+        StageDefinition stage = world.Stages[0];
+        stage.SetHeight(0, 0, 4, 4, -99);
+        stage.SetHeight(1, 0, 4, 4, 99);
+        Assert.That(stage.HeightAt(0, 0, 4, 4), Is.EqualTo(WorldTerrain.MinHeight));
+        Assert.That(stage.HeightAt(1, 0, 4, 4), Is.EqualTo(WorldTerrain.MaxHeight));
     }
 
     [Test]
@@ -122,9 +163,13 @@ public sealed class WorldMapFoundationTests
             ControllerOverride = "ai",
             Enabled = true
         });
+        source.Seed = 77;
+        source.GeneratorId = "hand";
         WorldMapIO.SaveChunked(source, folder);
         WorldDefinition loaded = WorldMapIO.LoadChunked(folder);
         Assert.That(loaded.WorldId, Is.EqualTo("roundtrip"));
+        Assert.That(loaded.Seed, Is.EqualTo(77));
+        Assert.That(loaded.GeneratorId, Is.EqualTo("hand"));
         Assert.That(loaded.Stages.Count, Is.EqualTo(4));
         Assert.That(WorldMapIO.Validate(loaded), Is.Empty);
         WorldCatalog.TryGetStageAt(loaded, 0, 0, out StageDefinition loadedStart);
@@ -221,16 +266,70 @@ public sealed class WorldMapFoundationTests
     [Test]
     public void AuthoredDemoFolderLoadsTwentyFiveChunks()
     {
-        string folder = Path.Combine(Application.streamingAssetsPath, "Content", "Worlds", "demo");
-        if (!File.Exists(Path.Combine(folder, "world.json")))
-            Assert.Ignore("demo 分块目录还没写到 StreamingAssets。");
+        string packWorld = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+            Application.dataPath, "..", "..", "ContentProjects", "lofe_core", "Worlds", "demo"));
+        string streaming = Path.Combine(Application.streamingAssetsPath, "Content", "Worlds", "demo");
+        string folder = File.Exists(Path.Combine(packWorld, "world.json")) ? packWorld
+            : File.Exists(Path.Combine(streaming, "world.json")) ? streaming : null;
+        if (folder == null)
+            Assert.Ignore("demo 世界还没写到内容工程 Worlds 或 StreamingAssets。");
         WorldDefinition world = WorldMapIO.LoadChunked(folder);
         Assert.That(world.Stages.Count, Is.EqualTo(25));
         Assert.That(world.StartStageId, Is.EqualTo("start"));
         Assert.That(WorldMapIO.Validate(world), Is.Empty);
         WorldCatalog.TryGetStage(world, "start", out StageDefinition start);
-        Assert.That(start.TerrainAt(0, 5, 10, 10), Is.EqualTo(WorldTerrainCatalog.Road));
-        Assert.That(start.Decorations, Has.Count.EqualTo(3));
+        Assert.That(start.TerrainAt(0, 5, 10, 10), Is.EqualTo(WorldTerrainCatalog.Grass));
+        Assert.That(start.TerrainAt(1, 1, 10, 10), Is.EqualTo(WorldTerrainCatalog.Water));
+        Assert.That(start.Decorations, Is.Not.Empty);
+    }
+
+    [Test]
+    public void AuthoredDemoDeploysSlimeOnBattlesAndTaigaoOnBoss()
+    {
+        string packWorld = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+            Application.dataPath, "..", "..", "ContentProjects", "lofe_core", "Worlds", "demo"));
+        string streaming = Path.Combine(Application.streamingAssetsPath, "Content", "Worlds", "demo");
+        string folder = File.Exists(Path.Combine(packWorld, "world.json")) ? packWorld
+            : File.Exists(Path.Combine(streaming, "world.json")) ? streaming : null;
+        if (folder == null)
+            Assert.Ignore("demo 世界还没写到内容工程 Worlds 或 StreamingAssets。");
+        WorldDefinition world = WorldMapIO.LoadChunked(folder);
+        WorldUnitPlacementDefinition[] battleUnits = world.Stages
+            .Where(stage => stage.StageType == ContentStageTypeKeys.Battle)
+            .SelectMany(stage => stage.UnitPlacements)
+            .Where(item => item != null && item.Enabled)
+            .ToArray();
+        WorldUnitPlacementDefinition[] bossUnits = world.Stages
+            .Where(stage => stage.StageType == ContentStageTypeKeys.Boss)
+            .SelectMany(stage => stage.UnitPlacements)
+            .Where(item => item != null && item.Enabled)
+            .ToArray();
+        Assert.That(battleUnits, Is.Not.Empty);
+        Assert.That(battleUnits.All(item => item.UnitId == "slime"), Is.True);
+        Assert.That(bossUnits.Any(item => item.UnitId == "taigao"), Is.True);
+        Assert.That(bossUnits.All(item => item.UnitId != "slime"), Is.True);
+    }
+
+    [Test]
+    public void EnteringConfiguredTerrainAppliesMatchingStatus()
+    {
+        UnityEngine.GameObject owner = new UnityEngine.GameObject("TerrainStatusOwner");
+        try
+        {
+            Unit unit = owner.AddComponent<Unit>();
+            StatusDefinition wet = new StatusDefinition { StatusId = "wet", Enabled = true };
+            wet.ApplyOnTerrainIds.Add(WorldTerrainCatalog.Water);
+
+            TerrainMovementRuntime.ApplyStatusesForTerrain(unit, WorldTerrainCatalog.Water, new[] { wet });
+            Assert.That(unit.State.Has("wet"), Is.True);
+
+            TerrainMovementRuntime.ApplyStatusesForTerrain(unit, WorldTerrainCatalog.Grass, new[] { wet });
+            Assert.That(unit.State.Get("wet"), Is.EqualTo(1));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(owner);
+        }
     }
 
     private static void AssertPath(WorldDefinition world, string fromId, string toId)

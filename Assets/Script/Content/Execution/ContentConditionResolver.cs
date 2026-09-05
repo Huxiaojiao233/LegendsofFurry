@@ -27,6 +27,7 @@ public sealed class ContentConditionParameters
     public string tag;
     public string poolId;
     public string rarityId;
+    public string terrainId;
     public string comparison;
     public float chance;
     public ContentValueExpression left;
@@ -95,6 +96,7 @@ public sealed class ContentConditionResolver
         Register("spent_action_compare", ResolveSpentActionComparison);
         Register("spent_mana_compare", ResolveSpentManaComparison);
         Register("random_chance", ResolveRandomChance);
+        Register("terrain_id_is", ResolveTerrainIdIs);
     }
 
     /// <summary>
@@ -197,6 +199,7 @@ public sealed class ContentConditionResolver
         TryReadString(values, "tag", out parameters.tag);
         TryReadString(values, "poolId", out parameters.poolId);
         TryReadString(values, "rarityId", out parameters.rarityId);
+        TryReadString(values, "terrainId", out parameters.terrainId);
         TryReadString(values, "comparison", out parameters.comparison);
         if (values.TryGetValue("chance", out object chance) && !TryReadFloat(chance, out parameters.chance))
         {
@@ -334,6 +337,8 @@ public sealed class ContentConditionResolver
                 return !string.IsNullOrWhiteSpace(parameters.poolId);
             case "card_rarity_is":
                 return !string.IsNullOrWhiteSpace(parameters.rarityId);
+            case "terrain_id_is":
+                return !string.IsNullOrWhiteSpace(parameters.terrainId);
             case "random_chance":
                 return parameters.chance >= 0f && parameters.chance <= 1f;
             default:
@@ -473,8 +478,8 @@ public sealed class ContentConditionResolver
     /// <summary>判断当前目标是否由本卡已记录伤害击杀。</summary>
     private bool ResolveTargetKilledByThisCard(ContentConditionParameters parameters, ContentCardExecutionContext context, Unit target, int depth, out bool result)
     {
-        result = context.WasKilledByThisCard(target);
-        return target != null;
+        result = target != null && context.WasKilledByThisCard(target);
+        return true;
     }
 
     /// <summary>判断本卡是否产生过护甲吸收或实际生命伤害。</summary>
@@ -531,6 +536,15 @@ public sealed class ContentConditionResolver
             return false;
         }
         result = context.RandomSource.NextUnit() < parameters.chance;
+        return true;
+    }
+
+    /// <summary>判断本次进入的地形稳定 ID 是否匹配策划填写的地形。</summary>
+    private bool ResolveTerrainIdIs(ContentConditionParameters parameters, ContentCardExecutionContext context, Unit target, int depth, out bool result)
+    {
+        result = false;
+        if (string.IsNullOrWhiteSpace(parameters.terrainId) || context == null) return false;
+        result = string.Equals(context.EnteredTerrainId, parameters.terrainId, StringComparison.Ordinal);
         return true;
     }
 

@@ -19,7 +19,7 @@ public class BattleFlow : MonoBehaviour
     [SerializeField] private Button endRoundButton;
     [SerializeField] private Canvas overlayCanvas;
     [SerializeField, Min(0)] private int cardsDrawnPerRound = 5;
-    [SerializeField, Min(0f)] private float enemyStepPause = 0.08f;
+    [SerializeField, Min(0f)] private float enemyStepPause = 0.5f;
 
     private BattlePhase phase = BattlePhase.PlayerTurn;
     private bool isBusy;
@@ -108,14 +108,22 @@ public class BattleFlow : MonoBehaviour
         SetEndRoundInteractable(false);
         boardClickController?.ClearSelection();
         handCardSystem?.CancelTargeting();
+        EnemyIntentPresenter.Instance?.ClearVisuals();
+        EnemyCardInspectUI.Instance?.Close();
+        BoardTileHover.Clear();
+        BattleCombatLog.Clear();
     }
 
     private IEnumerator BeginCombatRoutine(bool drawOpeningHand)
     {
+        BattleCombatLog.Clear();
+        BattleCombatLog.Append(BattleLogCategory.Turn, "进入战斗");
         phase = BattlePhase.PlayerTurn;
         yield return null;
         if (drawOpeningHand) handCardSystem?.DrawOpeningHand();
         bool frozen = BeginPlayerTurnState(false);
+        EnemyIntentPresenter.Ensure().RefreshAll();
+        EnemyCardInspectUI.Ensure();
         SetEndRoundInteractable(true);
         if (frozen) StartCoroutine(SkipFrozenTurn());
         else BeginPassiveFreeMove(ApplyClassPassive(ContentTriggerKeys.OnUnitTurnStart));
@@ -186,12 +194,14 @@ public class BattleFlow : MonoBehaviour
         if (phase == BattlePhase.GameOver || !HasLivingPlayerSide()) yield break;
 
         phase = BattlePhase.EnemyTurn;
+        EnemyIntentPresenter.Ensure().ClearVisuals();
         yield return EnemyTurnRoutine();
         if (phase == BattlePhase.GameOver) yield break;
 
         round++;
         phase = BattlePhase.PlayerTurn;
         bool frozen = BeginPlayerTurnState(true);
+        EnemyIntentPresenter.Ensure().RefreshAll();
         isBusy = false;
         SetEndRoundInteractable(true);
         if (frozen) StartCoroutine(SkipFrozenTurn());

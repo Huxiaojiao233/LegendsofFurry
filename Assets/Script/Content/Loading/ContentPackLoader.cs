@@ -51,7 +51,7 @@ public sealed class ContentPackRoot
     public bool Required { get; }
 }
 
-/// <summary>结构化的包发现或兼容性信息，适合写入日志和诊断界面。</summary>
+/// <summary>结构化的包发现信息，适合写入日志和诊断界面。</summary>
 public sealed class ContentLoadDiagnostic
 {
     public ContentLoadDiagnostic(string severity, string packId, string path, string message)
@@ -105,23 +105,115 @@ public static class ContentPackLoader
         IEnumerable<ContentPackRoot> packRoots,
         IEnumerable<string> disabledPackIds)
     {
-        ContentPackage basePackage = ContentPackageLoader.LoadFromDirectory(baseContentRoot);
+        ContentLoadResult result = null;
+        Exception error = null;
+        System.Collections.IEnumerator steps = CoLoad(
+            baseContentRoot, packRoots, disabledPackIds, null,
+            loaded => result = loaded,
+            exception => error = exception);
+        while (steps.MoveNext()) { }
+        if (error != null) throw error;
+        return result;
+    }
+
+    /// <summary>
+    /// 与 Load 相同，但在发现/合成每个包后 yield，方便加载屏刷新真实进度。
+    /// progress 的 float 为 0~1（仅本阶段内）。
+    /// </summary>
+    public static System.Collections.IEnumerator CoLoad(
+        string baseContentRoot,
+        IEnumerable<ContentPackRoot> packRoots,
+        IEnumerable<string> disabledPackIds,
+        Action<string, float> progress,
+        Action<ContentLoadResult> onComplete,
+        Action<Exception> onError)
+    {
+        progress?.Invoke("读取基础内容…", 0f);
+        yield return null;
+
+        ContentPackage basePackage = null;
+        Exception failure = null;
+        try
+        {
+            basePackage = ContentPackageLoader.LoadFromDirectory(baseContentRoot);
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        if (failure != null)
+        {
+            onError?.Invoke(failure);
+            yield break;
+        }
+
         List<ContentLoadDiagnostic> diagnostics = new List<ContentLoadDiagnostic>();
         HashSet<string> disabled = new HashSet<string>(disabledPackIds ?? Array.Empty<string>(), StringComparer.Ordinal);
-        List<ContentPackLoadInfo> discovered = Discover(packRoots, disabled, diagnostics);
-        RemoveDuplicateOptionalPacks(discovered, diagnostics);
-        RemoveInvalidOptionalDependencies(discovered, diagnostics);
-        IReadOnlyList<ContentPackDefinition> orderedDefinitions = ContentPackageComposer.OrderPacks(
-            discovered.Select(item => item.Definition));
-        Dictionary<string, ContentPackLoadInfo> infoById = discovered.ToDictionary(
-            item => item.Definition.PackId, StringComparer.Ordinal);
-        List<ContentPackLoadInfo> candidates = orderedDefinitions.Select(item => infoById[item.PackId]).ToList();
+
+        progress?.Invoke("扫描扩展包…", 0.08f);
+        yield return null;
+        List<ContentPackLoadInfo> discovered = new List<ContentPackLoadInfo>();
+        System.Collections.IEnumerator discover = CoDiscover(packRoots, disabled, diagnostics, discovered, progress);
+        while (true)
+        {
+            object current = null;
+            bool moved;
+            try
+            {
+                moved = discover.MoveNext();
+                if (moved) current = discover.Current;
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+                moved = false;
+            }
+
+            if (!moved) break;
+            yield return current;
+        }
+
+        if (failure != null)
+        {
+            onError?.Invoke(failure);
+            yield break;
+        }
+
+        IReadOnlyList<ContentPackDefinition> orderedDefinitions = null;
+        List<ContentPackLoadInfo> candidates = null;
+        try
+        {
+            RemoveDuplicateOptionalPacks(discovered, diagnostics);
+            RemoveInvalidOptionalDependencies(discovered, diagnostics);
+            orderedDefinitions = ContentPackageComposer.OrderPacks(
+                discovered.Select(item => item.Definition));
+            Dictionary<string, ContentPackLoadInfo> infoById = discovered.ToDictionary(
+                item => item.Definition.PackId, StringComparer.Ordinal);
+            candidates = orderedDefinitions.Select(item => infoById[item.PackId]).ToList();
+            ContentRuntimeCapabilityValidator.ValidateOrThrow(basePackage);
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        if (failure != null)
+        {
+            onError?.Invoke(failure);
+            yield break;
+        }
+
         List<ContentPackLoadInfo> accepted = new List<ContentPackLoadInfo>();
         Dictionary<string, string> assetPaths = new Dictionary<string, string>(StringComparer.Ordinal);
-        ContentRuntimeCapabilityValidator.ValidateOrThrow(basePackage);
         ContentPackage composed = basePackage;
-        foreach (ContentPackLoadInfo candidate in candidates)
+
+        for (int i = 0; i < candidates.Count; i++)
         {
+            ContentPackLoadInfo candidate = candidates[i];
+            float t = candidates.Count <= 1 ? 1f : (i + 1f) / candidates.Count;
+            progress?.Invoke($"合成扩展包 {candidate.Definition.PackId}…", 0.55f + 0.45f * t);
+            yield return null;
             try
             {
                 HashSet<string> acceptedIds = accepted.Select(item => item.Definition.PackId)
@@ -142,33 +234,49 @@ public static class ContentPackLoader
                 diagnostics.Add(new ContentLoadDiagnostic("error", candidate.Definition.PackId,
                     candidate.Directory, exception.Message));
             }
+            catch (Exception exception)
+            {
+                failure = exception;
+                break;
+            }
         }
-        return new ContentLoadResult(composed, accepted, assetPaths, diagnostics,
-            ComputeFingerprint(basePackage, accepted));
-    }
 
-    /// <summary>读取可选用户配置中需要停用的稳定包 ID 列表。</summary>
-    public static IReadOnlyCollection<string> ReadDisabledPackIds(string settingsPath)
-    {
-        if (string.IsNullOrWhiteSpace(settingsPath) || !File.Exists(settingsPath)) return Array.Empty<string>();
-        ContentPackSettingsDto dto = ContentPackageLoader.ParseJson<ContentPackSettingsDto>(
-            ContentPackageLoader.ReadRequiredText(settingsPath), settingsPath);
-        HashSet<string> result = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string packId in dto.disabledPackIds ?? Array.Empty<string>())
+        if (failure != null)
         {
-            if (!ContentId.IsValid(packId))
-                throw new InvalidDataException($"扩展包启停配置包含无效 ID：{packId}。");
-            result.Add(packId);
+            onError?.Invoke(failure);
+            yield break;
         }
-        return result;
+
+        ContentLoadResult completed = null;
+        try
+        {
+            completed = new ContentLoadResult(composed, accepted, assetPaths, diagnostics,
+                ComputeFingerprint(basePackage, accepted));
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        if (failure != null)
+        {
+            onError?.Invoke(failure);
+            yield break;
+        }
+
+        progress?.Invoke("内容包合成完成", 1f);
+        yield return null;
+        onComplete?.Invoke(completed);
     }
 
-    private static List<ContentPackLoadInfo> Discover(
+    private static System.Collections.IEnumerator CoDiscover(
         IEnumerable<ContentPackRoot> packRoots,
         ISet<string> disabled,
-        ICollection<ContentLoadDiagnostic> diagnostics)
+        ICollection<ContentLoadDiagnostic> diagnostics,
+        List<ContentPackLoadInfo> result,
+        Action<string, float> progress)
     {
-        List<ContentPackLoadInfo> result = new List<ContentPackLoadInfo>();
+        List<(ContentPackRoot root, string path, bool isPackage)> entries = new List<(ContentPackRoot, string, bool)>();
         foreach (ContentPackRoot packRoot in packRoots ?? Array.Empty<ContentPackRoot>())
         {
             string rootValue = packRoot?.Directory;
@@ -185,9 +293,9 @@ public static class ContentPackLoader
                 if (string.Equals(Path.GetFileNameWithoutExtension(fileName), "planner_pack", StringComparison.OrdinalIgnoreCase))
                     continue;
 #endif
-                TryAddDiscovered(result, diagnostics, disabled, packRoot.Required, packageFile, () =>
-                    LoadPack(Path.Combine(ExtractPackage(packageFile), ManifestFileName), packRoot.Required));
+                entries.Add((packRoot, packageFile, true));
             }
+
             foreach (string directory in Directory.GetDirectories(root).OrderBy(item => item, StringComparer.Ordinal))
             {
                 string folderName = Path.GetFileName(directory);
@@ -199,9 +307,54 @@ public static class ContentPackLoader
 #endif
                 string manifestPath = Path.Combine(directory, ManifestFileName);
                 if (!File.Exists(manifestPath)) continue;
-                TryAddDiscovered(result, diagnostics, disabled, packRoot.Required, directory, () =>
+                entries.Add((packRoot, directory, false));
+            }
+        }
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            (ContentPackRoot packRoot, string path, bool isPackage) = entries[i];
+            float t = entries.Count <= 1 ? 1f : (i + 1f) / entries.Count;
+            string label = Path.GetFileName(path);
+            progress?.Invoke(isPackage ? $"解压 {label}…" : $"读取 {label}…", 0.1f + 0.45f * t);
+            yield return null;
+            if (isPackage)
+            {
+                TryAddDiscovered(result, diagnostics, disabled, packRoot.Required, path, () =>
+                    LoadPack(Path.Combine(ExtractPackage(path), ManifestFileName), packRoot.Required));
+            }
+            else
+            {
+                string manifestPath = Path.Combine(path, ManifestFileName);
+                TryAddDiscovered(result, diagnostics, disabled, packRoot.Required, path, () =>
                     LoadPack(manifestPath, packRoot.Required));
             }
+        }
+    }
+
+    private static List<ContentPackLoadInfo> Discover(
+        IEnumerable<ContentPackRoot> packRoots,
+        ISet<string> disabled,
+        ICollection<ContentLoadDiagnostic> diagnostics)
+    {
+        List<ContentPackLoadInfo> result = new List<ContentPackLoadInfo>();
+        System.Collections.IEnumerator steps = CoDiscover(packRoots, disabled, diagnostics, result, null);
+        while (steps.MoveNext()) { }
+        return result;
+    }
+
+    /// <summary>读取可选用户配置中需要停用的稳定包 ID 列表。</summary>
+    public static IReadOnlyCollection<string> ReadDisabledPackIds(string settingsPath)
+    {
+        if (string.IsNullOrWhiteSpace(settingsPath) || !File.Exists(settingsPath)) return Array.Empty<string>();
+        ContentPackSettingsDto dto = ContentPackageLoader.ParseJson<ContentPackSettingsDto>(
+            ContentPackageLoader.ReadRequiredText(settingsPath), settingsPath);
+        HashSet<string> result = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string packId in dto.disabledPackIds ?? Array.Empty<string>())
+        {
+            if (!ContentId.IsValid(packId))
+                throw new InvalidDataException($"扩展包启停配置包含无效 ID：{packId}。");
+            result.Add(packId);
         }
         return result;
     }
@@ -274,7 +427,7 @@ public static class ContentPackLoader
         string directory = Path.GetDirectoryName(Path.GetFullPath(manifestPath));
         ContentPackManifestDto manifest = ContentPackageLoader.ParseJson<ContentPackManifestDto>(
             ContentPackageLoader.ReadRequiredText(manifestPath), manifestPath);
-        if (manifest.formatVersion < 1 || manifest.formatVersion > SupportedPackFormatVersion)
+        if (manifest.formatVersion != SupportedPackFormatVersion)
             throw new InvalidDataException($"扩展包格式版本不支持：{manifest.formatVersion}。");
         if (!ContentId.IsValid(manifest.packId) || string.IsNullOrWhiteSpace(manifest.packVersion))
             throw new InvalidDataException($"扩展包 manifest 的 ID 或版本无效：{manifest.packId}。");

@@ -5,7 +5,7 @@ using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
 
 public enum CardTargetMode { Self, Unit, Direction, AreaCell }
-public enum DamageType { Normal, Fire, Ice, Grass, Lightning, Rock, Wind, Water, Light, Dark, Poison, True }
+public enum DamageType { Normal, Fire, Ice, Grass, Lightning, Rock, Wind, Water, Light, Dark, Poison, Direct }
 
 /// <summary>
 /// 供 Unity 卡面与输入系统读取的纯运行时投影；权威内容始终来自数据库 CardDefinition。

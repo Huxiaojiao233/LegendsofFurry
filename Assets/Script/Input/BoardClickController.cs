@@ -55,6 +55,9 @@ public class BoardClickController : MonoBehaviour, IActionPointPool
     private bool isFreeMoveMode;
     private int freeMoveSteps;
     private System.Action freeMoveCompleted;
+    private int suspendedFreeMoveSteps;
+    private Unit suspendedFreeMoveUnit;
+    private System.Action suspendedFreeMoveCompleted;
 
     private TMP_Text moveCostTooltip;
     private RectTransform tooltipRect;
@@ -83,9 +86,27 @@ public class BoardClickController : MonoBehaviour, IActionPointPool
 
     private void Update()
     {
-        if (!BattleFlow.CanPlayerAct || Mouse.current == null || mainCamera == null)
+        if (Mouse.current == null || mainCamera == null)
+        {
+            BoardTileHover.Clear();
+            HideMoveCostTooltip();
+            return;
+        }
+
+        UpdateTileHover();
+
+        // 选牌指向目标必须先于免费移动：刺客回合开始的 1 格免费移动不能把确认目标、右键取消吞掉。
+        if (IsTargeting)
         {
             HideMoveCostTooltip();
+            if (Mouse.current.rightButton.wasPressedThisFrame)
+            {
+                handCardSystem.CancelTargeting();
+                return;
+            }
+
+            if (Mouse.current.leftButton.wasPressedThisFrame)
+                HandleTargetingClick();
             return;
         }
 
@@ -102,20 +123,22 @@ public class BoardClickController : MonoBehaviour, IActionPointPool
             return;
         }
 
-        if (IsTargeting)
+        if (Mouse.current.leftButton.wasPressedThisFrame &&
+            (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()) &&
+            TryRaycastPointer(out RaycastHit inspectHit))
         {
-            HideMoveCostTooltip();
-            if (Mouse.current.rightButton.wasPressedThisFrame)
+            Unit inspectUnit = inspectHit.collider.GetComponentInParent<Unit>();
+            if (inspectUnit != null && !inspectUnit.IsPlayer && !inspectUnit.IsMoving &&
+                BattleFlow.Instance != null && BattleFlow.Instance.Phase != BattlePhase.Exploration)
             {
-                handCardSystem.CancelTargeting();
+                EnemyCardInspectUI.Ensure().Show(inspectUnit);
                 return;
             }
+        }
 
-            if (Mouse.current.leftButton.wasPressedThisFrame)
-            {
-                HandleTargetingClick();
-            }
-
+        if (!BattleFlow.CanPlayerAct)
+        {
+            HideMoveCostTooltip();
             return;
         }
 
@@ -125,6 +148,24 @@ public class BoardClickController : MonoBehaviour, IActionPointPool
         {
             HandleClick();
         }
+    }
+
+    private void UpdateTileHover()
+    {
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        {
+            BoardTileHover.Clear();
+            return;
+        }
+
+        if (!TryRaycastPointer(out RaycastHit hit))
+        {
+            BoardTileHover.Clear();
+            return;
+        }
+
+        BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
+        BoardTileHover.Set(cell);
     }
 
     public void ResetActionPoints()
@@ -183,6 +224,7 @@ public class BoardClickController : MonoBehaviour, IActionPointPool
             return;
         }
 
+        ClearSuspendedFreeMove();
         ClearSelection();
         isFreeMoveMode = true;
         freeMoveSteps = steps;
@@ -191,6 +233,45 @@ public class BoardClickController : MonoBehaviour, IActionPointPool
         selectedUnit.SetSelected(true);
         ShowFreeMoveRange(unit, steps);
         Debug.Log($"请选择{steps}格内的免费移动位置；右键可以跳过。", this);
+    }
+
+    /// <summary>选牌指向目标时暂停免费移动，避免清掉高亮后仍拦截棋盘点击。</summary>
+    public void SuspendFreeMove()
+    {
+        if (!isFreeMoveMode) return;
+        if (suspendedFreeMoveSteps <= 0)
+        {
+            suspendedFreeMoveSteps = freeMoveSteps;
+            suspendedFreeMoveUnit = selectedUnit;
+            suspendedFreeMoveCompleted = freeMoveCompleted;
+        }
+        isFreeMoveMode = false;
+        freeMoveSteps = 0;
+        freeMoveCompleted = null;
+        if (selectedUnit != null)
+        {
+            selectedUnit.SetSelected(false);
+            selectedUnit = null;
+        }
+        ClearMoveRange();
+    }
+
+    /// <summary>目标选择结束且没有新的免费移动时，把暂停的步数加回来。</summary>
+    public void ResumeSuspendedFreeMove()
+    {
+        if (suspendedFreeMoveSteps <= 0) return;
+        Unit unit = suspendedFreeMoveUnit;
+        int steps = suspendedFreeMoveSteps;
+        System.Action callback = suspendedFreeMoveCompleted;
+        ClearSuspendedFreeMove();
+        BeginFreeMove(unit, steps, callback);
+    }
+
+    private void ClearSuspendedFreeMove()
+    {
+        suspendedFreeMoveSteps = 0;
+        suspendedFreeMoveUnit = null;
+        suspendedFreeMoveCompleted = null;
     }
 
     public void GrantNextMoveDiscount(int amount)
@@ -336,11 +417,14 @@ public class BoardClickController : MonoBehaviour, IActionPointPool
         Unit clickedUnit = hit.collider.GetComponentInParent<Unit>();
         if (clickedUnit != null)
         {
-            if (!clickedUnit.IsMoving && clickedUnit.IsPlayer)
+            if (clickedUnit.IsMoving) return;
+            if (clickedUnit.IsPlayer)
             {
                 SelectUnit(clickedUnit);
+                return;
             }
 
+            EnemyCardInspectUI.Ensure().Show(clickedUnit);
             return;
         }
 

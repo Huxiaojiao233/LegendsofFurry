@@ -5,11 +5,13 @@ using UnityEngine.Rendering;
 
 /// <summary>
 /// 一整片 CloudSea 盖在地形上方，按已点亮关卡的格子形状挖洞。
+/// 未解锁关卡额外放竖直云雾填充块，挡住地形隐藏后露出的空洞。
 /// 悬停/点击用看不见的关卡碰撞盒，不把云海按格子切开。
 /// </summary>
 public sealed class WorldCloudCover : MonoBehaviour
 {
     public const string PrefabResource = "Prefabs/CloudSea";
+    private const string FillChildName = "CloudFill";
     private const float PrefabPlaneSize = 500f;
     private const int MaxHoles = 32;
 
@@ -20,6 +22,7 @@ public sealed class WorldCloudCover : MonoBehaviour
     private WorldDefinition world;
     private BoardGenerator board;
     private Texture2D terrainHeightTex;
+    private Material fillMaterial;
 
     public float DeckY => sea != null ? sea.transform.position.y + 0.75f : 1.6f;
 
@@ -64,9 +67,10 @@ public sealed class WorldCloudCover : MonoBehaviour
 
         Shader.SetGlobalFloat("_CloudHoleCount", count);
         Shader.SetGlobalVectorArray("_CloudHoles", holes);
-        Shader.SetGlobalFloat("_CloudHoleSoft", 2.6f);
-        Shader.SetGlobalFloat("_CloudHoleNoise", 0.28f);
-        Shader.SetGlobalFloat("_CloudHoleRound", 1.1f);
+        // 略外扩并收紧软边，相邻关卡洞重叠，避免接缝留下细云线。
+        Shader.SetGlobalFloat("_CloudHoleSoft", 0.2f);
+        Shader.SetGlobalFloat("_CloudHoleNoise", 0.05f);
+        Shader.SetGlobalFloat("_CloudHoleRound", 0.15f);
         SyncHitBoxes(current, false);
     }
 
@@ -81,6 +85,7 @@ public sealed class WorldCloudCover : MonoBehaviour
         Shader.SetGlobalFloat("_CloudHoleCount", 0f);
         Shader.SetGlobalTexture("_CloudTerrainHeightTex", null);
         if (terrainHeightTex != null) Destroy(terrainHeightTex);
+        if (fillMaterial != null) Destroy(fillMaterial);
     }
 
     private void AddHole(StageDefinition stage, ref int count)
@@ -198,6 +203,9 @@ public sealed class WorldCloudCover : MonoBehaviour
         int th = Mathf.Max(1, world.TerrainHeight);
         float sizeX = tw * board.Spacing;
         float sizeZ = th * board.Spacing;
+        float bottomY = WorldTerrain.MinHeight * WorldTerrain.StepY - 1.5f;
+        float topY = DeckY + 0.35f;
+        float fillHeight = Mathf.Max(1f, topY - bottomY);
         for (int i = 0; i < world.Stages.Count; i++)
         {
             StageDefinition stage = world.Stages[i];
@@ -215,6 +223,27 @@ public sealed class WorldCloudCover : MonoBehaviour
             patch.HasStage = true;
             patch.StageId = stage.StageId;
             patches.Add(patch);
+
+            // 竖直填充：未解锁关卡地形被藏后，用雾块堵住斜视空洞。
+            GameObject fill = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            fill.name = FillChildName;
+            fill.transform.SetParent(box.transform, false);
+            fill.transform.localPosition = new Vector3(0f, (bottomY + topY) * 0.5f - DeckY, 0f);
+            fill.transform.localRotation = Quaternion.identity;
+            fill.transform.localScale = new Vector3(sizeX * 1.02f, fillHeight, sizeZ * 1.02f);
+            Collider fillCollider = fill.GetComponent<Collider>();
+            if (fillCollider != null) Destroy(fillCollider);
+            MeshRenderer fillRenderer = fill.GetComponent<MeshRenderer>();
+            if (fillRenderer != null)
+            {
+                fillRenderer.sharedMaterial = ResolveFillMaterial();
+                fillRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                fillRenderer.receiveShadows = false;
+                fillRenderer.lightProbeUsage = LightProbeUsage.Off;
+                fillRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+            }
+
+            fill.SetActive(false);
         }
     }
 
@@ -229,7 +258,25 @@ public sealed class WorldCloudCover : MonoBehaviour
             bool cloudy = WorldCloudRules.HasCloudOver(current, stage, explored, combat);
             Collider hit = patch.GetComponent<Collider>();
             if (hit != null) hit.enabled = cloudy && !combat;
+
+            Transform fill = patch.transform.Find(FillChildName);
+            if (fill != null) fill.gameObject.SetActive(cloudy && !combat);
         }
+    }
+
+    private Material ResolveFillMaterial()
+    {
+        if (fillMaterial != null) return fillMaterial;
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ??
+                        Shader.Find("Unlit/Color") ??
+                        Shader.Find("Sprites/Default");
+        fillMaterial = new Material(shader) { name = "CloudFill" };
+        // 贴近云海雾色，不透明，挡住空洞背景。
+        Color fog = new Color(0.78f, 0.82f, 0.88f, 1f);
+        fillMaterial.color = fog;
+        if (fillMaterial.HasProperty("_BaseColor")) fillMaterial.SetColor("_BaseColor", fog);
+        if (fillMaterial.HasProperty("_Color")) fillMaterial.SetColor("_Color", fog);
+        return fillMaterial;
     }
 
     private void StageCenter(int gx, int gy, out Vector3 center, out float halfW, out float halfH)
@@ -242,7 +289,8 @@ public sealed class WorldCloudCover : MonoBehaviour
         Vector3 c11 = board.EvaluateTilePosition(gx * tw + tw - 1, gy * th + th - 1);
         center = (c00 + c10 + c01 + c11) * 0.25f;
         center.y = Mathf.Max(c00.y, c10.y, c01.y, c11.y);
-        halfW = tw * board.Spacing * 0.5f + 2.6f;
-        halfH = th * board.Spacing * 0.5f + 2.6f;
+        // 半宽贴合关卡；软边只向外淡出，接缝不会留线。
+        halfW = tw * board.Spacing * 0.5f;
+        halfH = th * board.Spacing * 0.5f;
     }
 }

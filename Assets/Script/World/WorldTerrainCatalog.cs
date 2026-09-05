@@ -1,8 +1,9 @@
-using UnityEngine;
+using System.Linq;
 using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
+using UnityEngine;
 
-/// <summary>手写地图用地形与少量装饰的稳定 ID、图例字母和编辑/运行时颜色。</summary>
+/// <summary>手写地图用地形与少量装饰的稳定 ID、图例字母。</summary>
 public static class WorldTerrainCatalog
 {
     public const string Grass = "base.grass";
@@ -20,29 +21,22 @@ public static class WorldTerrainCatalog
 
     public static readonly TerrainBrush[] Terrains =
     {
-        new TerrainBrush("G", Grass, "草", new Color(0.42f, 0.72f, 0.36f)),
-        new TerrainBrush("S", Stone, "石", new Color(0.55f, 0.56f, 0.58f)),
-        new TerrainBrush("W", Water, "水", new Color(0.28f, 0.52f, 0.78f)),
-        new TerrainBrush("D", Dirt, "土", new Color(0.62f, 0.48f, 0.28f)),
-        new TerrainBrush("A", Sand, "沙", new Color(0.84f, 0.76f, 0.48f)),
-        new TerrainBrush("R", Road, "路", new Color(0.7f, 0.62f, 0.42f)),
-        new TerrainBrush("F", Forest, "林", new Color(0.22f, 0.48f, 0.24f)),
-        new TerrainBrush("V", Void, "空", new Color(0.12f, 0.13f, 0.15f))
+        new TerrainBrush("G", Grass, "草"),
+        new TerrainBrush("S", Stone, "石"),
+        new TerrainBrush("W", Water, "水"),
+        new TerrainBrush("D", Dirt, "土"),
+        new TerrainBrush("A", Sand, "沙"),
+        new TerrainBrush("R", Road, "路"),
+        new TerrainBrush("F", Forest, "林"),
+        new TerrainBrush("V", Void, "空")
     };
 
     public static readonly DecorationBrush[] Decorations =
     {
-        new DecorationBrush(Tree, "树", new Color(0.2f, 0.45f, 0.18f)),
-        new DecorationBrush(Rock, "石", new Color(0.45f, 0.46f, 0.48f)),
-        new DecorationBrush(Camp, "营", new Color(0.72f, 0.5f, 0.28f))
+        new DecorationBrush(Tree, "树"),
+        new DecorationBrush(Rock, "石"),
+        new DecorationBrush(Camp, "营")
     };
-
-    public static Color ColorOf(string terrainId)
-    {
-        for (int i = 0; i < Terrains.Length; i++)
-            if (Terrains[i].Id == terrainId) return Terrains[i].Color;
-        return Terrains[0].Color;
-    }
 
     public static string GlyphOf(string terrainId)
     {
@@ -61,8 +55,8 @@ public static class WorldTerrainCatalog
     public static string FromHeight(int height)
     {
         if (height < 0) return Water;
-        if (height == 0) return Grass;
-        if (height == 1) return Dirt;
+        if (height <= 2) return Grass;
+        if (height <= 5) return Dirt;
         return Stone;
     }
 
@@ -98,14 +92,12 @@ public static class WorldTerrainCatalog
         public readonly string Glyph;
         public readonly string Id;
         public readonly string Label;
-        public readonly Color Color;
 
-        public TerrainBrush(string glyph, string id, string label, Color color)
+        public TerrainBrush(string glyph, string id, string label)
         {
             Glyph = glyph;
             Id = id;
             Label = label;
-            Color = color;
         }
     }
 
@@ -113,13 +105,11 @@ public static class WorldTerrainCatalog
     {
         public readonly string Id;
         public readonly string Label;
-        public readonly Color Color;
 
-        public DecorationBrush(string id, string label, Color color)
+        public DecorationBrush(string id, string label)
         {
             Id = id;
             Label = label;
-            Color = color;
         }
     }
 }
@@ -133,12 +123,25 @@ public static class TerrainMovementRuntime
         string terrainId = unit.Board.GetTerrain(to.x, to.y);
         CombatEventBus.Shared.Publish(new UnitMoveCompletedEvent(unit, from, to));
         CombatEventBus.Shared.Publish(new TerrainEnteredEvent(unit, terrainId, from, to));
-        ContentActorBehaviorRuntime.Execute(unit, ContentTriggerKeys.OnMoveCompleted, actionPoints);
-        ContentActorBehaviorRuntime.Execute(unit, ContentTriggerKeys.OnEnteredTerrain, actionPoints);
+        ContentActorBehaviorRuntime.Execute(unit, ContentTriggerKeys.OnMoveCompleted, actionPoints, terrainId);
+        ContentActorBehaviorRuntime.Execute(unit, ContentTriggerKeys.OnEnteredTerrain, actionPoints, terrainId);
         if (WorldTerrainCatalog.EndsActionOnEnter(terrainId))
-        {
             actionPoints?.TrySpendActionPoints(actionPoints.CurrentActionPoints);
-            unit.State.Add("wet", 1, 0, unit.InstanceId);
+        ApplyStatusesForTerrain(unit, terrainId, ContentRuntime.IsLoaded
+            ? ContentRuntime.Registry.Statuses : System.Array.Empty<StatusDefinition>());
+    }
+
+    /// <summary>按状态定义上的地形列表施加状态，扩展包可给熔岩、毒沼等复用同一入口。</summary>
+    public static void ApplyStatusesForTerrain(Unit unit, string terrainId,
+        System.Collections.Generic.IEnumerable<StatusDefinition> statuses)
+    {
+        if (unit == null || string.IsNullOrWhiteSpace(terrainId) || statuses == null) return;
+        foreach (StatusDefinition status in statuses)
+        {
+            if (status == null || !status.Enabled || string.IsNullOrWhiteSpace(status.StatusId)) continue;
+            if (status.ApplyOnTerrainIds == null ||
+                !status.ApplyOnTerrainIds.Contains(terrainId, System.StringComparer.Ordinal)) continue;
+            unit.State.Add(status.StatusId, 1, 0, unit.InstanceId);
         }
     }
 }

@@ -38,7 +38,8 @@ float CloudHoleCover(float3 positionWS, float noiseSample)
         float2 local = float2(dot(delta, right), dot(delta, fwd));
         float2 q = abs(local) - hole.zw + roundness;
         float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - roundness + n;
-        float edge = smoothstep(-soft, soft, sd);
+        // 边界 sd=0 时直接开洞，避免相邻洞接缝 cover≈0.5 留下十字细线。
+        float edge = smoothstep(0.0, soft, sd);
         cover = min(cover, edge);
     }
 

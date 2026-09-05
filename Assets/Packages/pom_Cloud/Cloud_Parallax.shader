@@ -265,10 +265,11 @@ Shader "Custom/Cloud Parallax URP"
                         _Color;
 
                     float holeCover = CloudHoleCover(input.positionWS, turbulence.r);
-                    if (holeCover < 0.5)
+                    // 接缝处 cover 常为 0.5；用 <0.5 会留下十字/网格状细云线。
+                    if (holeCover < 0.99)
                         discard;
 
-                    half alpha = 1.0h;
+                    half alpha = _Alpha;
 
                     // ------------------------------------------------
                     // URP lighting

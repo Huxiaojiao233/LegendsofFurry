@@ -106,6 +106,8 @@ public class CardEffectResolver : MonoBehaviour
             targetQueryService: handCardSystem);
         result.ExecutionContext = context;
         result.Success = ContentCardEffectExecutor.TryExecuteOnPlay(context);
+        if (result.Success)
+            CombatEventBus.Shared.Publish(new CardPlayedEvent(player, instance, target));
         return result;
     }
     /// <summary>

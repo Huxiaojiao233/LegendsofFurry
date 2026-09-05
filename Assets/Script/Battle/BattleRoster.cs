@@ -85,10 +85,31 @@ public sealed class BattleRoster : MonoBehaviour
         ClearEnemies();
         WorldDefinition world = ResolveCurrentWorld();
         if (world == null) return;
+        int spawned = 0;
         foreach (WorldUnitPlacementDefinition placement in stage.UnitPlacements)
         {
             if (placement == null || !placement.Enabled) continue;
+            int before = enemies.Count;
             SpawnPlacement(placement, stage, world, board);
+            if (enemies.Count > before) spawned++;
+        }
+
+        if (spawned == 0 &&
+            (stage.StageType == ContentStageTypeKeys.Battle || stage.StageType == ContentStageTypeKeys.Boss))
+        {
+            string unitId = stage.StageType == ContentStageTypeKeys.Boss ? "taigao" : "slime";
+            int tw = Mathf.Max(1, world.TerrainWidth);
+            int th = Mathf.Max(1, world.TerrainHeight);
+            SpawnPlacement(new WorldUnitPlacementDefinition
+            {
+                InstanceId = $"{stage.StageId}-{unitId}-fallback",
+                UnitId = unitId,
+                LocalX = tw / 2,
+                LocalY = th / 2,
+                FactionOverride = "enemy",
+                ControllerOverride = "ai",
+                Enabled = true
+            }, stage, world, board);
         }
     }
 
@@ -206,15 +227,28 @@ public sealed class BattleRoster : MonoBehaviour
         {
             for (int i = 0; i < authored.Length && ids.Count < cap; i++)
             {
-                if (!string.IsNullOrWhiteSpace(authored[i])) ids.Add(authored[i].Trim());
+                string candidate = authored[i]?.Trim();
+                if (string.IsNullOrWhiteSpace(candidate)) continue;
+                if (!ContentRuntime.Registry.TryGetUnit(candidate, out _))
+                {
+                    Debug.LogWarning($"编制配置的单位 {candidate} 不存在或未启用，已跳过。");
+                    continue;
+                }
+                ids.Add(candidate);
             }
         }
 
-        if (ids.Count == 0 && !string.IsNullOrWhiteSpace(fallbackId)) ids.Add(fallbackId.Trim());
+        if (ids.Count == 0 && !string.IsNullOrWhiteSpace(fallbackId))
+        {
+            string fallback = fallbackId.Trim();
+            if (ContentRuntime.Registry.TryGetUnit(fallback, out _)) ids.Add(fallback);
+            else Debug.LogWarning($"内容包 PlayerUnitId={fallback} 不存在或未启用。");
+        }
+
         if (ids.Count == 0)
         {
             List<UnitDefinition> ordered = new List<UnitDefinition>(ContentRuntime.Registry.Units);
-            ordered.RemoveAll(item => !item.CanJoinParty && item.DefaultFaction != "player");
+            ordered.RemoveAll(item => item == null || !item.CanJoinParty || item.DefaultFaction != "player");
             ordered.Sort((left, right) =>
             {
                 int byOrder = left.SortOrder.CompareTo(right.SortOrder);

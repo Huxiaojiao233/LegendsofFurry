@@ -14,22 +14,43 @@ public static class RuntimeSceneBootstrap
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
-    /// <summary>每次场景加载完成后补齐该场景需要的运行时入口组件。</summary>
-    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-    {
-        EnsureScene(scene.name);
-    }
-
     /// <summary>兼容直接从当前场景进入播放时的首次初始化。</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureInitialScene()
     {
+        EnsureBootLoader();
         EnsureScene(SceneManager.GetActiveScene().name);
+    }
+
+    /// <summary>S_Loading 场景里若没有 BootLoader，运行时补一个。</summary>
+    private static void EnsureBootLoader()
+    {
+        if (SceneManager.GetActiveScene().name != ContentBootLoader.LoadingSceneName) return;
+        if (Object.FindAnyObjectByType<ContentBootLoader>() != null) return;
+        new GameObject("ContentBootLoader").AddComponent<ContentBootLoader>();
+    }
+
+    /// <summary>每次场景加载完成后补齐该场景需要的运行时入口组件。</summary>
+    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name == ContentBootLoader.LoadingSceneName)
+        {
+            EnsureBootLoader();
+            return;
+        }
+
+        EnsureScene(scene.name);
     }
 
     /// <summary>按场景名称创建且只创建一个职业选择或战斗初始化器。</summary>
     private static void EnsureScene(string sceneName)
     {
+        if (sceneName == ContentBootLoader.LoadingSceneName) return;
+
+        // 从非加载场景直接 Play 时，补一次同步加载，避免编辑器跳过 S_Loading。
+        if (!ContentRuntime.IsLoaded && !ContentRuntime.IsLoading)
+            ContentRuntime.EnsureLoaded();
+
         if (!ContentRuntime.IsLoaded)
         {
             ContentLoadFailureNotice.Ensure();

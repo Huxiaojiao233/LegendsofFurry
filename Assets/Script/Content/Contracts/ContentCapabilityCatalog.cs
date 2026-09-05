@@ -90,7 +90,7 @@ public static class ContentCapabilityCatalog
         "target_team_is", "target_has_armor", "target_has_status", "card_has_tag",
         "card_in_pool", "card_rarity_is", "target_killed_by_this_card", "damage_was_applied",
         "health_damage_greater_than", "resource_compare", "health_compare", "armor_compare",
-        "spent_action_compare", "spent_mana_compare", "random_chance"
+        "spent_action_compare", "spent_mana_compare", "random_chance", "terrain_id_is"
     });
 
     /// <summary>获取当前 foreach 注册表已经实现的目标集合选择器 key。</summary>

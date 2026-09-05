@@ -54,6 +54,13 @@ public sealed class WorldMapController : MonoBehaviour
 
     private void Update()
     {
+        if (RunSession.HasActive && Keyboard.current != null && Keyboard.current.kKey.wasPressedThisFrame)
+        {
+            RunSession.GrantKey(RunSession.BossKeyId);
+            pendingMessage = "测试：已获得魔王钥匙（K）。";
+            RefreshHud();
+        }
+
         if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
         Ray ray = worldCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
@@ -389,6 +396,7 @@ public sealed class WorldMapController : MonoBehaviour
         builder.Append("    金币 ").Append(RunSession.Current.gold);
         builder.Append("    牌 ").Append(RunSession.Current.deckCardIds.Length);
         if (RunSession.HasKey(RunSession.BossKeyId)) builder.Append("    钥匙已入手");
+        else builder.Append("    K 测试钥匙");
         if (RunSession.IsLocked(stage)) builder.Append("    [锁定]");
         if (!string.IsNullOrEmpty(pendingMessage)) builder.Append("\n").Append(pendingMessage);
         statusText.text = builder.ToString();

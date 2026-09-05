@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using LegendsOfFurry.Content.Contracts;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 负责生成棋盘、记录所有真实存在的格子与占格，并提供安全的查询接口。
 /// boardMap 中数值为 0 的位置代表空洞，不会生成格子。
+/// 每种地形使用独立 Prefab，不再靠染色区分。
 /// </summary>
 [DefaultExecutionOrder(-100)]
 public class BoardGenerator : MonoBehaviour
@@ -13,7 +15,9 @@ public class BoardGenerator : MonoBehaviour
     [SerializeField] private float RandomMapProbability = 0.9f;
 
     [Header("棋盘设置")]
-    [SerializeField] private GameObject cellPrefab;
+    [FormerlySerializedAs("cellPrefab")]
+    [SerializeField] private GameObject fallbackCellPrefab;
+    [SerializeField] private TerrainPrefabBinding[] terrainPrefabs;
 
     [SerializeField] private int width = 10;
     [SerializeField] private int height = 8;
@@ -45,6 +49,7 @@ public class BoardGenerator : MonoBehaviour
     private readonly Dictionary<Vector2Int, Unit> occupants =
         new Dictionary<Vector2Int, Unit>();
     private readonly List<GameObject> decorations = new List<GameObject>();
+    private Dictionary<string, GameObject> terrainPrefabLookup;
 
     public int Width => cells == null ? width : cells.GetLength(0);
     public int Height => cells == null ? height : cells.GetLength(1);
@@ -86,9 +91,39 @@ public class BoardGenerator : MonoBehaviour
 
     private void Awake()
     {
+        RebuildTerrainPrefabLookup();
         if (TryGenerateRunWorld()) return;
         boardMap = GenerateRandomBoardMap();
         GenerateBoard();
+    }
+
+    private void OnValidate()
+    {
+        RebuildTerrainPrefabLookup();
+    }
+
+    private void RebuildTerrainPrefabLookup()
+    {
+        terrainPrefabLookup = new Dictionary<string, GameObject>(StringComparer.Ordinal);
+        if (terrainPrefabs == null) return;
+        for (int i = 0; i < terrainPrefabs.Length; i++)
+        {
+            TerrainPrefabBinding binding = terrainPrefabs[i];
+            if (binding == null || string.IsNullOrWhiteSpace(binding.terrainId) || binding.prefab == null)
+                continue;
+            terrainPrefabLookup[binding.terrainId] = binding.prefab;
+        }
+    }
+
+    private GameObject ResolveCellPrefab(string terrainId)
+    {
+        if (string.IsNullOrWhiteSpace(terrainId))
+            terrainId = WorldTerrainCatalog.Grass;
+        if (terrainPrefabLookup != null &&
+            terrainPrefabLookup.TryGetValue(terrainId, out GameObject prefab) &&
+            prefab != null)
+            return prefab;
+        return fallbackCellPrefab;
     }
 
     /// <summary>冒险进行中时把整张大地图拼进同一块棋盘，不再随机挖洞。</summary>
@@ -185,9 +220,10 @@ public class BoardGenerator : MonoBehaviour
         cells = new BoardCell[mapWidth, mapHeight];
         occupants.Clear();
 
-        if (cellPrefab == null)
+        RebuildTerrainPrefabLookup();
+        if (fallbackCellPrefab == null && (terrainPrefabs == null || terrainPrefabs.Length == 0))
         {
-            Debug.LogError("棋盘格子预制件为空，无法生成棋盘。", this);
+            Debug.LogError("棋盘地形预制件为空，无法生成棋盘。", this);
             return;
         }
 
@@ -202,7 +238,16 @@ public class BoardGenerator : MonoBehaviour
                     continue;
                 }
 
-                GameObject cellObject = Instantiate(cellPrefab, gridRoot);
+                string stageId = cellStageIds != null ? cellStageIds[x, z] : null;
+                string terrainId = cellTerrainIds != null ? cellTerrainIds[x, z] : WorldTerrainCatalog.Grass;
+                GameObject prefab = ResolveCellPrefab(terrainId);
+                if (prefab == null)
+                {
+                    Debug.LogError($"地形 {terrainId} 没有 Prefab，且 fallback 也为空。", this);
+                    continue;
+                }
+
+                GameObject cellObject = Instantiate(prefab, gridRoot);
                 int worldX = originWorldX + x;
                 int worldZ = originWorldZ + z;
                 float posX = (worldX - (originWorldX + (mapWidth - 1) / 2f)) * spacing;
@@ -214,14 +259,41 @@ public class BoardGenerator : MonoBehaviour
                 BoardCell cell = cellObject.GetComponent<BoardCell>();
                 if (cell == null) cell = cellObject.GetComponentInChildren<BoardCell>();
                 if (cell == null) cell = cellObject.AddComponent<BoardCell>();
-                string stageId = cellStageIds != null ? cellStageIds[x, z] : null;
-                string terrainId = cellTerrainIds != null ? cellTerrainIds[x, z] : null;
                 cell.Initialize(worldX, worldZ, stageId, tileHeight, terrainId);
-                if (!string.IsNullOrEmpty(terrainId))
-                    cell.SetTerrainIdentity(terrainId, WorldTerrainCatalog.ColorOf(terrainId));
                 cells[x, z] = cell;
             }
         }
+
+        if (cellHeights != null)
+            RebuildFoundationWalls(false);
+    }
+
+    /// <summary>
+    /// 按当前可见格子重算地基墙。进战后只保留激活关卡的墙；离开后恢复整图。
+    /// </summary>
+    public void RebuildFoundationWalls(bool activeCellsOnly)
+    {
+        if (boardMap == null || cellHeights == null) return;
+        int mapHeight = boardMap.GetLength(0);
+        int mapWidth = boardMap.GetLength(1);
+        int[,] map = boardMap;
+        if (activeCellsOnly)
+        {
+            map = new int[mapHeight, mapWidth];
+            for (int z = 0; z < mapHeight; z++)
+            {
+                for (int x = 0; x < mapWidth; x++)
+                {
+                    if (boardMap[z, x] == 0) continue;
+                    BoardCell cell = cells != null ? cells[x, z] : null;
+                    if (cell != null && cell.gameObject.activeInHierarchy)
+                        map[z, x] = 1;
+                }
+            }
+        }
+
+        Transform root = gridRoot != null ? gridRoot : transform;
+        WorldFoundationWalls.Rebuild(root, map, cellHeights, Spacing, HeightStep);
     }
 
     public BoardCell GetCell(int x, int z)
@@ -470,4 +542,10 @@ public class BoardGenerator : MonoBehaviour
         }
     }
 
+    [Serializable]
+    public sealed class TerrainPrefabBinding
+    {
+        public string terrainId;
+        public GameObject prefab;
+    }
 }

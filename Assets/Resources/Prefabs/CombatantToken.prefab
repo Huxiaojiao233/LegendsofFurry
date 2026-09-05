@@ -49,7 +49,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Unit
   board: {fileID: 0}
   faction: 0
-  heightOffset: 0.2
+  heightOffset: 1.5
   moveDuration: 0.35
   jumpHeight: 0.25
   selectedPulseAmount: 0.08

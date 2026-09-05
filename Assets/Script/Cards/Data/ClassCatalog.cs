@@ -7,7 +7,6 @@ using UnityEngine;
 public static class GameSession
 {
     private const string ClassIdKey = "LegendsOfFurry.SelectedClassId";
-    private const string LegacyClassKey = "LegendsOfFurry.SelectedClass";
     private const string ContentFingerprintKey = "LegendsOfFurry.SelectedContentFingerprint";
     private static bool hasRuntimeSelection;
     private static string selectedClassId = string.Empty;
@@ -28,7 +27,6 @@ public static class GameSession
         hasRuntimeSelection = true;
         PlayerPrefs.SetString(ClassIdKey, selectedClassId);
         PlayerPrefs.SetString(ContentFingerprintKey, ContentRuntime.ContentFingerprint);
-        PlayerPrefs.DeleteKey(LegacyClassKey);
         PlayerPrefs.Save();
     }
 
@@ -37,7 +35,6 @@ public static class GameSession
         hasRuntimeSelection = false;
         selectedClassId = string.Empty;
         PlayerPrefs.DeleteKey(ClassIdKey);
-        PlayerPrefs.DeleteKey(LegacyClassKey);
         PlayerPrefs.Save();
     }
 
@@ -54,16 +51,6 @@ public static class GameSession
         }
 
         ClassProfileDefinition[] profiles = GetProfiles();
-        if (PlayerPrefs.HasKey(LegacyClassKey) && profiles.Length > 0)
-        {
-            int legacyIndex = Mathf.Clamp(PlayerPrefs.GetInt(LegacyClassKey, 0), 0, profiles.Length - 1);
-            selectedClassId = profiles[legacyIndex].ClassId;
-            PlayerPrefs.SetString(ClassIdKey, selectedClassId);
-            PlayerPrefs.SetString(ContentFingerprintKey, ContentRuntime.ContentFingerprint);
-            PlayerPrefs.DeleteKey(LegacyClassKey);
-            PlayerPrefs.Save();
-            return;
-        }
         selectedClassId = profiles.FirstOrDefault()?.ClassId ?? string.Empty;
     }
 

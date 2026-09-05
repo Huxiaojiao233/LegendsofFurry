@@ -75,6 +75,55 @@ public sealed class UnitMoveCompletedEvent : ICombatEvent
     public UnityEngine.Vector2Int To { get; }
 }
 
+/// <summary>单位成功打出一张牌。</summary>
+public sealed class CardPlayedEvent : ICombatEvent
+{
+    public CardPlayedEvent(Unit actor, CardInstance card, Unit target)
+    {
+        Actor = actor;
+        Card = card;
+        Target = target;
+        CardId = card?.Definition?.CardId ?? card?.Data?.cardId ?? string.Empty;
+        CardName = card?.Definition?.DisplayName ?? card?.Data?.cardName ?? CardId;
+    }
+
+    public Unit Actor { get; }
+    public CardInstance Card { get; }
+    public Unit Target { get; }
+    public string CardId { get; }
+    public string CardName { get; }
+}
+
+/// <summary>单位回复生命。</summary>
+public sealed class HealResolvedEvent : ICombatEvent
+{
+    public HealResolvedEvent(Unit source, Unit target, int amount)
+    {
+        Source = source;
+        Target = target;
+        Amount = amount;
+    }
+
+    public Unit Source { get; }
+    public Unit Target { get; }
+    public int Amount { get; }
+}
+
+/// <summary>单位获得护甲。</summary>
+public sealed class ArmorGainedEvent : ICombatEvent
+{
+    public ArmorGainedEvent(Unit source, Unit target, int amount)
+    {
+        Source = source;
+        Target = target;
+        Amount = amount;
+    }
+
+    public Unit Source { get; }
+    public Unit Target { get; }
+    public int Amount { get; }
+}
+
 /// <summary>Notification describing a card instance moving between stable card zones.</summary>
 public sealed class CardZoneChangedEvent : ICombatEvent
 {

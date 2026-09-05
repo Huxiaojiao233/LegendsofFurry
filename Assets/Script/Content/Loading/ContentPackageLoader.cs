@@ -12,7 +12,6 @@ namespace LegendsOfFurry.Content.Runtime
 /// </summary>
 public static class ContentPackageLoader
 {
-    public const int MinimumSchemaVersion = 1;
     public const int SupportedSchemaVersion = 3;
 
     /// <summary>
@@ -43,7 +42,7 @@ public static class ContentPackageLoader
         CurrentContentPointerDto pointer = ParseJson<CurrentContentPointerDto>(ReadRequiredText(currentPath), currentPath);
         string manifestPath = ResolveContainedPath(root, pointer.manifestPath, "manifest");
         ContentManifestDto manifest = ParseJson<ContentManifestDto>(ReadRequiredText(manifestPath), manifestPath);
-        if (manifest.schemaVersion < MinimumSchemaVersion || manifest.schemaVersion > SupportedSchemaVersion)
+        if (manifest.schemaVersion != SupportedSchemaVersion)
         {
             throw new InvalidDataException($"内容 schema {manifest.schemaVersion} 与运行时支持版本 {SupportedSchemaVersion} 不一致。");
         }
@@ -65,7 +64,7 @@ public static class ContentPackageLoader
         int schemaVersion,
         string contentVersion)
     {
-        if (schemaVersion < MinimumSchemaVersion || schemaVersion > SupportedSchemaVersion)
+        if (schemaVersion != SupportedSchemaVersion)
             throw new InvalidDataException($"内容 schema {schemaVersion} 与运行时支持版本 {SupportedSchemaVersion} 不一致。");
         string catalogPath = ResolveContainedPath(ownerDirectory, catalogFile, "catalog");
         string catalogJson = ReadRequiredText(catalogPath);
@@ -109,8 +108,10 @@ public static class ContentPackageLoader
             if (slice.rarities != null) merged.rarities = slice.rarities;
             if (slice.assets != null) merged.assets = slice.assets;
             if (slice.classProfiles != null) merged.classProfiles = slice.classProfiles;
-            if (slice.characters != null) merged.characters = slice.characters;
+            if (slice.units != null) merged.units = slice.units;
+            if (slice.aiProfiles != null) merged.aiProfiles = slice.aiProfiles;
             if (slice.equipment != null) merged.equipment = slice.equipment;
+            if (slice.worlds != null) merged.worlds = slice.worlds;
             if (slice.gameSettings != null) merged.gameSettings = slice.gameSettings;
         }
         return merged;

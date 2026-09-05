@@ -15,10 +15,6 @@ using UnityEngine.UI;
 /// </summary>
 public sealed class WorldPlaySession : MonoBehaviour
 {
-    private static readonly Color ExploredTint = new Color(0.82f, 0.84f, 0.86f, 1f);
-    private static readonly Color CurrentTint = Color.white;
-    private static readonly Color FogTint = new Color(0.18f, 0.2f, 0.24f, 1f);
-    private static readonly Color CombatHiddenTint = new Color(0.07f, 0.08f, 0.1f, 1f);
     private static readonly Color PathDotColor = new Color(0.25f, 0.72f, 1f, 0.95f);
     private static readonly Color CurrentOutlineColor = new Color(1f, 1f, 1f, 1f);
 
@@ -113,8 +109,16 @@ public sealed class WorldPlaySession : MonoBehaviour
 
     private void Update()
     {
+        if (RunSession.HasActive && Keyboard.current != null && Keyboard.current.kKey.wasPressedThisFrame)
+        {
+            RunSession.GrantKey(RunSession.BossKeyId);
+            pendingMessage = "测试：已获得魔王钥匙（K）。";
+            RefreshHud();
+        }
+
         if (!IsExploring || walking || transitioning || !RunSession.HasActive) return;
         UpdateHoverStatus();
+        UpdateExploreTileHover();
         if (Mouse.current == null || !Mouse.current.leftButton.wasPressedThisFrame) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
         if (mainCamera == null) return;
@@ -130,6 +134,31 @@ public sealed class WorldPlaySession : MonoBehaviour
         BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
         if (cell == null) return;
         TryWalkTo(cell.Coordinate);
+    }
+
+    private void UpdateExploreTileHover()
+    {
+        if (mainCamera == null || Mouse.current == null)
+        {
+            BoardTileHover.Clear();
+            return;
+        }
+
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        {
+            BoardTileHover.Clear();
+            return;
+        }
+
+        Ray ray = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
+        if (!Physics.Raycast(ray, out RaycastHit hit))
+        {
+            BoardTileHover.Clear();
+            return;
+        }
+
+        BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
+        BoardTileHover.Set(cell);
     }
 
     private void TryWalkIntoCloudPatch(WorldCloudPatch cloud)
@@ -390,7 +419,7 @@ public sealed class WorldPlaySession : MonoBehaviour
         if (stage == null || RunSession.IsCompleted(stage.StageId)) return false;
         if (stage.StageType != ContentStageTypeKeys.Battle && stage.StageType != ContentStageTypeKeys.Boss)
             return false;
-        return !RunSession.IsLocked(stage) && stage.UnitPlacements.Exists(item => item != null && item.Enabled);
+        return !RunSession.IsLocked(stage);
     }
 
     private void RefreshSpawnCells()
@@ -410,26 +439,19 @@ public sealed class WorldPlaySession : MonoBehaviour
             BoardCell cell = cells[i];
             if (!WorldLayout.TryGetStage(world, cell.Coordinate.x, cell.Coordinate.y, out StageDefinition stage))
             {
-                cell.SetTerrainTint(FogTint);
+                cell.SetTerrainVisible(false);
                 continue;
             }
 
             bool explored = RunSession.IsExplored(stage.StageId);
-            if (IsCombat && (current == null || stage.StageId != current.StageId))
-                cell.SetTerrainTint(CombatHiddenTint);
-            else if (current != null && stage.StageId == current.StageId)
-                cell.SetTerrainTint(CurrentTint);
-            else if (explored)
-                cell.SetTerrainTint(ExploredTint);
-            else
-                cell.SetTerrainTint(FogTint);
+            bool currentStage = current != null && stage.StageId == current.StageId;
+            cell.SetTerrainVisible(currentStage || (explored && !IsCombat));
 
             if (stageIcons.TryGetValue(stage.StageId, out TextMeshPro icon) && icon != null)
             {
                 bool cloudy = WorldCloudRules.HasCloudOver(current, stage, explored, IsCombat);
                 Color color = IconColor(stage);
                 if (!explored) color = Color.Lerp(color, cloudy ? Color.white : Color.black, cloudy ? 0.08f : 0.65f);
-                bool currentStage = current != null && stage.StageId == current.StageId;
                 if (IsCombat && !currentStage)
                     color.a = 0.15f;
                 else
@@ -811,6 +833,7 @@ public sealed class WorldPlaySession : MonoBehaviour
         SetForeignIconsVisible(keep.StageId, false);
         yield return AnimateForeignStages(keep.StageId, true);
         SetForeignStagesActive(keep.StageId, false);
+        board?.RebuildFoundationWalls(true);
     }
 
     private IEnumerator RestoreForeignStages()
@@ -822,6 +845,7 @@ public sealed class WorldPlaySession : MonoBehaviour
         SetForeignIconsVisible(keepId, true);
         if (linkRoot != null) linkRoot.gameObject.SetActive(true);
         RefreshStageLinks();
+        board?.RebuildFoundationWalls(false);
     }
 
     private IEnumerator AnimateForeignStages(string keepStageId, bool collapse)
@@ -1100,6 +1124,7 @@ public sealed class WorldPlaySession : MonoBehaviour
         builder.Append("    生命 ").Append(RunSession.Current.health).Append("/").Append(RunSession.Current.maxHealth);
         builder.Append("    金币 ").Append(RunSession.Current.gold);
         if (RunSession.HasKey(RunSession.BossKeyId)) builder.Append("    钥匙已入手");
+        else builder.Append("    K 测试钥匙");
         if (RunSession.IsLocked(stage)) builder.Append("    [锁定]");
         if (!string.IsNullOrEmpty(pendingMessage)) builder.Append("    ").Append(pendingMessage);
         statusText.text = builder.ToString();

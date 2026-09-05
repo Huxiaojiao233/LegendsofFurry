@@ -197,7 +197,7 @@ public sealed class ContentArchitectureFoundationTests
     [Test]
     public void TokenVisualApplyCreatesRuntimeMaterials()
     {
-        GameObject host = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        GameObject host = new GameObject("TokenVisualHost");
         try
         {
             UnitDefinition definition = new UnitDefinition
@@ -208,7 +208,7 @@ public sealed class ContentArchitectureFoundationTests
                 PortraitKey = string.Empty
             };
 
-            TokenVisualRuntime.Apply(host.GetComponent<MeshRenderer>(), definition);
+            TokenVisualRuntime.Apply(host.transform, definition);
 
             MeshRenderer renderer = host.GetComponent<MeshRenderer>();
             MeshFilter filter = host.GetComponent<MeshFilter>();
@@ -244,7 +244,7 @@ public sealed class ContentArchitectureFoundationTests
         Assert.That(composed.GameSettings.PlayerUnitId, Is.EqualTo("hero"));
     }
 
-    /// <summary>A later pack with blank character IDs must keep earlier authored encounter characters.</summary>
+    /// <summary>后加载的包如果没写玩家单位 ID，不得清掉前一层编制。</summary>
     [Test]
     public void ContentPackComposerKeepsPlayerUnitIdWhenLaterPackOmitsIt()
     {
@@ -268,9 +268,9 @@ public sealed class ContentArchitectureFoundationTests
         Assert.That(composed.GameSettings.PlayerUnitId, Is.EqualTo("hongye"));
     }
 
-    /// <summary>Later character overrides without portrait keys keep earlier token art fields.</summary>
+    /// <summary>Later unit overrides without portrait keys keep earlier token art fields.</summary>
     [Test]
-    public void ContentPackComposerKeepsPortraitWhenLaterCharacterOmitsIt()
+    public void ContentPackComposerKeepsPortraitWhenLaterUnitOmitsIt()
     {
         ContentPackage basePackage = new ContentPackage();
         ContentPackDefinition core = new ContentPackDefinition { PackId = "core", LoadOrder = 0 };
@@ -301,6 +301,7 @@ public sealed class ContentArchitectureFoundationTests
         Assert.That(composed.Units[0].TokenFrameColor, Is.EqualTo("#9AB041"));
         Assert.That(composed.Units[0].InitialHealth, Is.EqualTo(30));
     }
+
     [Test]
     public void GameDirectoryPacksRootIsBesideProjectOrPlayer()
     {
@@ -323,9 +324,9 @@ public sealed class ContentArchitectureFoundationTests
             string assetPath = Path.Combine(assetDirectory, "art.png");
             File.WriteAllBytes(assetPath, Convert.FromBase64String(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));
-            string catalog = "{\"schemaVersion\":2,\"contentVersion\":\"1.0.0\",\"characters\":[{\"characterId\":\"external_hero\",\"displayName\":\"External Hero\",\"initialHealth\":20,\"baseDamage\":3,\"moveSteps\":2,\"enabled\":true}],\"assets\":[{\"assetKey\":\"external.art\",\"assetKind\":\"artwork\",\"relativePath\":\"assets/art.png\"}]}";
+            string catalog = "{\"schemaVersion\":3,\"contentVersion\":\"1.0.0\",\"units\":[{\"unitId\":\"external_hero\",\"displayName\":\"External Hero\",\"initialHealth\":20,\"baseDamage\":3,\"moveSteps\":2,\"enabled\":true}],\"assets\":[{\"assetKey\":\"external.art\",\"assetKind\":\"artwork\",\"relativePath\":\"assets/art.png\"}]}";
             File.WriteAllText(Path.Combine(packDirectory, "catalog.json"), catalog, new UTF8Encoding(false));
-            string manifest = $"{{\"formatVersion\":1,\"packId\":\"sample_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":2,\"loadOrder\":100,\"dependencies\":[],\"overrides\":[],\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
+            string manifest = $"{{\"formatVersion\":2,\"packId\":\"sample_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"loadOrder\":100,\"dependencies\":[],\"overrides\":[],\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
             File.WriteAllText(Path.Combine(packDirectory, ContentPackLoader.ManifestFileName), manifest,
                 new UTF8Encoding(false));
             string baseRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
@@ -356,13 +357,13 @@ public sealed class ContentArchitectureFoundationTests
             string assetPath = Path.Combine(staging, "assets", "art.png");
             File.WriteAllBytes(assetPath, Convert.FromBase64String(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));
-            string characters = "{\"characters\":[{\"characterId\":\"zip_hero\",\"displayName\":\"Zip Hero\",\"initialHealth\":20,\"baseDamage\":3,\"moveSteps\":2,\"enabled\":true}]}";
+            string units = "{\"units\":[{\"unitId\":\"zip_hero\",\"displayName\":\"Zip Hero\",\"initialHealth\":20,\"baseDamage\":3,\"moveSteps\":2,\"enabled\":true}]}";
             string assets = "{\"assets\":[{\"assetKey\":\"zip.art\",\"assetKind\":\"artwork\",\"relativePath\":\"assets/art.png\"}]}";
-            File.WriteAllText(Path.Combine(staging, "characters.json"), characters, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(staging, "units.json"), units, new UTF8Encoding(false));
             File.WriteAllText(Path.Combine(staging, "assets.json"), assets, new UTF8Encoding(false));
-            string catalog = $"{{\"schemaVersion\":2,\"contentVersion\":\"1.0.0\",\"layout\":\"split\",\"parts\":[{{\"kind\":\"characters\",\"file\":\"characters.json\",\"sha256\":\"{ComputeSha256(characters)}\"}},{{\"kind\":\"assets\",\"file\":\"assets.json\",\"sha256\":\"{ComputeSha256(assets)}\"}}]}}";
+            string catalog = $"{{\"schemaVersion\":3,\"contentVersion\":\"1.0.0\",\"layout\":\"split\",\"parts\":[{{\"kind\":\"units\",\"file\":\"units.json\",\"sha256\":\"{ComputeSha256(units)}\"}},{{\"kind\":\"assets\",\"file\":\"assets.json\",\"sha256\":\"{ComputeSha256(assets)}\"}}]}}";
             File.WriteAllText(Path.Combine(staging, "catalog.json"), catalog, new UTF8Encoding(false));
-            string manifest = $"{{\"formatVersion\":2,\"packId\":\"zip_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":2,\"loadOrder\":100,\"dependencies\":[],\"overrides\":[],\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
+            string manifest = $"{{\"formatVersion\":2,\"packId\":\"zip_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"loadOrder\":100,\"dependencies\":[],\"overrides\":[],\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
             File.WriteAllText(Path.Combine(staging, ContentPackLoader.ManifestFileName), manifest, new UTF8Encoding(false));
             Directory.CreateDirectory(packRoot);
             CreateZipFromDirectory(staging, Path.Combine(packRoot, "zip_pack.lofepackage"));
@@ -381,6 +382,42 @@ public sealed class ContentArchitectureFoundationTests
         }
     }
 
+    /// <summary>schema 3 分文件包必须合并 units 与 aiProfiles。</summary>
+    [Test]
+    public void PhysicalContentPackLoadsSchema3UnitsAndAiProfiles()
+    {
+        string temporary = Path.Combine(Path.GetTempPath(), "lof-pack-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string packRoot = Path.Combine(temporary, "Packs");
+            string staging = Path.Combine(temporary, "staging");
+            Directory.CreateDirectory(staging);
+            string units = "{\"units\":[{\"unitId\":\"schema3_slime\",\"displayName\":\"史莱姆\",\"unitKind\":\"monster\",\"defaultFaction\":\"enemy\",\"controller\":\"ai\",\"enabled\":true,\"initialHealth\":20,\"capabilities\":[\"wading\"],\"aiProfileId\":\"general\",\"aiOverrides\":[{\"key\":\"killWeight\",\"value\":2}]}]}";
+            string profiles = "{\"aiProfiles\":[{\"aiProfileId\":\"general\",\"displayName\":\"通用型\",\"attackWeight\":1,\"defenseWeight\":1,\"healingWeight\":1,\"approachWeight\":1,\"retreatWeight\":1,\"killWeight\":1,\"preferredRange\":1,\"lowHealthThreshold\":0.3,\"enabled\":true}]}";
+            File.WriteAllText(Path.Combine(staging, "units.json"), units, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(staging, "ai-profiles.json"), profiles, new UTF8Encoding(false));
+            string catalog = $"{{\"schemaVersion\":3,\"contentVersion\":\"1.0.0\",\"layout\":\"split\",\"parts\":[{{\"kind\":\"units\",\"file\":\"units.json\",\"sha256\":\"{ComputeSha256(units)}\"}},{{\"kind\":\"aiProfiles\",\"file\":\"ai-profiles.json\",\"sha256\":\"{ComputeSha256(profiles)}\"}}]}}";
+            File.WriteAllText(Path.Combine(staging, "catalog.json"), catalog, new UTF8Encoding(false));
+            string manifest = $"{{\"formatVersion\":2,\"packId\":\"schema3_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"loadOrder\":100,\"dependencies\":[],\"overrides\":[],\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
+            File.WriteAllText(Path.Combine(staging, ContentPackLoader.ManifestFileName), manifest, new UTF8Encoding(false));
+            Directory.CreateDirectory(packRoot);
+            CreateZipFromDirectory(staging, Path.Combine(packRoot, "schema3_pack.lofepackage"));
+            string baseRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
+
+            ContentLoadResult result = ContentPackLoader.Load(baseRoot, new[] { packRoot });
+
+            Assert.That(result.Package.Units.Any(item => item.UnitId == "schema3_slime"), Is.True);
+            UnitDefinition slime = result.Package.Units.Single(item => item.UnitId == "schema3_slime");
+            Assert.That(slime.AiOverrides.KillWeight, Is.EqualTo(2f));
+            Assert.That(float.IsNaN(slime.AiOverrides.AttackWeight), Is.True);
+            Assert.That(result.Package.AiProfiles.Any(item => item.AiProfileId == "general"), Is.True);
+        }
+        finally
+        {
+            if (Directory.Exists(temporary)) Directory.Delete(temporary, true);
+        }
+    }
+
     /// <summary>Ensures a tampered catalog never reaches package composition.</summary>
     [Test]
     public void PhysicalContentPackRejectsCatalogHashMismatch()
@@ -391,7 +428,7 @@ public sealed class ContentArchitectureFoundationTests
             string packDirectory = Path.Combine(temporary, "Packs", "tampered");
             Directory.CreateDirectory(packDirectory);
             File.WriteAllText(Path.Combine(packDirectory, "catalog.json"), "{}", new UTF8Encoding(false));
-            string manifest = "{\"formatVersion\":1,\"packId\":\"tampered\",\"packVersion\":\"1.0.0\",\"schemaVersion\":2,\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"deadbeef\"}";
+            string manifest = "{\"formatVersion\":2,\"packId\":\"tampered\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"deadbeef\"}";
             File.WriteAllText(Path.Combine(packDirectory, ContentPackLoader.ManifestFileName), manifest,
                 new UTF8Encoding(false));
             string baseRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
@@ -414,10 +451,10 @@ public sealed class ContentArchitectureFoundationTests
         {
             string packDirectory = Path.Combine(temporary, "Packs", "escape");
             Directory.CreateDirectory(packDirectory);
-            string catalog = "{\"schemaVersion\":2,\"contentVersion\":\"1.0.0\"}";
+            string catalog = "{\"schemaVersion\":3,\"contentVersion\":\"1.0.0\"}";
             File.WriteAllText(Path.Combine(temporary, "Packs", "outside.json"), catalog,
                 new UTF8Encoding(false));
-            string manifest = $"{{\"formatVersion\":1,\"packId\":\"escape\",\"packVersion\":\"1.0.0\",\"schemaVersion\":2,\"catalogFile\":\"../outside.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
+            string manifest = $"{{\"formatVersion\":2,\"packId\":\"escape\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"catalogFile\":\"../outside.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}";
             File.WriteAllText(Path.Combine(packDirectory, ContentPackLoader.ManifestFileName), manifest,
                 new UTF8Encoding(false));
             string baseRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
@@ -443,25 +480,36 @@ public sealed class ContentArchitectureFoundationTests
         Assert.Throws<InvalidDataException>(() => ContentRuntimeCapabilityValidator.ValidateOrThrow(package));
     }
 
-    /// <summary>Ensures a broken optional user pack is isolated and reported instead of disabling base content.</summary>
+    /// <summary>Ensures a broken optional user pack is isolated and reported instead of disabling required content.</summary>
     [Test]
     public void OptionalUserPackFailureProducesDiagnosticAndKeepsBasePackage()
     {
         string temporary = Path.Combine(Path.GetTempPath(), "lof-pack-tests", Guid.NewGuid().ToString("N"));
         try
         {
-            string packDirectory = Path.Combine(temporary, "Packs", "broken-user-pack");
-            Directory.CreateDirectory(packDirectory);
-            File.WriteAllText(Path.Combine(packDirectory, "catalog.json"), "{}", new UTF8Encoding(false));
-            File.WriteAllText(Path.Combine(packDirectory, ContentPackLoader.ManifestFileName),
-                "{\"formatVersion\":1,\"packId\":\"broken_user_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":2,\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"invalid\"}",
+            string validDirectory = Path.Combine(temporary, "Valid", "keep");
+            Directory.CreateDirectory(validDirectory);
+            string catalog = "{\"schemaVersion\":3,\"contentVersion\":\"1.0.0\",\"cards\":[{\"cardId\":\"hit_01\",\"displayName\":\"爪击\",\"enabled\":true}]}";
+            File.WriteAllText(Path.Combine(validDirectory, "catalog.json"), catalog, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(validDirectory, ContentPackLoader.ManifestFileName),
+                $"{{\"formatVersion\":2,\"packId\":\"keep_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}",
+                new UTF8Encoding(false));
+            string brokenDirectory = Path.Combine(temporary, "Broken", "broken-user-pack");
+            Directory.CreateDirectory(brokenDirectory);
+            File.WriteAllText(Path.Combine(brokenDirectory, "catalog.json"), "{}", new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(brokenDirectory, ContentPackLoader.ManifestFileName),
+                "{\"formatVersion\":2,\"packId\":\"broken_user_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"invalid\"}",
                 new UTF8Encoding(false));
             string baseRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
 
             ContentLoadResult result = ContentPackLoader.Load(baseRoot,
-                new[] { new ContentPackRoot(Path.Combine(temporary, "Packs"), false) }, Array.Empty<string>());
+                new[]
+                {
+                    new ContentPackRoot(Path.Combine(temporary, "Valid"), true),
+                    new ContentPackRoot(Path.Combine(temporary, "Broken"), false)
+                }, Array.Empty<string>());
 
-            Assert.That(result.LoadedPacks, Is.Empty);
+            Assert.That(result.LoadedPacks.Select(item => item.Definition.PackId), Is.EqualTo(new[] { "keep_pack" }));
             Assert.That(result.Diagnostics.Any(item => item.Severity == "error"), Is.True);
             Assert.That(result.Package.Cards.Any(item => item.CardId == "hit_01"), Is.True);
         }
@@ -480,10 +528,10 @@ public sealed class ContentArchitectureFoundationTests
         {
             string packDirectory = Path.Combine(temporary, "Packs", "toggle");
             Directory.CreateDirectory(packDirectory);
-            string catalog = "{\"schemaVersion\":2,\"contentVersion\":\"1.0.0\",\"characters\":[{\"characterId\":\"toggle_hero\",\"displayName\":\"Toggle\",\"initialHealth\":10,\"baseDamage\":1,\"moveSteps\":1,\"enabled\":true}]}";
+            string catalog = "{\"schemaVersion\":3,\"contentVersion\":\"1.0.0\",\"units\":[{\"unitId\":\"toggle_hero\",\"displayName\":\"Toggle\",\"initialHealth\":10,\"baseDamage\":1,\"moveSteps\":1,\"enabled\":true}]}";
             File.WriteAllText(Path.Combine(packDirectory, "catalog.json"), catalog, new UTF8Encoding(false));
             File.WriteAllText(Path.Combine(packDirectory, ContentPackLoader.ManifestFileName),
-                $"{{\"formatVersion\":1,\"packId\":\"toggle_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":2,\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}",
+                $"{{\"formatVersion\":2,\"packId\":\"toggle_pack\",\"packVersion\":\"1.0.0\",\"schemaVersion\":3,\"catalogFile\":\"catalog.json\",\"catalogSha256\":\"{ComputeSha256(catalog)}\"}}",
                 new UTF8Encoding(false));
             string baseRoot = Path.Combine(Application.dataPath, "StreamingAssets", "Content");
             ContentPackRoot root = new ContentPackRoot(Path.Combine(temporary, "Packs"), false);

@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using LegendsOfFurry.Content.Contracts;
+using LegendsOfFurry.Content.Runtime;
 using UnityEngine;
 
 /// <summary>
-/// 读写 StreamingAssets/Content/Worlds。优先分块目录，其次兼容旧的单文件 demo.json。
+/// 读写世界分块目录。优先内容包 worlds/，StreamingAssets/Content/Worlds 仅作兼容回退。
 /// </summary>
 public static class WorldMapIO
 {
@@ -19,11 +20,25 @@ public static class WorldMapIO
 
     public static List<WorldDefinition> LoadAll()
     {
-        List<WorldDefinition> worlds = new List<WorldDefinition>();
-        HashSet<string> loadedIds = new HashSet<string>(StringComparer.Ordinal);
-        string root = WorldsRoot;
-        if (!Directory.Exists(root)) return worlds;
+        Dictionary<string, WorldDefinition> byId =
+            new Dictionary<string, WorldDefinition>(StringComparer.Ordinal);
+        LoadAllFromRoot(WorldsRoot, byId, replaceExisting: false);
+        if (ContentRuntime.IsLoaded)
+        {
+            foreach (ContentPackLoadInfo pack in ContentRuntime.LoadedPacks)
+            {
+                if (pack == null || string.IsNullOrEmpty(pack.Directory)) continue;
+                LoadAllFromRoot(Path.Combine(pack.Directory, "worlds"), byId, replaceExisting: true);
+            }
+        }
 
+        return new List<WorldDefinition>(byId.Values);
+    }
+
+    /// <summary>从指定根目录加载全部世界；replaceExisting 为真时同 ID 覆盖（内容包优先）。</summary>
+    public static void LoadAllFromRoot(string root, Dictionary<string, WorldDefinition> byId, bool replaceExisting)
+    {
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root) || byId == null) return;
         foreach (string directory in Directory.GetDirectories(root))
         {
             string worldPath = Path.Combine(directory, "world.json");
@@ -31,28 +46,22 @@ public static class WorldMapIO
             try
             {
                 WorldDefinition world = LoadChunked(directory);
-                if (loadedIds.Add(world.WorldId)) worlds.Add(world);
+                if (byId.ContainsKey(world.WorldId) && !replaceExisting) continue;
+                byId[world.WorldId] = world;
             }
             catch (Exception exception)
             {
                 Debug.LogError($"世界地图 {worldPath} 读取失败：{exception.Message}");
             }
         }
+    }
 
-        foreach (string path in Directory.GetFiles(root, "*.json"))
-        {
-            try
-            {
-                WorldDefinition world = LoadLegacy(path);
-                if (loadedIds.Add(world.WorldId)) worlds.Add(world);
-            }
-            catch (Exception exception)
-            {
-                Debug.LogError($"世界地图 {path} 读取失败：{exception.Message}");
-            }
-        }
-
-        return worlds;
+    public static List<WorldDefinition> LoadAllFromRoot(string root)
+    {
+        Dictionary<string, WorldDefinition> byId =
+            new Dictionary<string, WorldDefinition>(StringComparer.Ordinal);
+        LoadAllFromRoot(root, byId, replaceExisting: true);
+        return new List<WorldDefinition>(byId.Values);
     }
 
     public static WorldDefinition LoadChunked(string folder)
@@ -89,59 +98,6 @@ public static class WorldMapIO
             world.Stages.Find(item => item.StageId == world.StartStageId) == null)
             throw new InvalidDataException($"世界 {world.WorldId} 的起始关卡不存在。");
 
-        WorldTerrain.FillMissingHeights(world);
-        return world;
-    }
-
-    public static WorldDefinition LoadLegacy(string path)
-    {
-        WorldFileDto dto = JsonUtility.FromJson<WorldFileDto>(File.ReadAllText(path));
-        if (dto == null || !ContentId.IsValid(dto.worldId))
-            throw new InvalidDataException($"世界 ID 无效：{path}");
-        WorldDefinition world = new WorldDefinition
-        {
-            FormatVersion = 1,
-            WorldId = dto.worldId,
-            DisplayName = string.IsNullOrWhiteSpace(dto.displayName) ? dto.worldId : dto.displayName,
-            Mode = "finite",
-            StageGridWidth = dto.stageGridWidth > 0 ? dto.stageGridWidth : 5,
-            StageGridHeight = dto.stageGridHeight > 0 ? dto.stageGridHeight : 5,
-            TerrainWidth = dto.terrainWidth > 0 ? dto.terrainWidth : 10,
-            TerrainHeight = dto.terrainHeight > 0 ? dto.terrainHeight : 10,
-            StartStageId = dto.startStageId ?? string.Empty,
-            StartTileX = dto.terrainWidth > 0 ? dto.terrainWidth / 2 : 5,
-            StartTileY = dto.terrainHeight > 0 ? dto.terrainHeight / 2 : 5
-        };
-        if (dto.stages == null) throw new InvalidDataException($"世界 {dto.worldId} 没有关卡格子。");
-        HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
-        HashSet<(int, int)> cells = new HashSet<(int, int)>();
-        foreach (StageFileDto item in dto.stages)
-        {
-            if (item == null || !item.enabled) continue;
-            if (!ContentId.IsValid(item.stageId) || !ContentStageTypeKeys.IsKnown(item.stageType))
-                throw new InvalidDataException($"关卡 {item.stageId} 的 ID 或类型无效。");
-            if (!ids.Add(item.stageId) || !cells.Add((item.gridX, item.gridY)))
-                throw new InvalidDataException($"关卡 {item.stageId} 的 ID 或坐标重复。");
-            StageDefinition stage = new StageDefinition
-            {
-                StageId = item.stageId,
-                DisplayName = string.IsNullOrWhiteSpace(item.displayName) ? item.stageId : item.displayName,
-                StageType = item.stageType,
-                GridX = item.gridX,
-                GridY = item.gridY,
-                Heights = item.heights ?? Array.Empty<int>(),
-                RewardPoolId = item.rewardPoolId ?? string.Empty,
-                RequiredKeyId = item.requiredKeyId ?? string.Empty,
-                DropKeyId = item.dropKeyId ?? string.Empty,
-                Enabled = true
-            };
-            AddUnitPlacements(stage, item.unitPlacements, item.enemyCharacterIds,
-                world.TerrainWidth, world.TerrainHeight);
-            world.Stages.Add(stage);
-        }
-
-        if (world.Stages.Find(item => item.StageId == world.StartStageId) == null)
-            throw new InvalidDataException($"世界 {world.WorldId} 的起始关卡不存在。");
         WorldTerrain.FillMissingHeights(world);
         return world;
     }
@@ -333,7 +289,9 @@ public static class WorldMapIO
             TerrainHeight = th,
             StartStageId = header.startStageId ?? string.Empty,
             StartTileX = ReadVec(header.startTile, 0, tw / 2),
-            StartTileY = ReadVec(header.startTile, 1, th / 2)
+            StartTileY = ReadVec(header.startTile, 1, th / 2),
+            Seed = header.seed,
+            GeneratorId = header.generatorId ?? string.Empty
         };
     }
 
@@ -350,7 +308,9 @@ public static class WorldMapIO
             startTile = new[] { world.StartTileX, world.StartTileY },
             boundsMin = new[] { world.BoundsMinX, world.BoundsMinY },
             boundsMax = new[] { world.BoundsMaxX, world.BoundsMaxY },
-            startStageId = world.StartStageId
+            startStageId = world.StartStageId,
+            seed = world.Seed,
+            generatorId = world.GeneratorId
         };
     }
 
@@ -382,7 +342,7 @@ public static class WorldMapIO
         };
         if (!ContentId.IsValid(stage.StageId))
             throw new InvalidDataException($"关卡 {stage.StageId} 的 ID 无效。");
-        AddUnitPlacements(stage, dto.unitPlacements, dto.enemyCharacterIds, width, height);
+        AddUnitPlacements(stage, dto.unitPlacements);
         stage.Heights = NormalizeHeights(dto.heights, width, height);
         stage.TerrainIds = DecodeTerrain(dto.terrainLegend, dto.terrain, width, height, stage.Heights);
         if (dto.objects != null)
@@ -477,44 +437,24 @@ public static class WorldMapIO
         };
     }
 
-    /// <summary>读取 schema v3 部署；旧 ID 数组只在迁移时转换一次，后续保存不再写回。</summary>
-    private static void AddUnitPlacements(StageDefinition stage, UnitPlacementFileDto[] placements,
-        string[] legacyEnemyIds, int width, int height)
+    /// <summary>读取世界编辑器保存的单位部署实例。</summary>
+    private static void AddUnitPlacements(StageDefinition stage, UnitPlacementFileDto[] placements)
     {
-        if (placements != null)
+        if (placements == null) return;
+        foreach (UnitPlacementFileDto item in placements)
         {
-            foreach (UnitPlacementFileDto item in placements)
-            {
-                if (item == null || string.IsNullOrWhiteSpace(item.unitId)) continue;
-                stage.UnitPlacements.Add(new WorldUnitPlacementDefinition
-                {
-                    InstanceId = string.IsNullOrWhiteSpace(item.instanceId)
-                        ? $"{stage.StageId}-{item.unitId}-{item.x}-{item.y}" : item.instanceId,
-                    UnitId = item.unitId,
-                    LocalX = item.x,
-                    LocalY = item.y,
-                    FactionOverride = item.factionOverride ?? string.Empty,
-                    ControllerOverride = item.controllerOverride ?? string.Empty,
-                    DeckIdOverride = item.deckIdOverride ?? string.Empty,
-                    Enabled = item.enabled
-                });
-            }
-            return;
-        }
-        if (legacyEnemyIds == null) return;
-        for (int index = 0; index < legacyEnemyIds.Length; index++)
-        {
-            string unitId = legacyEnemyIds[index];
-            if (string.IsNullOrWhiteSpace(unitId)) continue;
+            if (item == null || string.IsNullOrWhiteSpace(item.unitId)) continue;
             stage.UnitPlacements.Add(new WorldUnitPlacementDefinition
             {
-                InstanceId = $"{stage.StageId}-{unitId}-{index + 1}",
-                UnitId = unitId,
-                LocalX = Math.Max(0, width - 3 + index),
-                LocalY = Math.Max(0, height / 2),
-                FactionOverride = "enemy",
-                ControllerOverride = "ai",
-                Enabled = true
+                InstanceId = string.IsNullOrWhiteSpace(item.instanceId)
+                    ? $"{stage.StageId}-{item.unitId}-{item.x}-{item.y}" : item.instanceId,
+                UnitId = item.unitId,
+                LocalX = item.x,
+                LocalY = item.y,
+                FactionOverride = item.factionOverride ?? string.Empty,
+                ControllerOverride = item.controllerOverride ?? string.Empty,
+                DeckIdOverride = item.deckIdOverride ?? string.Empty,
+                Enabled = item.enabled
             });
         }
     }
@@ -581,6 +521,8 @@ public static class WorldMapIO
         public int[] boundsMin;
         public int[] boundsMax;
         public string startStageId;
+        public int seed;
+        public string generatorId;
     }
 
     [Serializable]
@@ -596,7 +538,6 @@ public static class WorldMapIO
         public int[] heights;
         public DecorationFileDto[] objects;
         public UnitPlacementFileDto[] unitPlacements;
-        public string[] enemyCharacterIds;
         public string rewardPoolId;
         public string requiredKeyId;
         public string dropKeyId;
@@ -629,36 +570,6 @@ public static class WorldMapIO
         public string factionOverride;
         public string controllerOverride;
         public string deckIdOverride;
-        public bool enabled = true;
-    }
-
-    [Serializable]
-    private sealed class WorldFileDto
-    {
-        public string worldId;
-        public string displayName;
-        public int stageGridWidth;
-        public int stageGridHeight;
-        public int terrainWidth;
-        public int terrainHeight;
-        public string startStageId;
-        public StageFileDto[] stages;
-    }
-
-    [Serializable]
-    private sealed class StageFileDto
-    {
-        public string stageId;
-        public string displayName;
-        public string stageType;
-        public int gridX;
-        public int gridY;
-        public int[] heights;
-        public UnitPlacementFileDto[] unitPlacements;
-        public string[] enemyCharacterIds;
-        public string rewardPoolId;
-        public string requiredKeyId;
-        public string dropKeyId;
         public bool enabled = true;
     }
 }

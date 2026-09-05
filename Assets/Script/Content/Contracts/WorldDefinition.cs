@@ -26,6 +26,8 @@ public sealed class WorldDefinition : IContentDefinition
     public string WorldId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string Mode { get; set; } = "finite";
+    public int Seed { get; set; }
+    public string GeneratorId { get; set; } = string.Empty;
     public int BoundsMinX { get; set; }
     public int BoundsMinY { get; set; }
     public int StageGridWidth { get; set; } = 5;
@@ -151,8 +153,8 @@ public sealed class WorldDecorationDefinition
 /// <summary>按大世界坐标生成高度，保证相邻关卡接缝处高度连续。</summary>
 public static class WorldTerrain
 {
-    public const int MinHeight = -1;
-    public const int MaxHeight = 2;
+    public const int MinHeight = -5;
+    public const int MaxHeight = 10;
     /// <summary>一层高度对应的世界 Y。地形方块高度是 0.5，抬高/降低一格就移动这么多。</summary>
     public const float StepY = 0.5f;
 
@@ -181,7 +183,7 @@ public static class WorldTerrain
             stage.EnsureGrids(tw, th);
     }
 
-    /// <summary>西低东高、南侧略降一层，范围夹在 -1 到 2。</summary>
+    /// <summary>西低东高、南侧略降一层，范围夹在 MinHeight 到 MaxHeight。</summary>
     public static int HeightAt(WorldDefinition world, int worldX, int worldY)
     {
         int maxX = Math.Max(1, world.WorldTerrainWidth - 1);

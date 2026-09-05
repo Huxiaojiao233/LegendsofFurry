@@ -104,10 +104,10 @@ public static class ContentDefinitionKinds
 
     /// <summary>
     /// 判断该定义类型是否可以拥有行为图。
-    /// 角色和装备现在就预留，避免后续 schema 阶段另造一套归属语义。
+    /// 单位和装备现在就预留，避免后续 schema 阶段另造一套归属语义。
     /// </summary>
     /// <param name="kind">策划编写的归属类型。</param>
-    /// <returns>卡牌、状态、职业、角色或装备时返回 true。</returns>
+    /// <returns>卡牌、状态、职业、单位或装备时返回 true。</returns>
     public static bool CanOwnBehavior(string? kind)
     {
         return kind == Card || kind == Status || kind == Class ||
