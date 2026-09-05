@@ -109,6 +109,15 @@ public sealed class WorldPlaySession : MonoBehaviour
 
     private void Update()
     {
+        if (RunSession.HasActive && Keyboard.current != null && Keyboard.current.uKey.wasPressedThisFrame)
+        {
+            RunSession.DebugUnlockAllStages(world);
+            RevealAdjacent(CurrentStage);
+            ApplyFog();
+            pendingMessage = "测试：已解锁并揭示全部关卡（U）。";
+            RefreshHud();
+        }
+
         if (RunSession.HasActive && Keyboard.current != null && Keyboard.current.kKey.wasPressedThisFrame)
         {
             RunSession.GrantKey(RunSession.BossKeyId);

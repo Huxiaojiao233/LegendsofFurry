@@ -100,7 +100,8 @@ public sealed class WorldChunkManager : MonoBehaviour
 
         foreach (ChunkState state in chunks.Values)
         {
-            float distance = Mathf.Sqrt(state.Bounds.SqrDistance(position));
+            // 正交俯视相机的高度不应把近处 Chunk 判成远景；只比较水平 XZ 距离。
+            float distance = HorizontalDistance(state.Bounds, position);
             ChunkLod lod = distance <= highDistance ? ChunkLod.High
                 : distance <= mediumDistance ? ChunkLod.Medium
                 : distance <= lowDistance ? ChunkLod.Low
@@ -123,5 +124,12 @@ public sealed class WorldChunkManager : MonoBehaviour
             cell.SetSmallDecorationsVisible(decorationsVisible);
             cell.SetChunkColliderEnabled(terrainVisible);
         }
+    }
+
+    private static float HorizontalDistance(Bounds bounds, Vector3 position)
+    {
+        float dx = Mathf.Max(Mathf.Abs(position.x - bounds.center.x) - bounds.extents.x, 0f);
+        float dz = Mathf.Max(Mathf.Abs(position.z - bounds.center.z) - bounds.extents.z, 0f);
+        return Mathf.Sqrt(dx * dx + dz * dz);
     }
 }

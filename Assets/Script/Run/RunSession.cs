@@ -166,6 +166,28 @@ public static class RunSession
         return !Contains(current?.unlockedStageIds, stage.StageId);
     }
 
+    /// <summary>测试辅助：揭示并解锁世界中的全部关卡，不标记为已完成。</summary>
+    public static void DebugUnlockAllStages(WorldDefinition world)
+    {
+        if (!HasActive || world == null || world.Stages == null) return;
+        List<string> explored = new List<string>(current.exploredStageIds ?? Array.Empty<string>());
+        List<string> unlocked = new List<string>(current.unlockedStageIds ?? Array.Empty<string>());
+        List<string> keys = new List<string>(current.keys ?? Array.Empty<string>());
+        for (int i = 0; i < world.Stages.Count; i++)
+        {
+            StageDefinition stage = world.Stages[i];
+            if (stage == null || string.IsNullOrWhiteSpace(stage.StageId)) continue;
+            if (!explored.Contains(stage.StageId)) explored.Add(stage.StageId);
+            if (!unlocked.Contains(stage.StageId)) unlocked.Add(stage.StageId);
+            if (!string.IsNullOrWhiteSpace(stage.RequiredKeyId) && !keys.Contains(stage.RequiredKeyId))
+                keys.Add(stage.RequiredKeyId);
+        }
+        current.exploredStageIds = explored.ToArray();
+        current.unlockedStageIds = unlocked.ToArray();
+        current.keys = keys.ToArray();
+        Persist();
+    }
+
     /// <summary>战斗或事件完成后写入血量、牌库，并处理钥匙掉落。</summary>
     public static void CompleteCurrentStage(int remainingHealth, int maxHealth, IReadOnlyList<string> deckCardIds,
         StageDefinition stage)
