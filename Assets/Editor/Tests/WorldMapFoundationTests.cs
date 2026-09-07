@@ -207,6 +207,31 @@ public sealed class WorldMapFoundationTests
     }
 
     [Test]
+    public void ChunkedWorldRoundTripKeepsMultiCellObjectAndContentPackReference()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "lofe-world-object-footprint-test");
+        if (Directory.Exists(folder)) Directory.Delete(folder, true);
+        WorldDefinition source = WorldMapIO.CreateBlank("objects", "对象测试", 1, 1, 8);
+        source.ContentPackId = "lofe-core";
+        StageDefinition stage = source.Stages[0];
+        stage.Decorations.Add(new WorldDecorationDefinition
+        {
+            Id = "gate", Definition = "base.gate", LocalX = 1, LocalY = 2,
+            Rotation = 90, FootprintWidth = 3, FootprintHeight = 2
+        });
+
+        WorldMapIO.SaveChunked(source, folder);
+        WorldDefinition loaded = WorldMapIO.LoadChunked(folder);
+        WorldDecorationDefinition gate = loaded.Stages[0].Decorations.Single();
+        Assert.That(loaded.ContentPackId, Is.EqualTo("lofe-core"));
+        Assert.That(gate.FootprintWidth, Is.EqualTo(3));
+        Assert.That(gate.FootprintHeight, Is.EqualTo(2));
+        Assert.That(gate.EffectiveWidth, Is.EqualTo(2));
+        Assert.That(gate.EffectiveHeight, Is.EqualTo(3));
+        Assert.That(WorldMapIO.Validate(loaded), Is.Empty);
+    }
+
+    [Test]
     public void FiniteWorldRejectsMissingChunkFile()
     {
         string folder = Path.Combine(Path.GetTempPath(), "lofe-world-missing-chunk");

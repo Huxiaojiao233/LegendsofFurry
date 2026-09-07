@@ -28,6 +28,8 @@ public sealed class WorldDefinition : IContentDefinition
     public string Mode { get; set; } = "finite";
     public int Seed { get; set; }
     public string GeneratorId { get; set; } = string.Empty;
+    /// <summary>提供此地图所需 Unit、AI 等定义的内容包 ID；空值表示基础内容。</summary>
+    public string ContentPackId { get; set; } = string.Empty;
     public int BoundsMinX { get; set; }
     public int BoundsMinY { get; set; }
     public int StageGridWidth { get; set; } = 5;
@@ -148,6 +150,14 @@ public sealed class WorldDecorationDefinition
     public int LocalX { get; set; }
     public int LocalY { get; set; }
     public int Rotation { get; set; }
+    /// <summary>对象在逻辑格上占用的宽高。视觉 Prefab 与逻辑地形格保持分离。</summary>
+    public int FootprintWidth { get; set; } = 1;
+    public int FootprintHeight { get; set; } = 1;
+
+    public int EffectiveWidth => Rotation % 180 == 0
+        ? Math.Max(1, FootprintWidth) : Math.Max(1, FootprintHeight);
+    public int EffectiveHeight => Rotation % 180 == 0
+        ? Math.Max(1, FootprintHeight) : Math.Max(1, FootprintWidth);
 }
 
 /// <summary>按大世界坐标生成高度，保证相邻关卡接缝处高度连续。</summary>

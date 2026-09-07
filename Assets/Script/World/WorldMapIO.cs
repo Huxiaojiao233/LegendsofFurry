@@ -14,6 +14,10 @@ public static class WorldMapIO
     public static string WorldsRoot =>
         Path.Combine(Application.streamingAssetsPath, "Content", "Worlds");
 
+    /// <summary>游戏内编辑器的可写地图覆盖层。不会改写安装包或 Unity Scene。</summary>
+    public static string UserWorldsRoot =>
+        Path.Combine(Application.persistentDataPath, "Content", "Worlds");
+
     public static string WorldFolder(string worldId) => Path.Combine(WorldsRoot, worldId);
 
     public static string ChunkFileName(int x, int y) => $"{x}_{y}.json";
@@ -31,6 +35,8 @@ public static class WorldMapIO
                 LoadAllFromRoot(Path.Combine(pack.Directory, "worlds"), byId, replaceExisting: true);
             }
         }
+        // 玩家或关卡设计师在 Runtime 保存的版本优先级最高。
+        LoadAllFromRoot(UserWorldsRoot, byId, replaceExisting: true);
 
         return new List<WorldDefinition>(byId.Values);
     }
@@ -104,6 +110,10 @@ public static class WorldMapIO
 
     public static void SaveChunked(WorldDefinition world) => SaveChunked(world, WorldFolder(world.WorldId));
 
+    /// <summary>Runtime 编辑器只写持久化覆盖层，重启游戏后仍由 WorldCatalog 自动读取。</summary>
+    public static void SaveUserWorld(WorldDefinition world) =>
+        SaveChunked(world, Path.Combine(UserWorldsRoot, world.WorldId));
+
     public static void SaveChunked(WorldDefinition world, string folder)
     {
         if (world == null) throw new ArgumentNullException(nameof(world));
@@ -167,6 +177,28 @@ public static class WorldMapIO
             stage.EnsureGrids(tw, th);
             if (stage.Heights.Length != tw * th) issues.Add($"关卡 {stage.StageId} 高度格子数不对。");
             if (stage.TerrainIds.Length != tw * th) issues.Add($"关卡 {stage.StageId} 地形格子数不对。");
+            HashSet<string> objectIds = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<(int, int)> objectCells = new HashSet<(int, int)>();
+            foreach (WorldDecorationDefinition decoration in stage.Decorations ?? new List<WorldDecorationDefinition>())
+            {
+                if (decoration == null) continue;
+                if (string.IsNullOrWhiteSpace(decoration.Id) || !objectIds.Add(decoration.Id))
+                    issues.Add($"关卡 {stage.StageId} 的对象实例 ID 为空或重复：{decoration?.Id}。");
+                if (string.IsNullOrWhiteSpace(decoration.Definition))
+                    issues.Add($"关卡 {stage.StageId} 的对象 {decoration.Id} 缺少资源定义。");
+                int objectWidth = decoration.EffectiveWidth;
+                int objectHeight = decoration.EffectiveHeight;
+                for (int y = decoration.LocalY; y < decoration.LocalY + objectHeight; y++)
+                {
+                    for (int x = decoration.LocalX; x < decoration.LocalX + objectWidth; x++)
+                    {
+                        if (x < 0 || y < 0 || x >= tw || y >= th)
+                            issues.Add($"关卡 {stage.StageId} 的对象 {decoration.Id} 超出区块范围。");
+                        else if (!objectCells.Add((x, y)))
+                            issues.Add($"关卡 {stage.StageId} 的对象在 ({x},{y}) 重叠。");
+                    }
+                }
+            }
             HashSet<string> instanceIds = new HashSet<string>(StringComparer.Ordinal);
             HashSet<(int, int)> placementCells = new HashSet<(int, int)>();
             foreach (WorldUnitPlacementDefinition placement in stage.UnitPlacements ?? new List<WorldUnitPlacementDefinition>())
@@ -291,7 +323,8 @@ public static class WorldMapIO
             StartTileX = ReadVec(header.startTile, 0, tw / 2),
             StartTileY = ReadVec(header.startTile, 1, th / 2),
             Seed = header.seed,
-            GeneratorId = header.generatorId ?? string.Empty
+            GeneratorId = header.generatorId ?? string.Empty,
+            ContentPackId = header.contentPackId ?? string.Empty
         };
     }
 
@@ -310,7 +343,8 @@ public static class WorldMapIO
             boundsMax = new[] { world.BoundsMaxX, world.BoundsMaxY },
             startStageId = world.StartStageId,
             seed = world.Seed,
-            generatorId = world.GeneratorId
+            generatorId = world.GeneratorId,
+            contentPackId = world.ContentPackId
         };
     }
 
@@ -356,7 +390,9 @@ public static class WorldMapIO
                     Definition = item.definition ?? string.Empty,
                     LocalX = item.x,
                     LocalY = item.y,
-                    Rotation = item.rotation
+                    Rotation = item.rotation,
+                    FootprintWidth = item.width > 0 ? item.width : 1,
+                    FootprintHeight = item.height > 0 ? item.height : 1
                 });
             }
         }
@@ -398,7 +434,9 @@ public static class WorldMapIO
                 definition = deco.Definition,
                 x = deco.LocalX,
                 y = deco.LocalY,
-                rotation = deco.Rotation
+                rotation = deco.Rotation,
+                width = Math.Max(1, deco.FootprintWidth),
+                height = Math.Max(1, deco.FootprintHeight)
             });
         }
 
@@ -523,6 +561,7 @@ public static class WorldMapIO
         public string startStageId;
         public int seed;
         public string generatorId;
+        public string contentPackId;
     }
 
     [Serializable]
@@ -558,6 +597,8 @@ public static class WorldMapIO
         public int x;
         public int y;
         public int rotation;
+        public int width = 1;
+        public int height = 1;
     }
 
     [Serializable]

@@ -25,7 +25,7 @@ public sealed class BoardCameraController : MonoBehaviour
     [SerializeField, Range(10f, 89f)] private float maximumPitch = 80f;
     [SerializeField, Min(0.001f)] private float zoomSensitivity = 0.012f;
     [SerializeField, Min(0.1f)] private float minimumDistance = 5f;
-    [SerializeField, Min(0.1f)] private float maximumDistance = 18f;
+    [SerializeField, Min(0.1f)] private float maximumDistance = 8f;
     [SerializeField, Min(1f)] private float orthographicRigDistance = 36f;
     [SerializeField, Min(0f)] private float movementDamping = 14f;
     [SerializeField] private float yawStep = 90f;
@@ -93,7 +93,7 @@ public sealed class BoardCameraController : MonoBehaviour
     public void ConfigureDistanceRange(float minimum, float maximum)
     {
         minimumDistance = Mathf.Max(0.1f, minimum);
-        maximumDistance = Mathf.Max(minimumDistance, maximum);
+        // maximumDistance = Mathf.Max(minimumDistance, maximum);
     }
 
     /// <summary>把焦点和缩放拉过去；instant 时当帧到位，避免走路时镜头乱跳。</summary>

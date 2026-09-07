@@ -842,7 +842,6 @@ public sealed class WorldPlaySession : MonoBehaviour
         SetForeignIconsVisible(keep.StageId, false);
         yield return AnimateForeignStages(keep.StageId, true);
         SetForeignStagesActive(keep.StageId, false);
-        board?.RebuildFoundationWalls(true);
     }
 
     private IEnumerator RestoreForeignStages()
@@ -854,7 +853,6 @@ public sealed class WorldPlaySession : MonoBehaviour
         SetForeignIconsVisible(keepId, true);
         if (linkRoot != null) linkRoot.gameObject.SetActive(true);
         RefreshStageLinks();
-        board?.RebuildFoundationWalls(false);
     }
 
     private IEnumerator AnimateForeignStages(string keepStageId, bool collapse)

@@ -16,6 +16,7 @@ public class BoardCell : MonoBehaviour
     private GameObject intentHighlight;
     private Renderer intentHighlightRenderer;
     private Renderer[] terrainRenderers;
+    private BoardGenerator board;
     private bool hovered;
     private float hoverPulse;
 
@@ -23,6 +24,7 @@ public class BoardCell : MonoBehaviour
     public string StageId { get; private set; }
     public int Height { get; private set; }
     public string TerrainId { get; private set; }
+    public bool TerrainVisible { get; private set; } = true;
 
     public void Initialize(int x, int y, string stageId = null, int height = 0, string terrainId = null)
     {
@@ -32,6 +34,8 @@ public class BoardCell : MonoBehaviour
         TerrainId = terrainId ?? string.Empty;
         name = string.IsNullOrEmpty(StageId) ? $"Cell_{x}_{y}" : $"Cell_{StageId}_{x}_{y}";
         terrainRenderers = null;
+        TerrainVisible = true;
+        EnsureBoard();
         RestLocalPosition = transform.localPosition;
         RestLocalScale = transform.localScale;
     }
@@ -42,13 +46,21 @@ public class BoardCell : MonoBehaviour
     /// <summary>开关地形网格显示（迷雾/战外关卡隐藏），不改材质颜色。</summary>
     public void SetTerrainVisible(bool visible)
     {
+        bool changed = TerrainVisible != visible;
+        TerrainVisible = visible;
         EnsureTerrainRenderers();
-        if (terrainRenderers == null) return;
-        for (int i = 0; i < terrainRenderers.Length; i++)
-        {
-            if (terrainRenderers[i] != null)
-                terrainRenderers[i].enabled = visible;
-        }
+        ApplyTerrainRendererVisible(visible);
+        if (changed) NotifyTilesChanged();
+    }
+
+    private void OnEnable()
+    {
+        NotifyTilesChanged();
+    }
+
+    private void OnDisable()
+    {
+        NotifyTilesChanged();
     }
 
     /// <summary>设置格子的移动/攻击范围高亮。草地格本身有渲染器，必须用独立覆盖层。</summary>
@@ -104,6 +116,29 @@ public class BoardCell : MonoBehaviour
                 ApplyColor(hoverHighlightRenderer.material, color);
             }
         }
+    }
+
+    private void ApplyTerrainRendererVisible(bool visible)
+    {
+        if (terrainRenderers == null) return;
+        for (int i = 0; i < terrainRenderers.Length; i++)
+        {
+            if (terrainRenderers[i] != null)
+                terrainRenderers[i].enabled = visible;
+        }
+    }
+
+    private void EnsureBoard()
+    {
+        if (board == null)
+            board = GetComponentInParent<BoardGenerator>();
+    }
+
+    private void NotifyTilesChanged()
+    {
+        if (!Application.isPlaying) return;
+        EnsureBoard();
+        board?.NotifyTilesChanged();
     }
 
     private void EnsureTerrainRenderers()

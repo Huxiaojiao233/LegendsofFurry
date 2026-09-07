@@ -14,6 +14,7 @@ public sealed class WorldCloudCover : MonoBehaviour
     private const string FillChildName = "CloudFill";
     private const float PrefabPlaneSize = 500f;
     private const int MaxHoles = 32;
+    private const bool CloudHitsEnabled = false;
 
     private readonly List<WorldCloudPatch> patches = new List<WorldCloudPatch>();
     private readonly Vector4[] holes = new Vector4[MaxHoles];
@@ -33,7 +34,8 @@ public sealed class WorldCloudCover : MonoBehaviour
         EnsureSea();
         FitSea();
         PublishTerrainHeights();
-        RebuildHitBoxes();
+        if (CloudHitsEnabled)
+            RebuildHitBoxes();
         Refresh(world, null, false);
     }
 
@@ -41,11 +43,12 @@ public sealed class WorldCloudCover : MonoBehaviour
     {
         world = worldDefinition != null ? worldDefinition : world;
         if (sea != null) sea.SetActive(!combat);
-        if (hitRoot != null) hitRoot.gameObject.SetActive(!combat);
+        if (hitRoot != null) hitRoot.gameObject.SetActive(CloudHitsEnabled && !combat);
         if (combat || world == null || board == null)
         {
             Shader.SetGlobalFloat("_CloudHoleCount", 0f);
-            SyncHitBoxes(current, true);
+            if (CloudHitsEnabled)
+                SyncHitBoxes(current, true);
             return;
         }
 
@@ -71,7 +74,8 @@ public sealed class WorldCloudCover : MonoBehaviour
         Shader.SetGlobalFloat("_CloudHoleSoft", 0.2f);
         Shader.SetGlobalFloat("_CloudHoleNoise", 0.05f);
         Shader.SetGlobalFloat("_CloudHoleRound", 0.15f);
-        SyncHitBoxes(current, false);
+        if (CloudHitsEnabled)
+            SyncHitBoxes(current, false);
     }
 
     public static WorldCloudPatch FromHit(RaycastHit hit)

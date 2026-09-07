@@ -61,6 +61,8 @@ public static class RuntimeSceneBootstrap
             new GameObject("ClassSelectionController").AddComponent<ClassSelectionController>();
         if (sceneName == "S_World" && Object.FindAnyObjectByType<WorldMapController>() == null)
             new GameObject("WorldMapController").AddComponent<WorldMapController>();
+        if (sceneName == "S_WorldEditor" && Object.FindAnyObjectByType<RuntimeWorldEditorController>() == null)
+            new GameObject("RuntimeWorldEditorController").AddComponent<RuntimeWorldEditorController>();
         if (sceneName == "S_Battle" && Object.FindAnyObjectByType<BattleBootstrap>() == null)
             new GameObject("BattleBootstrap").AddComponent<BattleBootstrap>();
     }

@@ -26,7 +26,7 @@ RenderSettings:
   m_AmbientIntensity: 1
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 2100000, guid: 2dbe9749d5da4434fabc52d9f41deeb0, type: 2}
+  m_SkyboxMaterial: {fileID: 2100000, guid: 2bd8959f5fbd3644aa33af1a155fc147, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -1451,7 +1451,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u6211\u4E5F\u60F3\u53D8\u6210\u5C0F\u52A8\u7269 - \u5185\u5BB9\u5305\u5236\u4F5C\u5DE5\u5177"
+  m_text: "\u795E\u4E4B\u624B - \u5730\u56FE\u7F16\u8F91\u5668"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 7f20bf3d55d1ad740b0c79c505275c8e, type: 2}
   m_sharedMaterial: {fileID: -3045552422203404759, guid: 7f20bf3d55d1ad740b0c79c505275c8e, type: 2}

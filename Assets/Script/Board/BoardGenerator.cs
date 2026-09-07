@@ -50,6 +50,7 @@ public class BoardGenerator : MonoBehaviour
         new Dictionary<Vector2Int, Unit>();
     private readonly List<GameObject> decorations = new List<GameObject>();
     private Dictionary<string, GameObject> terrainPrefabLookup;
+    private bool foundationWallsDirty;
 
     public int Width => cells == null ? width : cells.GetLength(0);
     public int Height => cells == null ? height : cells.GetLength(1);
@@ -265,30 +266,38 @@ public class BoardGenerator : MonoBehaviour
         }
 
         if (cellHeights != null)
-            RebuildFoundationWalls(false);
+            RebuildFoundationWalls();
     }
 
-    /// <summary>
-    /// 按当前可见格子重算地基墙。进战后只保留激活关卡的墙；离开后恢复整图。
-    /// </summary>
-    public void RebuildFoundationWalls(bool activeCellsOnly)
+    private void LateUpdate()
     {
+        if (!foundationWallsDirty) return;
+        RebuildFoundationWalls();
+    }
+
+    /// <summary>地块显隐、激活或生成变化后标记地基墙，本帧结束按当前可见格子重算一次。</summary>
+    public void NotifyTilesChanged()
+    {
+        if (!isActiveAndEnabled) return;
+        foundationWallsDirty = true;
+    }
+
+    /// <summary>按当前仍显示的格子重算地基墙。隐藏或关掉的地块不画墙。</summary>
+    public void RebuildFoundationWalls()
+    {
+        foundationWallsDirty = false;
         if (boardMap == null || cellHeights == null) return;
         int mapHeight = boardMap.GetLength(0);
         int mapWidth = boardMap.GetLength(1);
-        int[,] map = boardMap;
-        if (activeCellsOnly)
+        int[,] map = new int[mapHeight, mapWidth];
+        for (int z = 0; z < mapHeight; z++)
         {
-            map = new int[mapHeight, mapWidth];
-            for (int z = 0; z < mapHeight; z++)
+            for (int x = 0; x < mapWidth; x++)
             {
-                for (int x = 0; x < mapWidth; x++)
-                {
-                    if (boardMap[z, x] == 0) continue;
-                    BoardCell cell = cells != null ? cells[x, z] : null;
-                    if (cell != null && cell.gameObject.activeInHierarchy)
-                        map[z, x] = 1;
-                }
+                if (boardMap[z, x] == 0) continue;
+                BoardCell cell = cells != null ? cells[x, z] : null;
+                if (cell != null && cell.gameObject.activeInHierarchy && cell.TerrainVisible)
+                    map[z, x] = 1;
             }
         }
 
