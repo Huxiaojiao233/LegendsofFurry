@@ -19,15 +19,29 @@ public static class ContentStageTypeKeys
         value == Shop || value == Boss;
 }
 
+/// <summary>世界地图模式。infinite 表示生成器提供缺失块，磁盘只保存人工覆盖。</summary>
+public static class WorldModes
+{
+    public const string Finite = "finite";
+    public const string Infinite = "infinite";
+
+    public static bool IsInfinite(string? mode) =>
+        string.Equals(mode, Infinite, StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>一张大地图：由关卡格子拼成，每个关卡格子再由地形单位格子拼成。</summary>
 public sealed class WorldDefinition : IContentDefinition
 {
-    public int FormatVersion { get; set; } = 1;
+    public const int FormatVersionV1 = 1;
+    public const int FormatVersionV2 = 2;
+
+    public int FormatVersion { get; set; } = FormatVersionV1;
     public string WorldId { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public string Mode { get; set; } = "finite";
+    public string Mode { get; set; } = WorldModes.Finite;
     public int Seed { get; set; }
     public string GeneratorId { get; set; } = string.Empty;
+    public int GeneratorVersion { get; set; }
     /// <summary>提供此地图所需 Unit、AI 等定义的内容包 ID；空值表示基础内容。</summary>
     public string ContentPackId { get; set; } = string.Empty;
     public int BoundsMinX { get; set; }
@@ -37,6 +51,8 @@ public sealed class WorldDefinition : IContentDefinition
     public int TerrainWidth { get; set; } = 10;
     public int TerrainHeight { get; set; } = 10;
     public string StartStageId { get; set; } = string.Empty;
+    public int StartChunkX { get; set; }
+    public int StartChunkY { get; set; }
     public int StartTileX { get; set; } = 5;
     public int StartTileY { get; set; } = 5;
     public List<StageDefinition> Stages { get; set; } = new List<StageDefinition>();
@@ -44,8 +60,9 @@ public sealed class WorldDefinition : IContentDefinition
     public string GetDefinitionKind() => "world";
     public string GetDefinitionId() => WorldId;
 
-    public int BoundsMaxX => BoundsMinX + StageGridWidth - 1;
-    public int BoundsMaxY => BoundsMinY + StageGridHeight - 1;
+    public bool IsInfinite => WorldModes.IsInfinite(Mode);
+    public int BoundsMaxX => BoundsMinX + Math.Max(1, StageGridWidth) - 1;
+    public int BoundsMaxY => BoundsMinY + Math.Max(1, StageGridHeight) - 1;
     public int OriginWorldX => BoundsMinX * TerrainWidth;
     public int OriginWorldY => BoundsMinY * TerrainHeight;
     public int WorldTerrainWidth => StageGridWidth * TerrainWidth;
@@ -119,6 +136,56 @@ public sealed class StageDefinition
                 ids[i] = WorldTerrainCatalog.FromHeight(heights[i]);
             TerrainIds = ids;
         }
+    }
+
+    public StageDefinition Clone()
+    {
+        StageDefinition copy = new StageDefinition
+        {
+            StageId = StageId,
+            DisplayName = DisplayName,
+            StageType = StageType,
+            GridX = GridX,
+            GridY = GridY,
+            Heights = Heights != null ? (int[])Heights.Clone() : Array.Empty<int>(),
+            TerrainIds = TerrainIds != null ? (string[])TerrainIds.Clone() : Array.Empty<string>(),
+            RewardPoolId = RewardPoolId,
+            RequiredKeyId = RequiredKeyId,
+            DropKeyId = DropKeyId,
+            Enabled = Enabled
+        };
+        foreach (WorldDecorationDefinition decoration in Decorations ?? new List<WorldDecorationDefinition>())
+        {
+            if (decoration == null) continue;
+            copy.Decorations.Add(new WorldDecorationDefinition
+            {
+                Id = decoration.Id,
+                Definition = decoration.Definition,
+                LocalX = decoration.LocalX,
+                LocalY = decoration.LocalY,
+                Rotation = decoration.Rotation,
+                FootprintWidth = decoration.FootprintWidth,
+                FootprintHeight = decoration.FootprintHeight
+            });
+        }
+
+        foreach (WorldUnitPlacementDefinition placement in UnitPlacements ?? new List<WorldUnitPlacementDefinition>())
+        {
+            if (placement == null) continue;
+            copy.UnitPlacements.Add(new WorldUnitPlacementDefinition
+            {
+                InstanceId = placement.InstanceId,
+                UnitId = placement.UnitId,
+                LocalX = placement.LocalX,
+                LocalY = placement.LocalY,
+                FactionOverride = placement.FactionOverride,
+                ControllerOverride = placement.ControllerOverride,
+                DeckIdOverride = placement.DeckIdOverride,
+                Enabled = placement.Enabled
+            });
+        }
+
+        return copy;
     }
 
     private static int MathfClampHeight(int height)

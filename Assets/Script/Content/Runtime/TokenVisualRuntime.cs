@@ -63,7 +63,7 @@ public static class TokenVisualRuntime
 
     private static void ApplyToMesh(GameObject host, Texture2D portrait, Color? frameColor)
     {
-        CombatantTokenFactory.EnsureTokenComponents(host);
+        CombatantTokenFactory.EnsureVisualComponents(host);
         MeshRenderer renderer = CombatantTokenFactory.ResolveVisualRenderer(host);
         if (renderer == null) return;
 

@@ -24,6 +24,8 @@ public sealed class WorldPlaySession : MonoBehaviour
     public static WorldPlaySession Instance { get; private set; }
 
     private WorldDefinition world;
+    private IChunkProvider chunkProvider;
+    private WorldChunkStreamer chunkStreamer;
     private BoardGenerator board;
     private BoardCameraController cameraController;
     private readonly List<Vector2Int> walkPath = new List<Vector2Int>();
@@ -71,6 +73,8 @@ public sealed class WorldPlaySession : MonoBehaviour
             return;
         }
 
+        chunkProvider = board.ChunkProvider ?? WorldMapIO.CreateProvider(world);
+        SubscribeStreamer();
         RefreshSpawnCells();
         ShouldStartCombat = NeedsCombat(CurrentStage);
         IsExploring = !ShouldStartCombat;
@@ -85,6 +89,7 @@ public sealed class WorldPlaySession : MonoBehaviour
 
     private void OnDestroy()
     {
+        UnsubscribeStreamer();
         if (Instance == this) Instance = null;
         if (lineMaterial != null) Destroy(lineMaterial);
         if (wallMaterial != null) Destroy(wallMaterial);
@@ -1142,10 +1147,39 @@ public sealed class WorldPlaySession : MonoBehaviour
         get
         {
             if (world == null || !RunSession.HasActive) return null;
-            WorldCatalog.TryGetStage(world, RunSession.Current.currentStageId, out StageDefinition stage);
-            return stage;
+            string id = RunSession.Current.currentStageId;
+            if (WorldCatalog.TryGetStage(world, id, out StageDefinition stage) && stage != null)
+                return stage;
+            if (WorldStageIds.TryParse(id, out ChunkPosition chunk) &&
+                chunkProvider != null && chunkProvider.TryGetChunk(chunk, out stage))
+                return stage;
+            if (chunkProvider != null &&
+                chunkProvider.TryGetChunk(new ChunkPosition(world.StartChunkX, world.StartChunkY), out stage))
+                return stage;
+            return null;
         }
     }
+
+    private void SubscribeStreamer()
+    {
+        UnsubscribeStreamer();
+        chunkStreamer = board != null ? board.GetComponent<WorldChunkStreamer>() : null;
+        if (chunkStreamer == null) return;
+        chunkStreamer.ChunkLoaded += OnChunkLoaded;
+        chunkStreamer.ChunkUnloaded += OnChunkUnloaded;
+    }
+
+    private void UnsubscribeStreamer()
+    {
+        if (chunkStreamer == null) return;
+        chunkStreamer.ChunkLoaded -= OnChunkLoaded;
+        chunkStreamer.ChunkUnloaded -= OnChunkUnloaded;
+        chunkStreamer = null;
+    }
+
+    private void OnChunkLoaded(ChunkPosition position, WorldChunkView view) => CacheCells();
+
+    private void OnChunkUnloaded(ChunkPosition position) => CacheCells();
 
     private StageDefinition FindBoss()
     {

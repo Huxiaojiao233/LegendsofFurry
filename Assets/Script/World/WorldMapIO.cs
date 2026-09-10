@@ -70,19 +70,59 @@ public static class WorldMapIO
         return new List<WorldDefinition>(byId.Values);
     }
 
-    public static WorldDefinition LoadChunked(string folder)
+    public static WorldDefinition LoadHeader(string folder)
     {
         string worldPath = Path.Combine(folder, "world.json");
         WorldHeaderDto header = JsonUtility.FromJson<WorldHeaderDto>(File.ReadAllText(worldPath));
         if (header == null || !ContentId.IsValid(header.id))
             throw new InvalidDataException($"世界 ID 无效：{worldPath}");
+        return HeaderToWorld(header);
+    }
 
-        WorldDefinition world = HeaderToWorld(header);
+    public static WorldDefinition LoadChunked(string folder)
+    {
+        WorldDefinition world = LoadHeader(folder);
         string chunkDir = Path.Combine(folder, "chunks");
         if (!Directory.Exists(chunkDir))
+        {
+            if (world.IsInfinite)
+            {
+                Directory.CreateDirectory(chunkDir);
+                return world;
+            }
+
             throw new InvalidDataException($"世界 {world.WorldId} 缺少 chunks 目录。");
+        }
 
         HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
+        if (world.IsInfinite)
+            LoadSparseChunks(world, chunkDir, ids);
+        else
+            LoadBoundedChunks(world, chunkDir, ids);
+
+        if (!world.IsInfinite)
+        {
+            if (string.IsNullOrEmpty(world.StartStageId) ||
+                world.Stages.Find(item => item.StageId == world.StartStageId) == null)
+                throw new InvalidDataException($"世界 {world.WorldId} 的起始关卡不存在。");
+        }
+        else if (!ContentId.IsValid(world.StartStageId))
+            throw new InvalidDataException($"世界 {world.WorldId} 的起始关卡 ID 无效。");
+
+        WorldTerrain.FillMissingHeights(world);
+        return world;
+    }
+
+    public static IChunkProvider CreateProvider(WorldDefinition world)
+    {
+        if (world == null) throw new ArgumentNullException(nameof(world));
+        if (world.IsInfinite)
+            return new EditableChunkProvider(new ProceduralChunkProvider(world), world.Stages);
+        return new FiniteChunkProvider(world);
+    }
+
+    private static void LoadBoundedChunks(WorldDefinition world, string chunkDir, HashSet<string> ids)
+    {
         for (int gy = world.BoundsMinY; gy <= world.BoundsMaxY; gy++)
         {
             for (int gx = world.BoundsMinX; gx <= world.BoundsMaxX; gx++)
@@ -99,13 +139,33 @@ public static class WorldMapIO
                 world.Stages.Add(stage);
             }
         }
+    }
 
-        if (string.IsNullOrEmpty(world.StartStageId) ||
-            world.Stages.Find(item => item.StageId == world.StartStageId) == null)
-            throw new InvalidDataException($"世界 {world.WorldId} 的起始关卡不存在。");
+    private static void LoadSparseChunks(WorldDefinition world, string chunkDir, HashSet<string> ids)
+    {
+        foreach (string chunkPath in Directory.GetFiles(chunkDir, "*.json"))
+        {
+            string name = Path.GetFileNameWithoutExtension(chunkPath);
+            if (!TryParseChunkFileName(name, out int gx, out int gy))
+                throw new InvalidDataException($"无限世界 {world.WorldId} 的块文件名无效：{chunkPath}");
+            StageDefinition stage = ReadChunk(chunkPath, world.TerrainWidth, world.TerrainHeight);
+            if (stage.GridX != gx || stage.GridY != gy)
+                throw new InvalidDataException($"块 {chunkPath} 的坐标与文件名不一致。");
+            if (!stage.Enabled) continue;
+            if (!ids.Add(stage.StageId))
+                throw new InvalidDataException($"关卡 {stage.StageId} 的 ID 重复。");
+            world.Stages.Add(stage);
+        }
+    }
 
-        WorldTerrain.FillMissingHeights(world);
-        return world;
+    public static bool TryParseChunkFileName(string name, out int x, out int y)
+    {
+        x = 0;
+        y = 0;
+        if (string.IsNullOrEmpty(name)) return false;
+        int split = name.LastIndexOf('_');
+        if (split <= 0 || split >= name.Length - 1) return false;
+        return int.TryParse(name.Substring(0, split), out x) && int.TryParse(name.Substring(split + 1), out y);
     }
 
     public static void SaveChunked(WorldDefinition world) => SaveChunked(world, WorldFolder(world.WorldId));
@@ -121,6 +181,22 @@ public static class WorldMapIO
             throw new InvalidDataException($"世界 ID 无效：{world.WorldId}");
         if (string.IsNullOrEmpty(folder)) folder = WorldFolder(world.WorldId);
 
+        string temp = folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + ".saving";
+        if (Directory.Exists(temp)) Directory.Delete(temp, true);
+        try
+        {
+            WriteWorldInto(world, temp);
+            ReplaceDirectory(temp, folder);
+        }
+        catch
+        {
+            if (Directory.Exists(temp)) Directory.Delete(temp, true);
+            throw;
+        }
+    }
+
+    private static void WriteWorldInto(WorldDefinition world, string folder)
+    {
         string chunkDir = Path.Combine(folder, "chunks");
         Directory.CreateDirectory(chunkDir);
         File.WriteAllText(Path.Combine(folder, "world.json"), JsonUtility.ToJson(WorldToHeader(world), true),
@@ -135,6 +211,19 @@ public static class WorldMapIO
 
         int tw = Mathf.Max(1, world.TerrainWidth);
         int th = Mathf.Max(1, world.TerrainHeight);
+        if (world.IsInfinite)
+        {
+            foreach (KeyValuePair<(int, int), StageDefinition> pair in byGrid)
+            {
+                StageDefinition stage = pair.Value;
+                stage.EnsureGrids(tw, th);
+                File.WriteAllText(Path.Combine(chunkDir, ChunkFileName(stage.GridX, stage.GridY)),
+                    JsonUtility.ToJson(ChunkToDto(stage, tw, th), true), new UTF8Encoding(false));
+            }
+
+            return;
+        }
+
         for (int gy = world.BoundsMinY; gy <= world.BoundsMaxY; gy++)
         {
             for (int gx = world.BoundsMinX; gx <= world.BoundsMaxX; gx++)
@@ -149,6 +238,15 @@ public static class WorldMapIO
         }
     }
 
+    private static void ReplaceDirectory(string temp, string folder)
+    {
+        string backup = folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + ".bak";
+        if (Directory.Exists(backup)) Directory.Delete(backup, true);
+        if (Directory.Exists(folder)) Directory.Move(folder, backup);
+        Directory.Move(temp, folder);
+        if (Directory.Exists(backup)) Directory.Delete(backup, true);
+    }
+
     public static List<string> Validate(WorldDefinition world)
     {
         List<string> issues = new List<string>();
@@ -160,7 +258,8 @@ public static class WorldMapIO
 
         if (!ContentId.IsValid(world.WorldId)) issues.Add("世界 ID 无效。");
         if (world.TerrainWidth <= 0 || world.TerrainHeight <= 0) issues.Add("区块尺寸必须为正。");
-        if (world.StageGridWidth <= 0 || world.StageGridHeight <= 0) issues.Add("世界边界必须为正。");
+        if (!world.IsInfinite && (world.StageGridWidth <= 0 || world.StageGridHeight <= 0))
+            issues.Add("世界边界必须为正。");
         bool hasStart = false;
         HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
         HashSet<(int, int)> cells = new HashSet<(int, int)>();
@@ -215,7 +314,18 @@ public static class WorldMapIO
             }
         }
 
-        if (!hasStart) issues.Add("起始关卡不存在。");
+        if (!hasStart)
+        {
+            if (world.IsInfinite)
+            {
+                if (!ContentId.IsValid(world.StartStageId))
+                    issues.Add("起始关卡 ID 无效。");
+            }
+            else
+            {
+                issues.Add("起始关卡不存在。");
+            }
+        }
         issues.AddRange(WorldTerrain.FindBorderMismatches(world));
         return issues;
     }
@@ -231,12 +341,14 @@ public static class WorldMapIO
             FormatVersion = 1,
             WorldId = worldId,
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? worldId : displayName,
-            Mode = "finite",
+            Mode = WorldModes.Finite,
             StageGridWidth = chunksX,
             StageGridHeight = chunksY,
             TerrainWidth = chunkSize,
             TerrainHeight = chunkSize,
             StartStageId = "start",
+            StartChunkX = 0,
+            StartChunkY = 0,
             StartTileX = chunkSize / 2,
             StartTileY = chunkSize / 2
         };
@@ -267,6 +379,31 @@ public static class WorldMapIO
         return world;
     }
 
+    public static WorldDefinition CreateInfinite(string worldId, string displayName, int seed, int chunkSize,
+        string generatorId = WorldIntegerHash.GeneratorId)
+    {
+        chunkSize = Mathf.Max(2, chunkSize);
+        return new WorldDefinition
+        {
+            FormatVersion = WorldDefinition.FormatVersionV2,
+            WorldId = worldId,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? worldId : displayName,
+            Mode = WorldModes.Infinite,
+            Seed = seed,
+            GeneratorId = string.IsNullOrWhiteSpace(generatorId) ? WorldIntegerHash.GeneratorId : generatorId,
+            GeneratorVersion = WorldIntegerHash.GeneratorVersion,
+            StageGridWidth = 1,
+            StageGridHeight = 1,
+            TerrainWidth = chunkSize,
+            TerrainHeight = chunkSize,
+            StartStageId = "start",
+            StartChunkX = 0,
+            StartChunkY = 0,
+            StartTileX = chunkSize / 2,
+            StartTileY = chunkSize / 2
+        };
+    }
+
     public static StageDefinition CreateEmptyChunk(WorldDefinition world, int gridX, int gridY, bool enabled)
     {
         StageDefinition stage = new StageDefinition
@@ -280,7 +417,7 @@ public static class WorldMapIO
         };
         if (stage.StageId[0] == '-') stage.StageId = "cell" + stage.StageId;
         if (!ContentId.IsValid(stage.StageId))
-            stage.StageId = $"cell{Math.Abs(gridX)}n{Math.Abs(gridY)}";
+            stage.StageId = WorldStageIds.FromChunk(new ChunkPosition(gridX, gridY));
         FillFlatTerrain(stage, Mathf.Max(1, world.TerrainWidth), Mathf.Max(1, world.TerrainHeight), 0,
             enabled ? WorldTerrainCatalog.Grass : WorldTerrainCatalog.Void);
         return stage;
@@ -307,23 +444,28 @@ public static class WorldMapIO
         int minY = ReadVec(header.boundsMin, 1, 0);
         int maxX = ReadVec(header.boundsMax, 0, minX);
         int maxY = ReadVec(header.boundsMax, 1, minY);
+        string mode = string.IsNullOrWhiteSpace(header.mode) ? WorldModes.Finite : header.mode;
+        bool infinite = WorldModes.IsInfinite(mode);
         return new WorldDefinition
         {
             FormatVersion = header.formatVersion > 0 ? header.formatVersion : 1,
             WorldId = header.id,
             DisplayName = string.IsNullOrWhiteSpace(header.displayName) ? header.id : header.displayName,
-            Mode = string.IsNullOrWhiteSpace(header.mode) ? "finite" : header.mode,
+            Mode = mode,
             BoundsMinX = minX,
             BoundsMinY = minY,
-            StageGridWidth = Math.Max(1, maxX - minX + 1),
-            StageGridHeight = Math.Max(1, maxY - minY + 1),
+            StageGridWidth = infinite ? 1 : Math.Max(1, maxX - minX + 1),
+            StageGridHeight = infinite ? 1 : Math.Max(1, maxY - minY + 1),
             TerrainWidth = tw,
             TerrainHeight = th,
             StartStageId = header.startStageId ?? string.Empty,
+            StartChunkX = ReadVec(header.startChunk, 0, 0),
+            StartChunkY = ReadVec(header.startChunk, 1, 0),
             StartTileX = ReadVec(header.startTile, 0, tw / 2),
             StartTileY = ReadVec(header.startTile, 1, th / 2),
             Seed = header.seed,
             GeneratorId = header.generatorId ?? string.Empty,
+            GeneratorVersion = header.generatorVersion,
             ContentPackId = header.contentPackId ?? string.Empty
         };
     }
@@ -332,10 +474,12 @@ public static class WorldMapIO
     {
         return new WorldHeaderDto
         {
-            formatVersion = world.FormatVersion > 0 ? world.FormatVersion : 1,
+            formatVersion = world.IsInfinite
+                ? Math.Max(world.FormatVersion, WorldDefinition.FormatVersionV2)
+                : (world.FormatVersion > 0 ? world.FormatVersion : WorldDefinition.FormatVersionV1),
             id = world.WorldId,
             displayName = world.DisplayName,
-            mode = string.IsNullOrEmpty(world.Mode) ? "finite" : world.Mode,
+            mode = string.IsNullOrEmpty(world.Mode) ? WorldModes.Finite : world.Mode,
             chunkSize = new[] { world.TerrainWidth, world.TerrainHeight },
             startChunk = StartChunkOf(world),
             startTile = new[] { world.StartTileX, world.StartTileY },
@@ -344,6 +488,7 @@ public static class WorldMapIO
             startStageId = world.StartStageId,
             seed = world.Seed,
             generatorId = world.GeneratorId,
+            generatorVersion = world.GeneratorVersion,
             contentPackId = world.ContentPackId
         };
     }
@@ -353,7 +498,7 @@ public static class WorldMapIO
         foreach (StageDefinition stage in world.Stages)
             if (stage != null && stage.StageId == world.StartStageId)
                 return new[] { stage.GridX, stage.GridY };
-        return new[] { world.BoundsMinX, world.BoundsMinY };
+        return new[] { world.StartChunkX, world.StartChunkY };
     }
 
     private static StageDefinition ReadChunk(string path, int width, int height)
@@ -561,6 +706,7 @@ public static class WorldMapIO
         public string startStageId;
         public int seed;
         public string generatorId;
+        public int generatorVersion;
         public string contentPackId;
     }
 

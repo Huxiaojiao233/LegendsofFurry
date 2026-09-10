@@ -46,6 +46,12 @@ public sealed class BoardCameraController : MonoBehaviour
     private Vector2 focusZLimits;
     private bool rightMousePanning;
     private bool middleMousePitching;
+    private bool inputRecoveryPending = true;
+
+#if UNITY_EDITOR
+    private InputSettings.EditorInputBehaviorInPlayMode previousEditorInputBehavior;
+    private bool editorInputBehaviorOverridden;
+#endif
 
     private bool IsOrthographic => targetCamera != null && targetCamera.orthographic;
 
@@ -58,9 +64,32 @@ public sealed class BoardCameraController : MonoBehaviour
         CalculateFocusLimits();
     }
 
+    /// <summary>
+    /// 编辑器切换场景时 Game View 偶尔会短暂失去焦点。S_Battle 运行期间把输入持续路由给 Game View，
+    /// 并监听设备重新连接；退出场景后恢复用户原有的编辑器输入设置。
+    /// </summary>
+    private void OnEnable()
+    {
+        inputRecoveryPending = true;
+        InputSystem.onDeviceChange += HandleInputDeviceChange;
+#if UNITY_EDITOR
+        ApplyEditorInputRoutingOverride();
+#endif
+    }
+
+    private void OnDisable()
+    {
+        InputSystem.onDeviceChange -= HandleInputDeviceChange;
+        CancelMouseGestures();
+#if UNITY_EDITOR
+        RestoreEditorInputRoutingOverride();
+#endif
+    }
+
     /// <summary>读取键盘、鼠标拖拽、滚轮和回正按键，并更新受限制的目标视角。</summary>
     private void Update()
     {
+        RecoverInputDevicesIfNeeded();
         HandleResetInput();
         HandleYawSnap();
         HandleKeyboardPan();
@@ -151,9 +180,108 @@ public sealed class BoardCameraController : MonoBehaviour
         targetDistance = initialDistance;
         targetPitch = initialPitch;
         targetYaw = initialYaw;
+        CancelMouseGestures();
+    }
+
+    /// <summary>失焦时终止拖拽，重新获得焦点后检查被 Input System 临时禁用的设备。</summary>
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        CancelMouseGestures();
+        if (hasFocus) inputRecoveryPending = true;
+    }
+
+    /// <summary>移动端从系统暂停恢复时执行与重新获得焦点相同的输入恢复。</summary>
+    private void OnApplicationPause(bool paused)
+    {
+        CancelMouseGestures();
+        if (!paused) inputRecoveryPending = true;
+    }
+
+    private void HandleInputDeviceChange(InputDevice device, InputDeviceChange change)
+    {
+        if (device is not Keyboard && device is not Mouse) return;
+        if (change == InputDeviceChange.Added ||
+            change == InputDeviceChange.Reconnected ||
+            change == InputDeviceChange.Enabled)
+            inputRecoveryPending = true;
+    }
+
+    /// <summary>
+    /// Input System 正常情况下会在重新获得焦点时自行启用设备；这里补上自愈，处理设备仍停留在
+    /// disabled 状态或 current 引用尚未恢复的边界情况。没有键鼠的移动设备会直接跳过。
+    /// </summary>
+    private void RecoverInputDevicesIfNeeded()
+    {
+        if (!inputRecoveryPending || !Application.isFocused) return;
+        inputRecoveryPending = false;
+        RecoverKeyboard();
+        RecoverMouse();
+    }
+
+    private static void RecoverKeyboard()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            foreach (InputDevice device in InputSystem.devices)
+            {
+                if (device is not Keyboard candidate) continue;
+                keyboard = candidate;
+                break;
+            }
+        }
+
+        if (keyboard == null) return;
+        if (!keyboard.enabled) InputSystem.EnableDevice(keyboard);
+        if (Keyboard.current == null) keyboard.MakeCurrent();
+    }
+
+    private static void RecoverMouse()
+    {
+        Mouse mouse = Mouse.current;
+        if (mouse == null)
+        {
+            foreach (InputDevice device in InputSystem.devices)
+            {
+                if (device is not Mouse candidate) continue;
+                mouse = candidate;
+                break;
+            }
+        }
+
+        if (mouse == null) return;
+        if (!mouse.enabled) InputSystem.EnableDevice(mouse);
+        if (Mouse.current == null) mouse.MakeCurrent();
+    }
+
+    private void CancelMouseGestures()
+    {
         rightMousePanning = false;
         middleMousePitching = false;
     }
+
+#if UNITY_EDITOR
+    private void ApplyEditorInputRoutingOverride()
+    {
+        if (!Application.isPlaying || InputSystem.settings == null) return;
+        previousEditorInputBehavior = InputSystem.settings.editorInputBehaviorInPlayMode;
+        if (previousEditorInputBehavior ==
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
+            return;
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+        editorInputBehaviorOverridden = true;
+    }
+
+    private void RestoreEditorInputRoutingOverride()
+    {
+        if (!editorInputBehaviorOverridden || InputSystem.settings == null) return;
+        if (InputSystem.settings.editorInputBehaviorInPlayMode ==
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
+            InputSystem.settings.editorInputBehaviorInPlayMode = previousEditorInputBehavior;
+        editorInputBehaviorOverridden = false;
+    }
+#endif
 
     /// <summary>从场景摄像机朝向与棋盘平面交点推导焦点，保证回正精确还原设计视角。</summary>
     private void CaptureInitialView()

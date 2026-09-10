@@ -83,6 +83,7 @@ public sealed class BattleRoster : MonoBehaviour
         BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
         if (board == null || !ContentRuntime.IsLoaded || stage == null) return;
         ClearEnemies();
+        WorldUnitPreview.ClearAll(board, stage);
         WorldDefinition world = ResolveCurrentWorld();
         if (world == null) return;
         int spawned = 0;

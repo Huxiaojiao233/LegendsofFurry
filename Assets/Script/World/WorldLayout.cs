@@ -45,6 +45,27 @@ public static class WorldLayout
         return WorldCatalog.TryGetStageAt(world, chunk.X, chunk.Y, out stage);
     }
 
+    public static bool TryGetStage(IChunkProvider provider, int boardX, int boardZ, out StageDefinition stage)
+    {
+        stage = null;
+        if (provider?.World == null) return false;
+        int tw = Mathf.Max(1, provider.World.TerrainWidth);
+        int th = Mathf.Max(1, provider.World.TerrainHeight);
+        WorldCoords.ToChunk(boardX, boardZ, tw, th, out ChunkPosition chunk, out _, out _);
+        return provider.TryGetChunk(chunk, out stage);
+    }
+
+    public static List<StageDefinition> OrthogonalNeighbors(IChunkProvider provider, StageDefinition stage)
+    {
+        List<StageDefinition> neighbors = new List<StageDefinition>(4);
+        if (provider == null || stage == null) return neighbors;
+        TryAdd(provider, stage.GridX, stage.GridY + 1, neighbors);
+        TryAdd(provider, stage.GridX + 1, stage.GridY, neighbors);
+        TryAdd(provider, stage.GridX, stage.GridY - 1, neighbors);
+        TryAdd(provider, stage.GridX - 1, stage.GridY, neighbors);
+        return neighbors;
+    }
+
     public static bool IsOrthogonalNeighbor(StageDefinition a, StageDefinition b)
     {
         if (a == null || b == null) return false;
@@ -66,6 +87,12 @@ public static class WorldLayout
     private static void TryAdd(WorldDefinition world, int gridX, int gridY, List<StageDefinition> list)
     {
         if (WorldCatalog.TryGetStageAt(world, gridX, gridY, out StageDefinition neighbor))
+            list.Add(neighbor);
+    }
+
+    private static void TryAdd(IChunkProvider provider, int gridX, int gridY, List<StageDefinition> list)
+    {
+        if (provider.TryGetChunk(new ChunkPosition(gridX, gridY), out StageDefinition neighbor))
             list.Add(neighbor);
     }
 }

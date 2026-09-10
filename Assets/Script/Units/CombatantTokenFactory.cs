@@ -14,12 +14,8 @@ public static class CombatantTokenFactory
     /// <summary>生成一枚已绑定角色定义的棋子。</summary>
     public static Unit Spawn(UnitDefinition definition, UnitFaction faction, string objectName)
     {
-        GameObject prefab = Resources.Load<GameObject>(PrefabResourcePath)
-            ?? Resources.Load<GameObject>(FallbackPrefabResourcePath)
-            ?? Resources.Load<GameObject>("CombatantToken");
-        string resolvedName = !string.IsNullOrWhiteSpace(objectName)
-            ? objectName
-            : definition != null ? definition.UnitId : "Combatant";
+        string resolvedName = ResolveName(objectName, definition, "Combatant");
+        GameObject prefab = LoadPrefab();
         GameObject instance = prefab != null
             ? Object.Instantiate(prefab)
             : new GameObject(resolvedName);
@@ -45,10 +41,29 @@ public static class CombatantTokenFactory
         return unit;
     }
 
+    /// <summary>地图编辑/大地图用的外观预览：同一套棋子模型，不挂战斗 Unit。</summary>
+    public static GameObject SpawnPreview(UnitDefinition definition, string objectName)
+    {
+        string resolvedName = ResolveName(objectName, definition, "UnitPreview");
+        GameObject instance = InstantiateVisual(resolvedName);
+        StripCombatBehaviours(instance);
+        EnsureVisualComponents(instance);
+        TokenVisualRuntime.Apply(instance.transform, definition);
+        DisableColliders(instance);
+        return instance;
+    }
+
     /// <summary>根上要有 Unit 和可点中的碰撞；手摆模型不再被占位立方体覆盖。</summary>
     public static void EnsureTokenComponents(GameObject instance)
     {
         Require<Unit>(instance);
+        EnsureVisualComponents(instance);
+    }
+
+    /// <summary>只保证棋子网格和渲染器，编辑预览用，不注入 Unit。</summary>
+    public static void EnsureVisualComponents(GameObject instance)
+    {
+        if (instance == null) return;
         if (HasAuthoredVisual(instance))
         {
             if (instance.GetComponentInChildren<Collider>() == null)
@@ -120,6 +135,69 @@ public static class CombatantTokenFactory
         Vector3 localSize = instance.transform.InverseTransformVector(bounds.size);
         box.center = localCenter;
         box.size = new Vector3(Mathf.Abs(localSize.x), Mathf.Abs(localSize.y), Mathf.Abs(localSize.z));
+    }
+
+    private static GameObject InstantiateVisual(string objectName)
+    {
+        GameObject prefab = LoadPrefab();
+        GameObject instance = prefab != null
+            ? InstantiateInactive(prefab)
+            : new GameObject(objectName);
+        instance.name = objectName;
+        return instance;
+    }
+
+    private static GameObject LoadPrefab()
+    {
+        return Resources.Load<GameObject>(PrefabResourcePath)
+            ?? Resources.Load<GameObject>(FallbackPrefabResourcePath)
+            ?? Resources.Load<GameObject>("CombatantToken");
+    }
+
+    private static GameObject InstantiateInactive(GameObject prefab)
+    {
+        GameObject holder = new GameObject("TokenPreviewHolder");
+        holder.SetActive(false);
+        GameObject instance = Object.Instantiate(prefab, holder.transform, false);
+        StripCombatBehaviours(instance);
+        instance.transform.SetParent(null, false);
+        if (Application.isPlaying) Object.Destroy(holder);
+        else Object.DestroyImmediate(holder);
+        return instance;
+    }
+
+    private static void StripCombatBehaviours(GameObject instance)
+    {
+        if (instance == null) return;
+        RemoveImmediate<UtilityAiController>(instance);
+        RemoveImmediate<WorldHealthBar>(instance);
+        RemoveImmediate<CombatantState>(instance);
+        RemoveImmediate<Unit>(instance);
+    }
+
+    private static void RemoveImmediate<T>(GameObject instance) where T : Component
+    {
+        T[] components = instance.GetComponentsInChildren<T>(true);
+        for (int i = 0; i < components.Length; i++)
+        {
+            if (components[i] == null) continue;
+            Object.DestroyImmediate(components[i]);
+        }
+    }
+
+    private static void DisableColliders(GameObject instance)
+    {
+        Collider[] colliders = instance.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+            if (colliders[i] != null) colliders[i].enabled = false;
+    }
+
+    private static string ResolveName(string objectName, UnitDefinition definition, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(objectName)) return objectName;
+        return definition != null && !string.IsNullOrWhiteSpace(definition.UnitId)
+            ? definition.UnitId
+            : fallback;
     }
 
     private static T Require<T>(GameObject instance) where T : Component

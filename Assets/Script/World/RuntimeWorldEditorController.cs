@@ -1,63 +1,32 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// MAST 风格交互的游戏内世界编辑器。它只编辑 WorldDefinition/Chunk JSON，
-/// 绝不引用 UnityEditor，也不把地图保存成 Scene。
+/// 游戏内世界编辑器入口。只绑定场景里的 uGUI 与共享 Board/Streamer，不再动态拼 Canvas。
 /// </summary>
 [DefaultExecutionOrder(-10)]
 public sealed class RuntimeWorldEditorController : MonoBehaviour
 {
-    private enum Tool { Terrain, Object, Unit, Erase, Select }
+    [SerializeField] private BoardGenerator board;
+    [SerializeField] private WorldEditorView view;
+    [SerializeField] private WorldEditorInputController input;
+    [SerializeField] private Button backButton;
 
-    private sealed class Tile : MonoBehaviour
-    {
-        [NonSerialized]
-        public StageDefinition Stage;
-        public int LocalX;
-        public int LocalY;
-    }
+    private WorldEditorSession session;
+    private readonly HashSet<(int, int)> pendingChunks = new HashSet<(int, int)>();
+    private readonly List<WorldListEntry> worldEntries = new List<WorldListEntry>();
+    private ChunkPosition selectedChunk;
+    private bool suppressWorldDropdown;
+    private bool deleteArmed;
+    private WorldChunkStreamer streamer;
 
-    private sealed class Selection
-    {
-        public StageDefinition Stage;
-        public WorldDecorationDefinition Object;
-        public WorldUnitPlacementDefinition Unit;
-    }
-
-    private const float CellSize = 1f;
-    private readonly WorldEditorCommandStack commands = new WorldEditorCommandStack();
-    private readonly Dictionary<Vector2Int, Tile> tiles = new Dictionary<Vector2Int, Tile>();
-    private readonly List<Selection> selection = new List<Selection>();
-
-    private WorldDefinition world;
-    private Transform terrainRoot;
-    private Transform objectRoot;
-    private Transform overlayRoot;
-    private Camera editorCamera;
-    private Text status;
-    private GameObject ghost;
-    private GameObject boxOverlay;
-    private Tool tool = Tool.Terrain;
-    private string terrainId = WorldTerrainCatalog.Grass;
-    private string objectId = WorldDecorationCatalog.DefaultId;
-    private string unitId = string.Empty;
-    private int objectWidth = 1;
-    private int objectHeight = 1;
-    private int objectRotation;
-    private Vector2Int? boxStart;
-    private Vector2Int hoverCell;
-    private bool hasHover;
-    private int nextObjectId;
-    private int nextUnitId;
+    public WorldEditorSession Session => session;
+    public BoardGenerator Board => board;
 
     public static void Open()
     {
@@ -66,553 +35,535 @@ public sealed class RuntimeWorldEditorController : MonoBehaviour
 
     private void Awake()
     {
-        if (!ContentRuntime.IsLoaded) ContentRuntime.EnsureLoaded();
-        if (!ContentRuntime.IsLoaded)
+        if (board == null) board = FindAnyObjectByType<BoardGenerator>();
+        if (view == null) view = FindAnyObjectByType<WorldEditorView>();
+        if (input == null) input = FindAnyObjectByType<WorldEditorInputController>();
+        if (board == null)
         {
-            Debug.LogError($"世界编辑器无法读取内容包：{ContentRuntime.LoadError}");
+            view?.SetStatus("场景缺少 BoardGenerator。请运行 WorldEditorSceneSetup。");
+            BindUi();
             return;
         }
 
-        world = WorldCatalog.Default;
+        if (!ContentRuntime.IsLoaded) ContentRuntime.EnsureLoaded();
+        BindUi();
+        OpenDefault();
+    }
+
+    private void LateUpdate()
+    {
+        if (pendingChunks.Count == 0 || board == null) return;
+        WorldChunkStreamer streamer = board.GetComponent<WorldChunkStreamer>();
+        foreach ((int x, int y) in pendingChunks)
+        {
+            var chunk = new ChunkPosition(x, y);
+            if (streamer != null)
+            {
+                streamer.Reload(chunk);
+                ReloadNeighbor(streamer, new ChunkPosition(x + 1, y));
+                ReloadNeighbor(streamer, new ChunkPosition(x - 1, y));
+                ReloadNeighbor(streamer, new ChunkPosition(x, y + 1));
+                ReloadNeighbor(streamer, new ChunkPosition(x, y - 1));
+            }
+            else
+            {
+                board.EnsureChunkData(chunk, out _);
+                board.GenerateBoard();
+            }
+        }
+
+        streamer?.Flush();
+        pendingChunks.Clear();
+    }
+
+    public void OpenWorld(string worldId)
+    {
+        session = WorldEditorSession.Open(worldId);
+        AttachSession();
+    }
+
+    public void DuplicateWritable()
+    {
+        if (session?.World == null) return;
+        string id = session.World.WorldId + "-edit";
+        session = session.DuplicateToWritable(id, session.World.DisplayName + " 副本");
+        AttachSession();
+        view?.SetStatus(session.Status);
+    }
+
+    public void CreateFiniteWorld()
+    {
+        CreateWorld(false);
+    }
+
+    public void CreateInfiniteWorld()
+    {
+        CreateWorld(true);
+    }
+
+    private void OpenDefault()
+    {
+        WorldDefinition world = WorldCatalog.Default;
         if (world == null)
         {
-            Debug.LogError("世界编辑器没有可编辑地图。");
+            view?.SetStatus("没有可编辑地图。");
             return;
         }
 
-        EnsureCameraAndLight();
-        EnsureUi();
-        terrainRoot = new GameObject("WorldEditorTerrain").transform;
-        objectRoot = new GameObject("WorldEditorObjects").transform;
-        overlayRoot = new GameObject("WorldEditorOverlay").transform;
-        CreateGhost();
-        RefreshView();
-        FrameWorld();
-        SetStatus("已打开 “" + world.DisplayName + "”。选择资源后在网格上单击放置。");
+        OpenWorld(world.WorldId);
     }
 
-    private void Update()
+    private void DetachSession()
     {
-        if (world == null || Mouse.current == null || Keyboard.current == null) return;
-        HandleShortcuts();
-        PanAndZoomCamera();
+        if (session == null) return;
+        session.ChunkChanged -= OnChunkChanged;
+        session.StatusChanged -= RefreshStatus;
+        if (input != null) input.ChunkSelected -= ShowStageInspector;
+        if (streamer != null) streamer.ChunkLoaded -= ApplyEditorOverlays;
+    }
 
-        bool overUi = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-        Tile tile = null;
-        hasHover = !overUi && TryHitTile(out tile);
-        if (hasHover)
+    private void AttachSession()
+    {
+        DetachSession();
+        if (session == null || board == null) return;
+        session.ChunkChanged += OnChunkChanged;
+        session.StatusChanged += RefreshStatus;
+        board.BindChunkProvider(session.Provider);
+        board.BuildWorldBoard(session.World, useStreamer: true);
+        streamer = board.GetComponent<WorldChunkStreamer>();
+        if (streamer != null)
         {
-            hoverCell = ToWorldCell(tile);
-            UpdateGhost(tile);
-        }
-        else if (ghost != null) ghost.SetActive(false);
-
-        if (overUi) return;
-        if (tool == Tool.Select)
-        {
-            HandleBoxSelection(tile);
-            return;
+            streamer.AutoCollectFromCamera = true;
+            streamer.Bind(board, session.Provider);
+            streamer.ChunkLoaded += ApplyEditorOverlays;
         }
 
-        if (hasHover && Mouse.current.leftButton.wasPressedThisFrame)
-            ApplyTool(tile);
-    }
-
-    private void HandleShortcuts()
-    {
-        Keyboard keyboard = Keyboard.current;
-        bool control = keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed;
-        if (control && keyboard.zKey.wasPressedThisFrame) Undo();
-        if (control && keyboard.yKey.wasPressedThisFrame) Redo();
-        if (keyboard.rKey.wasPressedThisFrame && tool == Tool.Object)
+        if (input == null) input = gameObject.AddComponent<WorldEditorInputController>();
+        input.Bind(session, board, view);
+        input.ChunkSelected += ShowStageInspector;
+        selectedChunk = new ChunkPosition(session.World.StartChunkX, session.World.StartChunkY);
+        RefreshStatus();
+        RefreshWorldList();
+        view?.SetWorldTitle(session.World.DisplayName);
+        view?.SetSourceHint(session.IsReadOnly ? "只读来源，保存前请复制为可写副本。" : "可写副本：" + session.Folder);
+        if (view != null)
         {
-            objectRotation = (objectRotation + 90) % 360;
-            SetStatus($"对象旋转：{objectRotation}°。");
+            if (view.WorldNameInput != null) view.WorldNameInput.text = session.World.DisplayName;
+            if (view.SeedInput != null) view.SeedInput.text = session.World.Seed.ToString();
         }
-        if (keyboard.deleteKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame) DeleteSelection();
-        if (keyboard.escapeKey.wasPressedThisFrame)
+        ShowStageInspector(selectedChunk);
+        ApplyEditorOverlaysToResidents();
+    }
+
+    private void BindUi()
+    {
+        Bind(view?.SaveButton, () => session?.Save());
+        Bind(view?.ReloadButton, () =>
         {
-            selection.Clear();
-            boxStart = null;
-            RefreshOverlays();
-        }
-        if (keyboard.digit1Key.wasPressedThisFrame) SetTool(Tool.Terrain);
-        if (keyboard.digit2Key.wasPressedThisFrame) SetTool(Tool.Object);
-        if (keyboard.digit3Key.wasPressedThisFrame) SetTool(Tool.Unit);
-        if (keyboard.digit4Key.wasPressedThisFrame) SetTool(Tool.Erase);
-        if (keyboard.digit5Key.wasPressedThisFrame) SetTool(Tool.Select);
-        if (keyboard.leftBracketKey.wasPressedThisFrame) ChangeHoveredHeight(-1);
-        if (keyboard.rightBracketKey.wasPressedThisFrame) ChangeHoveredHeight(1);
-    }
-
-    private void PanAndZoomCamera()
-    {
-        if (editorCamera == null) return;
-        Keyboard keyboard = Keyboard.current;
-        Vector3 pan = Vector3.zero;
-        if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) pan += Vector3.forward;
-        if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) pan += Vector3.back;
-        if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) pan += Vector3.left;
-        if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) pan += Vector3.right;
-        if (pan != Vector3.zero) editorCamera.transform.position += pan.normalized * (12f * Time.unscaledDeltaTime);
-        float scroll = Mouse.current.scroll.ReadValue().y;
-        if (Mathf.Abs(scroll) > 0.01f)
-            editorCamera.orthographicSize = Mathf.Clamp(editorCamera.orthographicSize - scroll * 0.012f, 4f, 80f);
-    }
-
-    private void HandleBoxSelection(Tile tile)
-    {
-        if (hasHover && Mouse.current.leftButton.wasPressedThisFrame)
-            boxStart = ToWorldCell(tile);
-        if (boxStart.HasValue && hasHover) DrawBox(boxStart.Value, hoverCell);
-        if (!Mouse.current.leftButton.wasReleasedThisFrame || !boxStart.HasValue) return;
-        if (hasHover) SelectInBox(boxStart.Value, hoverCell);
-        boxStart = null;
-        if (boxOverlay != null) boxOverlay.SetActive(false);
-    }
-
-    private void ApplyTool(Tile tile)
-    {
-        switch (tool)
+            session?.Reload();
+            AttachSession();
+        });
+        Bind(view?.UndoButton, () => session?.Commands.Undo());
+        Bind(view?.RedoButton, () => session?.Commands.Redo());
+        Bind(view?.DuplicateButton, DuplicateWritable);
+        Bind(view?.NewFiniteButton, CreateFiniteWorld);
+        Bind(view?.NewInfiniteButton, CreateInfiniteWorld);
+        Bind(view?.ValidateButton, () =>
         {
-            case Tool.Terrain: PaintTerrain(tile); break;
-            case Tool.Object: PlaceObject(tile); break;
-            case Tool.Unit: PlaceUnit(tile); break;
-            case Tool.Erase: EraseAt(tile); break;
-        }
-    }
-
-    private void PaintTerrain(Tile tile)
-    {
-        string before = tile.Stage.TerrainAt(tile.LocalX, tile.LocalY, world.TerrainWidth, world.TerrainHeight);
-        if (before == terrainId) return;
-        commands.Execute("绘制地形",
-            () => { tile.Stage.SetTerrain(tile.LocalX, tile.LocalY, world.TerrainWidth, world.TerrainHeight, terrainId); RefreshView(); },
-            () => { tile.Stage.SetTerrain(tile.LocalX, tile.LocalY, world.TerrainWidth, world.TerrainHeight, before); RefreshView(); });
-    }
-
-    private void ChangeHoveredHeight(int delta)
-    {
-        if (!hasHover || !tiles.TryGetValue(hoverCell, out Tile tile)) return;
-        int before = tile.Stage.HeightAt(tile.LocalX, tile.LocalY, world.TerrainWidth, world.TerrainHeight);
-        int after = Mathf.Clamp(before + delta, WorldTerrain.MinHeight, WorldTerrain.MaxHeight);
-        if (before == after) return;
-        commands.Execute("调整高度",
-            () => { tile.Stage.SetHeight(tile.LocalX, tile.LocalY, world.TerrainWidth, world.TerrainHeight, after); RefreshView(); },
-            () => { tile.Stage.SetHeight(tile.LocalX, tile.LocalY, world.TerrainWidth, world.TerrainHeight, before); RefreshView(); });
-    }
-
-    private void PlaceObject(Tile tile)
-    {
-        WorldDecorationDefinition placement = new WorldDecorationDefinition
+            List<string> issues = session?.Validate() ?? new List<string> { "没有打开的地图。" };
+            view?.SetStatus(issues.Count == 0 ? "校验通过。" : issues[0]);
+        });
+        Bind(view?.GenerateVisibleButton, GenerateVisible);
+        Bind(view?.RandomSeedButton, () =>
         {
-            Id = $"object-{++nextObjectId}", Definition = WorldDecorationCatalog.CanonicalId(objectId),
-            LocalX = tile.LocalX, LocalY = tile.LocalY, Rotation = objectRotation,
-            FootprintWidth = objectWidth, FootprintHeight = objectHeight
-        };
-        if (!CanPlaceObject(tile.Stage, placement, out string reason))
+            if (view?.SeedInput != null)
+                view.SeedInput.text = UnityEngine.Random.Range(1, int.MaxValue).ToString();
+        });
+        Bind(view?.RefreshWorldsButton, RefreshWorldList);
+        Bind(view?.ImportWorldButton, ImportWorld);
+        Bind(view?.DeleteWorldButton, DeleteCurrentWorld);
+        Bind(view?.ApplyWorldSettingsButton, ApplyWorldSettings);
+        Bind(view?.ApplyStageButton, ApplyStageSettings);
+        Bind(view?.SetStartTileButton, SetStartTile);
+        Bind(view?.TerrainToolButton, () => input?.SetTool(WorldEditorInputController.Tool.Terrain));
+        Bind(view?.HeightUpToolButton, () => input?.SetTool(WorldEditorInputController.Tool.HeightUp));
+        Bind(view?.HeightDownToolButton, () => input?.SetTool(WorldEditorInputController.Tool.HeightDown));
+        Bind(view?.ObjectToolButton, () => input?.SetTool(WorldEditorInputController.Tool.Object));
+        Bind(view?.UnitToolButton, () => input?.SetTool(WorldEditorInputController.Tool.Unit));
+        Bind(view?.EraseToolButton, () => input?.SetTool(WorldEditorInputController.Tool.Erase));
+        Bind(view?.EraseDecorationToolButton, () => input?.SetTool(WorldEditorInputController.Tool.EraseDecoration));
+        Bind(view?.EraseUnitToolButton, () => input?.SetTool(WorldEditorInputController.Tool.EraseUnit));
+        Bind(view?.SelectToolButton, () => input?.SetTool(WorldEditorInputController.Tool.Select));
+        Bind(backButton, () => SceneManager.LoadScene("S_Menu"));
+        if (view?.ContourToggle != null)
         {
-            SetStatus(reason);
-            return;
-        }
-
-        commands.Execute("放置对象",
-            () => { tile.Stage.Decorations.Add(placement); RefreshView(); },
-            () => { tile.Stage.Decorations.Remove(placement); RefreshView(); });
-    }
-
-    private bool CanPlaceObject(StageDefinition stage, WorldDecorationDefinition candidate, out string reason)
-    {
-        reason = string.Empty;
-        for (int y = candidate.LocalY; y < candidate.LocalY + candidate.EffectiveHeight; y++)
-        for (int x = candidate.LocalX; x < candidate.LocalX + candidate.EffectiveWidth; x++)
-        {
-            if (x < 0 || y < 0 || x >= world.TerrainWidth || y >= world.TerrainHeight)
+            view.ContourToggle.onValueChanged.RemoveAllListeners();
+            view.ContourToggle.onValueChanged.AddListener(enabled =>
             {
-                reason = "对象不能跨出当前区块；请在区块内选择锚点。";
-                return false;
-            }
-            foreach (WorldDecorationDefinition existing in stage.Decorations)
-                if (Covers(existing, x, y))
-                {
-                    reason = "对象不能和已有对象占用同一格。";
-                    return false;
-                }
-        }
-        return true;
-    }
-
-    private void PlaceUnit(Tile tile)
-    {
-        if (string.IsNullOrWhiteSpace(unitId) || !ContentRuntime.Registry.TryGetUnit(unitId, out UnitDefinition unit))
-        {
-            SetStatus("请先从单位 Palette 选择一个已启用单位。");
-            return;
-        }
-        foreach (WorldUnitPlacementDefinition existing in tile.Stage.UnitPlacements)
-            if (existing.Enabled && existing.LocalX == tile.LocalX && existing.LocalY == tile.LocalY)
-            {
-                SetStatus("同一格只能部署一个单位。");
-                return;
-            }
-
-        WorldUnitPlacementDefinition placement = new WorldUnitPlacementDefinition
-        {
-            InstanceId = $"unit-{++nextUnitId}", UnitId = unit.UnitId, LocalX = tile.LocalX, LocalY = tile.LocalY,
-            FactionOverride = unit.DefaultFaction, ControllerOverride = unit.Controller, DeckIdOverride = unit.DeckId,
-            Enabled = true
-        };
-        commands.Execute("部署单位",
-            () => { tile.Stage.UnitPlacements.Add(placement); RefreshView(); },
-            () => { tile.Stage.UnitPlacements.Remove(placement); RefreshView(); });
-    }
-
-    private void EraseAt(Tile tile)
-    {
-        WorldDecorationDefinition objectToRemove = null;
-        for (int i = tile.Stage.Decorations.Count - 1; i >= 0; i--)
-            if (Covers(tile.Stage.Decorations[i], tile.LocalX, tile.LocalY)) { objectToRemove = tile.Stage.Decorations[i]; break; }
-        if (objectToRemove != null)
-        {
-            int index = tile.Stage.Decorations.IndexOf(objectToRemove);
-            commands.Execute("删除对象",
-                () => { tile.Stage.Decorations.Remove(objectToRemove); RefreshView(); },
-                () => { tile.Stage.Decorations.Insert(index, objectToRemove); RefreshView(); });
-            return;
-        }
-        WorldUnitPlacementDefinition unitToRemove = tile.Stage.UnitPlacements.Find(item => item.Enabled &&
-            item.LocalX == tile.LocalX && item.LocalY == tile.LocalY);
-        if (unitToRemove == null) return;
-        int unitIndex = tile.Stage.UnitPlacements.IndexOf(unitToRemove);
-        commands.Execute("撤除单位",
-            () => { tile.Stage.UnitPlacements.Remove(unitToRemove); RefreshView(); },
-            () => { tile.Stage.UnitPlacements.Insert(unitIndex, unitToRemove); RefreshView(); });
-    }
-
-    private void SelectInBox(Vector2Int a, Vector2Int b)
-    {
-        selection.Clear();
-        int minX = Mathf.Min(a.x, b.x); int maxX = Mathf.Max(a.x, b.x);
-        int minY = Mathf.Min(a.y, b.y); int maxY = Mathf.Max(a.y, b.y);
-        foreach (StageDefinition stage in world.Stages)
-        {
-            if (stage == null || !stage.Enabled) continue;
-            foreach (WorldDecorationDefinition item in stage.Decorations)
-                if (ObjectIntersects(stage, item, minX, maxX, minY, maxY)) selection.Add(new Selection { Stage = stage, Object = item });
-            foreach (WorldUnitPlacementDefinition item in stage.UnitPlacements)
-            {
-                Vector2Int cell = WorldCoords.ToWorldTile(new ChunkPosition(stage.GridX, stage.GridY), item.LocalX, item.LocalY,
-                    world.TerrainWidth, world.TerrainHeight);
-                if (cell.x >= minX && cell.x <= maxX && cell.y >= minY && cell.y <= maxY)
-                    selection.Add(new Selection { Stage = stage, Unit = item });
-            }
-        }
-        RefreshOverlays();
-        SetStatus(selection.Count == 0 ? "框选中没有对象或单位。" : $"已选择 {selection.Count} 项；Delete 删除，Esc 取消。" );
-    }
-
-    private bool ObjectIntersects(StageDefinition stage, WorldDecorationDefinition item, int minX, int maxX, int minY, int maxY)
-    {
-        for (int y = item.LocalY; y < item.LocalY + item.EffectiveHeight; y++)
-        for (int x = item.LocalX; x < item.LocalX + item.EffectiveWidth; x++)
-        {
-            Vector2Int cell = WorldCoords.ToWorldTile(new ChunkPosition(stage.GridX, stage.GridY), x, y, world.TerrainWidth, world.TerrainHeight);
-            if (cell.x >= minX && cell.x <= maxX && cell.y >= minY && cell.y <= maxY) return true;
-        }
-        return false;
-    }
-
-    private void DeleteSelection()
-    {
-        if (selection.Count == 0) return;
-        List<Selection> deleted = new List<Selection>(selection);
-        commands.Execute("删除选中项",
-            () =>
-            {
-                foreach (Selection item in deleted)
-                {
-                    if (item.Object != null) item.Stage.Decorations.Remove(item.Object);
-                    if (item.Unit != null) item.Stage.UnitPlacements.Remove(item.Unit);
-                }
-                selection.Clear(); RefreshView();
-            },
-            () =>
-            {
-                foreach (Selection item in deleted)
-                {
-                    if (item.Object != null && !item.Stage.Decorations.Contains(item.Object)) item.Stage.Decorations.Add(item.Object);
-                    if (item.Unit != null && !item.Stage.UnitPlacements.Contains(item.Unit)) item.Stage.UnitPlacements.Add(item.Unit);
-                }
-                selection.Clear(); RefreshView();
+                ApplyEditorOverlaysToResidents();
+                view.SetStatus(enabled ? "等高线已开启。" : "等高线已关闭。");
             });
+        }
+        if (view?.ChunkBoundsToggle != null)
+        {
+            view.ChunkBoundsToggle.onValueChanged.RemoveAllListeners();
+            view.ChunkBoundsToggle.onValueChanged.AddListener(enabled =>
+            {
+                ApplyEditorOverlaysToResidents();
+                view.SetStatus(enabled ? "区块边界已开启。" : "区块边界已关闭。");
+            });
+        }
+        BindPalette();
     }
 
-    private void Undo() { if (commands.Undo()) SetStatus("已撤销。"); }
-    private void Redo() { if (commands.Redo()) SetStatus("已重做。"); }
-
-    private void Save()
+    private void BindPalette()
     {
-        List<string> issues = WorldMapIO.Validate(world);
-        if (issues.Count > 0)
+        Button[] terrains = view != null ? view.TerrainPaletteButtons : null;
+        if (terrains != null)
         {
-            SetStatus("无法保存：" + issues[0]);
+            int count = Mathf.Min(terrains.Length, WorldTerrainCatalog.Terrains.Length);
+            for (int i = 0; i < count; i++)
+            {
+                string id = WorldTerrainCatalog.Terrains[i].Id;
+                Bind(terrains[i], () => input?.SetTerrain(id));
+            }
+        }
+
+        Button[] decos = view != null ? view.DecorationPaletteButtons : null;
+        if (decos != null)
+        {
+            var decorations = WorldDecorationCatalog.All;
+            int count = Mathf.Min(decos.Length, decorations.Count);
+            for (int i = 0; i < count; i++)
+            {
+                string id = decorations[i].Id;
+                Bind(decos[i], () => input?.SetDecoration(id));
+                SetButtonLabel(decos[i], decorations[i].Label);
+            }
+        }
+
+        if (view?.DecorationList != null)
+        {
+            view.DecorationList.ClearOptions();
+            var options = new List<string>();
+            var ids = new List<string>();
+            foreach (WorldDecorationEntry entry in WorldDecorationCatalog.All)
+            {
+                ids.Add(entry.Id);
+                options.Add(entry.Label + " (" + entry.Id + ")");
+            }
+            view.DecorationList.AddOptions(options);
+            view.DecorationList.onValueChanged.RemoveAllListeners();
+            view.DecorationList.onValueChanged.AddListener(index =>
+            {
+                if (index >= 0 && index < ids.Count) input?.SetDecoration(ids[index]);
+            });
+            if (ids.Count > 0) input?.SetDecoration(ids[0]);
+        }
+
+        Button[] units = view != null ? view.UnitPaletteButtons : null;
+        if (units != null && ContentRuntime.IsLoaded)
+        {
+            int index = 0;
+            foreach (UnitDefinition unit in ContentRuntime.Registry.Units)
+            {
+                if (index >= units.Length) break;
+                if (!IsWorldDeployable(unit)) continue;
+                string id = unit.UnitId;
+                Bind(units[index], () => input?.SetUnit(id));
+                SetButtonLabel(units[index], unit.DisplayName);
+                index++;
+            }
+        }
+
+        if (view?.UnitList != null)
+        {
+            view.UnitList.ClearOptions();
+            var options = new List<string>();
+            var ids = new List<string>();
+            if (ContentRuntime.IsLoaded)
+            {
+                foreach (UnitDefinition unit in ContentRuntime.Registry.Units)
+                {
+                    if (!IsWorldDeployable(unit)) continue;
+                    ids.Add(unit.UnitId);
+                    options.Add(string.IsNullOrWhiteSpace(unit.DisplayName) ? unit.UnitId : unit.DisplayName + " (" + unit.UnitId + ")");
+                }
+            }
+            view.UnitList.AddOptions(options);
+            view.UnitList.onValueChanged.RemoveAllListeners();
+            view.UnitList.onValueChanged.AddListener(index =>
+            {
+                if (index >= 0 && index < ids.Count) input?.SetUnit(ids[index]);
+            });
+            if (ids.Count > 0) input?.SetUnit(ids[0]);
+        }
+
+        if (view?.StageTypeList != null)
+        {
+            view.StageTypeList.ClearOptions();
+            view.StageTypeList.AddOptions(new List<string>
+            {
+                ContentStageTypeKeys.Start, ContentStageTypeKeys.Battle, ContentStageTypeKeys.Rest,
+                ContentStageTypeKeys.Reward, ContentStageTypeKeys.Shop, ContentStageTypeKeys.Boss
+            });
+        }
+    }
+
+    private void RefreshWorldList()
+    {
+        if (view?.WorldList == null) return;
+        worldEntries.Clear();
+        worldEntries.AddRange(WorldEditorSession.ListWorlds());
+        suppressWorldDropdown = true;
+        view.WorldList.ClearOptions();
+        var options = new List<string>(worldEntries.Count);
+        int selected = 0;
+        for (int i = 0; i < worldEntries.Count; i++)
+        {
+            WorldListEntry entry = worldEntries[i];
+            options.Add($"{entry.DisplayName}{(entry.Writable ? "" : "（只读）")}");
+            if (session != null && entry.WorldId == session.World.WorldId) selected = i;
+        }
+
+        view.WorldList.AddOptions(options);
+        view.WorldList.onValueChanged.RemoveAllListeners();
+        view.WorldList.value = selected;
+        suppressWorldDropdown = false;
+        view.WorldList.onValueChanged.AddListener(index =>
+        {
+            if (suppressWorldDropdown || index < 0 || index >= worldEntries.Count) return;
+            if (session != null && session.Commands.IsDirty)
+            {
+                view.SetStatus("有未保存修改。请先保存或重载，再切换地图。");
+                suppressWorldDropdown = true;
+                view.WorldList.value = FindCurrentWorldIndex();
+                suppressWorldDropdown = false;
+            }
+            else
+                OpenWorld(worldEntries[index].WorldId);
+        });
+    }
+
+    private void GenerateVisible()
+    {
+        if (session == null || board == null) return;
+        WorldChunkStreamer streamer = board.GetComponent<WorldChunkStreamer>();
+        var chunks = new List<ChunkPosition>();
+        if (streamer != null)
+        {
+            // 驻留块即当前可见/预取集。
+            WorldChunkView[] views = board.GetComponentsInChildren<WorldChunkView>(true);
+            for (int i = 0; i < views.Length; i++)
+                if (views[i] != null) chunks.Add(views[i].Position);
+        }
+        else if (session.World.Stages != null)
+        {
+            for (int i = 0; i < session.World.Stages.Count; i++)
+            {
+                StageDefinition stage = session.World.Stages[i];
+                if (stage != null) chunks.Add(new ChunkPosition(stage.GridX, stage.GridY));
+            }
+        }
+
+        if (!session.World.IsInfinite)
+        {
+            chunks.Clear();
+            for (int y = session.World.BoundsMinY; y <= session.World.BoundsMaxY; y++)
+                for (int x = session.World.BoundsMinX; x <= session.World.BoundsMaxX; x++)
+                    chunks.Add(new ChunkPosition(x, y));
+        }
+        if (chunks.Count == 0) chunks.Add(new ChunkPosition(session.World.StartChunkX, session.World.StartChunkY));
+        session.GenerateVisible(chunks, CreateNoiseSettings());
+    }
+
+    private void CreateWorld(bool infinite)
+    {
+        string stamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+        string fallbackId = (infinite ? "endless-" : "user-") + stamp;
+        string id = ReadText(view?.NewWorldIdInput, fallbackId).ToLowerInvariant();
+        string name = ReadText(view?.NewWorldNameInput, infinite ? "无限地图" : "新地图");
+        int chunkSize = Mathf.Clamp(ReadInt(view?.ChunkSizeInput, 10), 2, 64);
+        int seed = ReadInt(view?.SeedInput, UnityEngine.Random.Range(1, int.MaxValue));
+        try
+        {
+            session = infinite
+                ? WorldEditorSession.CreateInfinite(id, name, seed, chunkSize)
+                : WorldEditorSession.CreateFinite(id, name,
+                    Mathf.Clamp(ReadInt(view?.ChunksXInput, 3), 1, 64),
+                    Mathf.Clamp(ReadInt(view?.ChunksYInput, 3), 1, 64), chunkSize);
+            session.UpdateWorldSettings(name, seed);
+            AttachSession();
+        }
+        catch (Exception ex)
+        {
+            view?.SetStatus("无法新建地图：" + ex.Message);
+        }
+    }
+
+    private void ImportWorld()
+    {
+        string path = ReadText(view?.ImportPathInput, string.Empty);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            view?.SetStatus("请输入待导入地图目录。");
             return;
         }
-        WorldMapIO.SaveUserWorld(world);
-        WorldCatalog.Reload();
-        SetStatus("已保存到可写地图覆盖层：" + Path.Combine(WorldMapIO.UserWorldsRoot, world.WorldId));
-    }
-
-    private void Reload()
-    {
-        WorldCatalog.Reload();
-        world = WorldCatalog.Default;
-        commands.Clear(); selection.Clear();
-        RefreshView(); FrameWorld();
-        SetStatus("已重新加载地图 JSON。未保存的编辑已丢弃。");
-    }
-
-    private void RefreshView()
-    {
-        if (terrainRoot == null) return;
-        ClearChildren(terrainRoot); ClearChildren(objectRoot); ClearChildren(overlayRoot);
-        tiles.Clear();
-        for (int s = 0; s < world.Stages.Count; s++)
+        try
         {
-            StageDefinition stage = world.Stages[s];
-            if (stage == null || !stage.Enabled) continue;
-            stage.EnsureGrids(world.TerrainWidth, world.TerrainHeight);
-            for (int y = 0; y < world.TerrainHeight; y++)
-            for (int x = 0; x < world.TerrainWidth; x++) CreateTile(stage, x, y);
-            foreach (WorldDecorationDefinition item in stage.Decorations) RenderObject(stage, item);
-            foreach (WorldUnitPlacementDefinition item in stage.UnitPlacements) RenderUnit(stage, item);
+            session = WorldEditorSession.ImportFolder(path);
+            AttachSession();
         }
-        RefreshOverlays();
-    }
-
-    private void CreateTile(StageDefinition stage, int localX, int localY)
-    {
-        Vector2Int cell = WorldCoords.ToWorldTile(new ChunkPosition(stage.GridX, stage.GridY), localX, localY,
-            world.TerrainWidth, world.TerrainHeight);
-        GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        cube.name = $"Cell_{cell.x}_{cell.y}";
-        cube.transform.SetParent(terrainRoot, false);
-        int height = stage.HeightAt(localX, localY, world.TerrainWidth, world.TerrainHeight);
-        cube.transform.position = new Vector3(cell.x * CellSize, height * WorldTerrain.StepY, cell.y * CellSize);
-        cube.transform.localScale = new Vector3(0.94f, Mathf.Max(0.12f, WorldTerrain.StepY), 0.94f);
-        cube.GetComponent<Renderer>().material.color = TerrainColor(stage.TerrainAt(localX, localY, world.TerrainWidth, world.TerrainHeight));
-        Tile tile = cube.AddComponent<Tile>(); tile.Stage = stage; tile.LocalX = localX; tile.LocalY = localY;
-        tiles[cell] = tile;
-    }
-
-    private void RenderObject(StageDefinition stage, WorldDecorationDefinition item)
-    {
-        if (item == null) return;
-        Vector2Int cell = WorldCoords.ToWorldTile(new ChunkPosition(stage.GridX, stage.GridY), item.LocalX, item.LocalY,
-            world.TerrainWidth, world.TerrainHeight);
-        if (!tiles.TryGetValue(cell, out Tile anchor)) return;
-        GameObject obj = WorldDecorationCatalog.Spawn(item, anchor.transform);
-        obj.transform.SetParent(objectRoot, true);
-        obj.transform.position += new Vector3((item.EffectiveWidth - 1) * 0.5f, 0f, (item.EffectiveHeight - 1) * 0.5f);
-        obj.name = "Object_" + item.Id;
-    }
-
-    private void RenderUnit(StageDefinition stage, WorldUnitPlacementDefinition item)
-    {
-        if (item == null || !item.Enabled) return;
-        Vector2Int cell = WorldCoords.ToWorldTile(new ChunkPosition(stage.GridX, stage.GridY), item.LocalX, item.LocalY,
-            world.TerrainWidth, world.TerrainHeight);
-        if (!tiles.TryGetValue(cell, out Tile anchor)) return;
-        GameObject token = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        token.name = "Unit_" + item.InstanceId;
-        token.transform.SetParent(objectRoot, false);
-        token.transform.position = anchor.transform.position + new Vector3(0f, 0.5f, 0f);
-        token.transform.localScale = new Vector3(0.42f, 0.55f, 0.42f);
-        token.GetComponent<Renderer>().material.color = item.FactionOverride == "enemy" ? new Color(0.82f, 0.25f, 0.28f) : new Color(0.25f, 0.55f, 0.95f);
-        Destroy(token.GetComponent<Collider>());
-    }
-
-    private void RefreshOverlays()
-    {
-        if (overlayRoot == null) return;
-        ClearChildren(overlayRoot);
-        foreach (Selection item in selection)
+        catch (Exception ex)
         {
-            if (item.Object != null) DrawObjectSelection(item.Stage, item.Object, new Color(1f, 0.8f, 0.15f, 0.7f));
-            if (item.Unit != null) DrawCellSelection(item.Stage, item.Unit.LocalX, item.Unit.LocalY, new Color(0.25f, 0.9f, 1f, 0.7f));
+            view?.SetStatus("导入失败：" + ex.Message);
         }
     }
 
-    private void DrawObjectSelection(StageDefinition stage, WorldDecorationDefinition item, Color color)
+    private void DeleteCurrentWorld()
     {
-        for (int y = item.LocalY; y < item.LocalY + item.EffectiveHeight; y++)
-        for (int x = item.LocalX; x < item.LocalX + item.EffectiveWidth; x++) DrawCellSelection(stage, x, y, color);
-    }
-
-    private void DrawCellSelection(StageDefinition stage, int localX, int localY, Color color)
-    {
-        Vector2Int cell = WorldCoords.ToWorldTile(new ChunkPosition(stage.GridX, stage.GridY), localX, localY, world.TerrainWidth, world.TerrainHeight);
-        if (!tiles.TryGetValue(cell, out Tile tile)) return;
-        GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        marker.transform.SetParent(overlayRoot, false);
-        marker.transform.position = tile.transform.position + new Vector3(0f, 0.32f, 0f);
-        marker.transform.localScale = new Vector3(1.01f, 0.025f, 1.01f);
-        marker.GetComponent<Renderer>().material.color = color;
-        Destroy(marker.GetComponent<Collider>());
-    }
-
-    private void CreateGhost()
-    {
-        ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        ghost.name = "PlacementGhost";
-        Destroy(ghost.GetComponent<Collider>());
-        ghost.GetComponent<Renderer>().material.color = new Color(0.2f, 0.95f, 1f, 0.38f);
-        ghost.SetActive(false);
-    }
-
-    private void UpdateGhost(Tile tile)
-    {
-        if (ghost == null || tool == Tool.Select || tool == Tool.Erase) { if (ghost != null) ghost.SetActive(false); return; }
-        ghost.SetActive(true);
-        int width = tool == Tool.Object ? (objectRotation % 180 == 0 ? objectWidth : objectHeight) : 1;
-        int height = tool == Tool.Object ? (objectRotation % 180 == 0 ? objectHeight : objectWidth) : 1;
-        ghost.transform.position = tile.transform.position + new Vector3((width - 1) * 0.5f, 0.42f, (height - 1) * 0.5f);
-        ghost.transform.localScale = new Vector3(width * 0.92f, 0.045f, height * 0.92f);
-        ghost.GetComponent<Renderer>().material.color = tool == Tool.Unit ? new Color(0.35f, 0.65f, 1f, 0.42f) : new Color(0.2f, 0.95f, 1f, 0.38f);
-    }
-
-    private void DrawBox(Vector2Int a, Vector2Int b)
-    {
-        if (boxOverlay == null)
+        if (session?.World == null) return;
+        if (!deleteArmed)
         {
-            boxOverlay = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            Destroy(boxOverlay.GetComponent<Collider>());
-            boxOverlay.GetComponent<Renderer>().material.color = new Color(1f, 0.85f, 0.15f, 0.35f);
+            deleteArmed = true;
+            view?.SetStatus("再次点击“删除”确认删除当前可写地图。");
+            return;
         }
-        boxOverlay.SetActive(true);
-        Vector2Int min = Vector2Int.Min(a, b); Vector2Int max = Vector2Int.Max(a, b);
-        boxOverlay.transform.position = new Vector3((min.x + max.x) * 0.5f, 0.45f, (min.y + max.y) * 0.5f);
-        boxOverlay.transform.localScale = new Vector3(max.x - min.x + 0.96f, 0.04f, max.y - min.y + 0.96f);
-    }
-
-    private bool TryHitTile(out Tile tile)
-    {
-        tile = null;
-        if (editorCamera == null) return false;
-        Ray ray = editorCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
-        if (!Physics.Raycast(ray, out RaycastHit hit, 300f)) return false;
-        tile = hit.collider.GetComponent<Tile>();
-        return tile != null;
-    }
-
-    private Vector2Int ToWorldCell(Tile tile) => WorldCoords.ToWorldTile(new ChunkPosition(tile.Stage.GridX, tile.Stage.GridY),
-        tile.LocalX, tile.LocalY, world.TerrainWidth, world.TerrainHeight);
-    private static bool Covers(WorldDecorationDefinition item, int x, int y) => item != null && x >= item.LocalX && y >= item.LocalY &&
-        x < item.LocalX + item.EffectiveWidth && y < item.LocalY + item.EffectiveHeight;
-
-    private void SetTool(Tool next) { tool = next; SetStatus("工具：" + ToolLabel(next)); }
-    private static string ToolLabel(Tool value) => value == Tool.Terrain ? "地形" : value == Tool.Object ? "对象" : value == Tool.Unit ? "单位" : value == Tool.Erase ? "删除" : "框选";
-
-    private void EnsureCameraAndLight()
-    {
-        editorCamera = Camera.main;
-        if (editorCamera == null)
+        deleteArmed = false;
+        string id = session.World.WorldId;
+        if (!WorldEditorSession.TryDeleteUserWorld(id, out string error))
         {
-            GameObject cameraObject = new GameObject("WorldEditorCamera"); cameraObject.tag = "MainCamera";
-            editorCamera = cameraObject.AddComponent<Camera>(); cameraObject.AddComponent<AudioListener>();
+            view?.SetStatus(error);
+            return;
         }
-        editorCamera.orthographic = true; editorCamera.orthographicSize = 14f;
-        editorCamera.transform.rotation = Quaternion.Euler(62f, 0f, 0f);
-        if (FindAnyObjectByType<Light>() == null)
+        OpenDefault();
+        RefreshWorldList();
+    }
+
+    private void ApplyWorldSettings()
+    {
+        if (session == null) return;
+        session.UpdateWorldSettings(ReadText(view?.WorldNameInput, session.World.DisplayName),
+            ReadInt(view?.SeedInput, session.World.Seed));
+        RefreshStatus();
+    }
+
+    private void ShowStageInspector(ChunkPosition chunk)
+    {
+        selectedChunk = chunk;
+        if (session == null || !session.Provider.TryGetChunk(chunk, out StageDefinition stage) || stage == null)
         {
-            Light light = new GameObject("WorldEditorLight").AddComponent<Light>();
-            light.type = LightType.Directional; light.transform.rotation = Quaternion.Euler(48f, -32f, 0f); light.intensity = 1.1f;
+            view?.SetStageTitle("关卡：未加载");
+            return;
+        }
+        view?.SetStageTitle($"关卡 {chunk.X},{chunk.Y}");
+        if (view == null) return;
+        if (view.StageIdInput != null) view.StageIdInput.text = stage.StageId;
+        if (view.StageNameInput != null) view.StageNameInput.text = stage.DisplayName;
+        if (view.StageRewardInput != null) view.StageRewardInput.text = stage.RewardPoolId;
+        if (view.StageRequiredKeyInput != null) view.StageRequiredKeyInput.text = stage.RequiredKeyId;
+        if (view.StageDropKeyInput != null) view.StageDropKeyInput.text = stage.DropKeyId;
+        if (view.StageTypeList != null)
+        {
+            int type = view.StageTypeList.options.FindIndex(item => item.text == stage.StageType);
+            view.StageTypeList.SetValueWithoutNotify(Mathf.Max(0, type));
         }
     }
 
-    private void FrameWorld()
+    private void ApplyStageSettings()
     {
-        float centerX = (world.BoundsMinX * world.TerrainWidth + world.BoundsMaxX * world.TerrainWidth + world.TerrainWidth - 1) * 0.5f;
-        float centerZ = (world.BoundsMinY * world.TerrainHeight + world.BoundsMaxY * world.TerrainHeight + world.TerrainHeight - 1) * 0.5f;
-        editorCamera.transform.position = new Vector3(centerX, 24f, centerZ - 13f);
-        editorCamera.transform.LookAt(new Vector3(centerX, 0f, centerZ));
-        editorCamera.orthographicSize = Mathf.Max(8f, Mathf.Max(world.WorldTerrainWidth, world.WorldTerrainHeight) * 0.62f);
+        if (session == null || view == null) return;
+        string stageType = view.StageTypeList != null && view.StageTypeList.options.Count > 0
+            ? view.StageTypeList.options[view.StageTypeList.value].text : ContentStageTypeKeys.Battle;
+        if (!session.TryUpdateStage(selectedChunk, ReadText(view.StageIdInput, string.Empty),
+                ReadText(view.StageNameInput, string.Empty), stageType, ReadText(view.StageRewardInput, string.Empty),
+                ReadText(view.StageRequiredKeyInput, string.Empty), ReadText(view.StageDropKeyInput, string.Empty),
+                out string reason))
+            view.SetStatus(reason);
+        else
+            ShowStageInspector(selectedChunk);
     }
 
-    private void EnsureUi()
+    private void SetStartTile()
     {
-        GameObject canvasObject = new GameObject("WorldEditorUI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-        Canvas canvas = canvasObject.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvasObject.GetComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        if (FindAnyObjectByType<EventSystem>() == null)
+        if (session == null || input == null) return;
+        int tw = Mathf.Max(1, session.World.TerrainWidth);
+        int th = Mathf.Max(1, session.World.TerrainHeight);
+        Vector2Int tile = input.HasHover ? input.HoverCell :
+            new Vector2Int(selectedChunk.X * tw + tw / 2, selectedChunk.Y * th + th / 2);
+        session.SetStartTile(tile.x, tile.y);
+    }
+
+    private void ApplyEditorOverlays(ChunkPosition _, WorldChunkView chunk) =>
+        chunk?.SetEditorOverlays(board, view != null && view.ContourToggle != null && view.ContourToggle.isOn,
+            view != null && view.ChunkBoundsToggle != null && view.ChunkBoundsToggle.isOn);
+
+    private void ApplyEditorOverlaysToResidents()
+    {
+        if (board == null) return;
+        WorldChunkView[] chunks = board.GetComponentsInChildren<WorldChunkView>(true);
+        for (int i = 0; i < chunks.Length; i++) ApplyEditorOverlays(default, chunks[i]);
+    }
+
+    private int FindCurrentWorldIndex()
+    {
+        if (session?.World == null) return 0;
+        for (int i = 0; i < worldEntries.Count; i++)
+            if (worldEntries[i].WorldId == session.World.WorldId) return i;
+        return 0;
+    }
+
+    // 地图编辑器要展示已加载内容包的全部启用单位；阵营和控制器从定义带入落点，
+    // 不再因为筛选条件而出现“单位列表为空”。
+    private static bool IsWorldDeployable(UnitDefinition unit) => unit != null && unit.Enabled &&
+        !string.IsNullOrWhiteSpace(unit.UnitId);
+
+    private static int ReadInt(TMPro.TMP_InputField input, int fallback) =>
+        input != null && int.TryParse(input.text, out int value) ? value : fallback;
+
+    private static string ReadText(TMPro.TMP_InputField input, string fallback) =>
+        input == null || string.IsNullOrWhiteSpace(input.text) ? fallback : input.text.Trim();
+
+    private WorldNoiseSettings CreateNoiseSettings() => new WorldNoiseSettings
+    {
+        Seed = ReadInt(view?.SeedInput, session != null ? session.World.Seed : 1),
+        HeightFrequency = ReadFloat(view?.HeightFrequencyInput, 0.075f),
+        DecorDensity = ReadFloat(view?.DecorationDensityInput, 0.16f),
+        EnemyDensity = ReadFloat(view?.EnemyDensityInput, 0.14f)
+    };
+
+    private static float ReadFloat(TMPro.TMP_InputField input, float fallback) =>
+        input != null && float.TryParse(input.text, out float value) ? Mathf.Max(0.001f, value) : fallback;
+
+    private static void SetButtonLabel(Button button, string value)
+    {
+        TMPro.TMP_Text text = button != null ? button.GetComponentInChildren<TMPro.TMP_Text>(true) : null;
+        if (text != null) text.text = value;
+    }
+
+    private void OnChunkChanged(ChunkPosition chunk) => pendingChunks.Add((chunk.X, chunk.Y));
+
+    private static void ReloadNeighbor(WorldChunkStreamer streamer, ChunkPosition chunk)
+    {
+        if (streamer.IsResident(chunk)) streamer.Reload(chunk);
+    }
+
+    private void RefreshStatus()
+    {
+        if (session == null)
         {
-            GameObject events = new GameObject("EventSystem", typeof(EventSystem)); events.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+            view?.SetStatus(string.Empty);
+            return;
         }
-        status = CreateText(canvasObject.transform, "Status", new Vector2(0.5f, 1f), new Vector2(0f, -18f), new Vector2(1160f, 34f), 18, TextAnchor.MiddleCenter);
-        CreateButton(canvasObject.transform, "保存", new Vector2(-270, -50), Save);
-        CreateButton(canvasObject.transform, "重新载入", new Vector2(-150, -50), Reload);
-        CreateButton(canvasObject.transform, "撤销", new Vector2(-30, -50), Undo);
-        CreateButton(canvasObject.transform, "重做", new Vector2(90, -50), Redo);
-        CreateButton(canvasObject.transform, "返回菜单", new Vector2(230, -50), () => SceneManager.LoadScene("S_Menu"));
-        CreateButton(canvasObject.transform, "地形 [1]", new Vector2(74, -118), () => SetTool(Tool.Terrain));
-        CreateButton(canvasObject.transform, "对象 [2]", new Vector2(74, -164), () => SetTool(Tool.Object));
-        CreateButton(canvasObject.transform, "单位 [3]", new Vector2(74, -210), () => SetTool(Tool.Unit));
-        CreateButton(canvasObject.transform, "删除 [4]", new Vector2(74, -256), () => SetTool(Tool.Erase));
-        CreateButton(canvasObject.transform, "框选 [5]", new Vector2(74, -302), () => SetTool(Tool.Select));
-        BuildPalette(canvasObject.transform);
+
+        view?.SetStatus(session.Status);
+        view?.SetWorldTitle(session.World != null ? session.World.DisplayName : string.Empty);
     }
 
-    private void BuildPalette(Transform parent)
+    private static void Bind(Button button, UnityEngine.Events.UnityAction action)
     {
-        int y = -88;
-        CreateText(parent, "TerrainTitle", new Vector2(0f, 1f), new Vector2(82, y), new Vector2(160, 28), 16, TextAnchor.MiddleLeft).text = "地形 Palette";
-        for (int i = 0; i < WorldTerrainCatalog.Terrains.Length; i++)
-        {
-            WorldTerrainCatalog.TerrainBrush brush = WorldTerrainCatalog.Terrains[i]; int row = i;
-            CreateButton(parent, brush.Label, new Vector2(56, y - 38 - row * 36), () => { terrainId = brush.Id; SetTool(Tool.Terrain); SetStatus("地形：" + brush.Label); }, 76, 30, new Vector2(0f, 1f));
-        }
-        int objectY = -88;
-        CreateText(parent, "ObjectTitle", new Vector2(1f, 1f), new Vector2(-90, objectY), new Vector2(230, 28), 16, TextAnchor.MiddleRight).text = "对象 Palette（R 旋转）";
-        string[] basics = { WorldTerrainCatalog.Tree, WorldTerrainCatalog.Rock, WorldTerrainCatalog.Camp };
-        for (int i = 0; i < basics.Length; i++)
-        {
-            string id = basics[i]; int row = i;
-            CreateButton(parent, WorldDecorationCatalog.GlyphOf(id), new Vector2(-176, objectY - 38 - row * 36), () => { objectId = id; SetTool(Tool.Object); }, 76, 30, new Vector2(1f, 1f));
-        }
-        CreateButton(parent, "宽 -", new Vector2(-215, objectY - 160), () => objectWidth = Mathf.Max(1, objectWidth - 1), 70, 30, new Vector2(1f, 1f));
-        CreateButton(parent, "宽 +", new Vector2(-137, objectY - 160), () => objectWidth = Mathf.Min(8, objectWidth + 1), 70, 30, new Vector2(1f, 1f));
-        CreateButton(parent, "高 -", new Vector2(-215, objectY - 196), () => objectHeight = Mathf.Max(1, objectHeight - 1), 70, 30, new Vector2(1f, 1f));
-        CreateButton(parent, "高 +", new Vector2(-137, objectY - 196), () => objectHeight = Mathf.Min(8, objectHeight + 1), 70, 30, new Vector2(1f, 1f));
-        CreateText(parent, "UnitTitle", new Vector2(1f, 0f), new Vector2(-90, 156), new Vector2(230, 28), 16, TextAnchor.MiddleRight).text = "单位 Palette";
-        int count = 0;
-        foreach (UnitDefinition item in ContentRuntime.Registry.Units)
-        {
-            if (count >= 5) break;
-            UnitDefinition captured = item; int row = count++;
-            CreateButton(parent, captured.DisplayName, new Vector2(-176, 118 - row * 36), () => { unitId = captured.UnitId; SetTool(Tool.Unit); SetStatus("单位：" + captured.DisplayName); }, 100, 30, new Vector2(1f, 0f));
-        }
+        if (button == null || action == null) return;
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(action);
     }
-
-    private static Button CreateButton(Transform parent, string label, Vector2 anchored, UnityEngine.Events.UnityAction action, float width = 108, float height = 36, Vector2? anchor = null)
-    {
-        GameObject obj = new GameObject(label, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button)); obj.transform.SetParent(parent, false);
-        RectTransform rect = obj.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = anchor ?? new Vector2(0.5f, 1f); rect.anchoredPosition = anchored; rect.sizeDelta = new Vector2(width, height);
-        obj.GetComponent<Image>().color = new Color(0.08f, 0.11f, 0.16f, 0.9f);
-        CreateText(obj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height), 15, TextAnchor.MiddleCenter).text = label;
-        Button button = obj.GetComponent<Button>(); button.onClick.AddListener(action); return button;
-    }
-
-    private static Text CreateText(Transform parent, string name, Vector2 anchor, Vector2 anchored, Vector2 size, int fontSize, TextAnchor alignment)
-    {
-        GameObject obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text)); obj.transform.SetParent(parent, false);
-        RectTransform rect = obj.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = anchor; rect.pivot = anchor; rect.anchoredPosition = anchored; rect.sizeDelta = size;
-        Text text = obj.GetComponent<Text>(); text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); text.fontSize = fontSize; text.alignment = alignment; text.color = Color.white; text.raycastTarget = false; return text;
-    }
-
-    private static Color TerrainColor(string id) => id == WorldTerrainCatalog.Water ? new Color(0.16f, 0.43f, 0.78f) :
-        id == WorldTerrainCatalog.Stone ? new Color(0.42f, 0.43f, 0.46f) : id == WorldTerrainCatalog.Dirt ? new Color(0.46f, 0.29f, 0.16f) :
-        id == WorldTerrainCatalog.Sand ? new Color(0.82f, 0.7f, 0.38f) : id == WorldTerrainCatalog.Road ? new Color(0.42f, 0.29f, 0.17f) :
-        id == WorldTerrainCatalog.Forest ? new Color(0.16f, 0.42f, 0.2f) : id == WorldTerrainCatalog.Void ? new Color(0.05f, 0.05f, 0.07f) : new Color(0.26f, 0.6f, 0.28f);
-    private void SetStatus(string value) { if (status != null) status.text = value; }
-    private static void ClearChildren(Transform root) { for (int i = root.childCount - 1; i >= 0; i--) Destroy(root.GetChild(i).gameObject); }
 }

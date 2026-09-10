@@ -65,6 +65,60 @@ public static class WorldFoundationWalls
             }
         }
 
+        CommitMesh(root, vertices, uvs, triangles);
+    }
+
+    /// <summary>按已驻留瓦片画一块的墙。缺席邻块当悬崖，等邻块加载后再刷接缝。</summary>
+    public static void RebuildChunk(Transform root, BoardGenerator board, ChunkPosition chunk, int tw, int th)
+    {
+        if (root == null || board == null) return;
+        Clear(root);
+        tw = Mathf.Max(1, tw);
+        th = Mathf.Max(1, th);
+        List<Vector3> vertices = new List<Vector3>(tw * th * 8);
+        List<Vector2> uvs = new List<Vector2>(tw * th * 8);
+        List<int> triangles = new List<int>(tw * th * 12);
+        int skirtFloor = WorldTerrain.MinHeight - 1;
+        float half = board.Spacing * 0.5f;
+        float heightStep = board.HeightStep;
+
+        for (int localY = 0; localY < th; localY++)
+        {
+            for (int localX = 0; localX < tw; localX++)
+            {
+                int worldX = chunk.X * tw + localX;
+                int worldZ = chunk.Y * th + localY;
+                if (!TryGetVisibleTile(board, worldX, worldZ, out BoardGenerator.TileRecord tile))
+                    continue;
+                Vector3 local = board.CellLocalPosition(worldX, worldZ, 0);
+                for (int edge = 0; edge < EdgeOffsets.Length; edge++)
+                {
+                    Vector2Int offset = EdgeOffsets[edge];
+                    int neighborHeight = skirtFloor;
+                    if (TryGetVisibleTile(board, worldX + offset.x, worldZ + offset.y,
+                            out BoardGenerator.TileRecord neighbor))
+                        neighborHeight = neighbor.Height;
+                    if (tile.Height <= neighborHeight) continue;
+                    EmitWall(vertices, uvs, triangles, local.x, local.z, half,
+                        neighborHeight * heightStep, tile.Height * heightStep, offset.x, offset.y);
+                }
+            }
+        }
+
+        CommitMesh(root, vertices, uvs, triangles);
+    }
+
+    private static bool TryGetVisibleTile(BoardGenerator board, int worldX, int worldZ,
+        out BoardGenerator.TileRecord tile)
+    {
+        if (!board.TryPeekTile(worldX, worldZ, out tile) || !tile.Exists)
+            return false;
+        return board.TryGetCell(worldX, worldZ, out BoardCell cell) && cell != null &&
+               cell.gameObject.activeInHierarchy && cell.TerrainVisible;
+    }
+
+    private static void CommitMesh(Transform root, List<Vector3> vertices, List<Vector2> uvs, List<int> triangles)
+    {
         if (triangles.Count == 0) return;
 
         Mesh mesh = new Mesh { name = ChildName };

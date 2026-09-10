@@ -16,7 +16,7 @@ public static class TerrainPrefabSetup
     public const string SourceBlockPrefab = "Assets/Resources/Prefabs/Block.prefab";
     public const string BattleScenePath = "Assets/Scenes/S_Battle.unity";
 
-    private static readonly (string terrainId, string fileName)[] Entries =
+    public static readonly (string terrainId, string fileName)[] Entries =
     {
         (WorldTerrainCatalog.Grass, "Terrain_Grass.prefab"),
         (WorldTerrainCatalog.Stone, "Terrain_Stone.prefab"),
@@ -88,7 +88,7 @@ public static class TerrainPrefabSetup
         if (!File.Exists(BattleScenePath)) return;
 
         Scene scene = EditorSceneManager.OpenScene(BattleScenePath, OpenSceneMode.Single);
-        BoardGenerator[] boards = Object.FindObjectsByType<BoardGenerator>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        BoardGenerator[] boards = Object.FindObjectsByType<BoardGenerator>(FindObjectsInactive.Include);
         for (int i = 0; i < boards.Length; i++)
         {
             BoardGenerator board = boards[i];

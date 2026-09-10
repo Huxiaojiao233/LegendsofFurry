@@ -10,7 +10,8 @@ using UnityEngine;
 /// </summary>
 public static class WorldDecorationCatalog
 {
-    public const string PrefabRoot = "Assets/Packages/HS_LowPoly/ForestEssentials/Prefabs";
+    public const string PrefabRoot = "Assets/Resources/Decorations";
+    public const string ResourcesPrefabRoot = "Decorations";
     public const string DefaultId = "hs.tree.oak.01";
 
     public static readonly string[] CategoryOrder =
@@ -167,18 +168,38 @@ public static class WorldDecorationCatalog
     private static void LoadLibrary()
     {
         WorldDecorationLibrary library = Resources.Load<WorldDecorationLibrary>(WorldDecorationLibrary.ResourcePath);
-        if (library == null || library.entries == null) return;
-        for (int i = 0; i < library.entries.Count; i++)
+        if (library != null && library.entries != null)
         {
-            WorldDecorationLibraryEntry item = library.entries[i];
-            if (item == null || string.IsNullOrEmpty(item.id)) continue;
+            for (int i = 0; i < library.entries.Count; i++)
+            {
+                WorldDecorationLibraryEntry item = library.entries[i];
+                if (item == null || string.IsNullOrEmpty(item.id)) continue;
+                Add(new WorldDecorationEntry
+                {
+                    Id = item.id,
+                    Category = item.category ?? "",
+                    Label = string.IsNullOrEmpty(item.label) ? item.id : item.label,
+                    Glyph = string.IsNullOrEmpty(item.glyph) ? GlyphForCategory(item.category) : item.glyph,
+                    Prefab = item.prefab
+                });
+            }
+        }
+
+        // 正式运行时不依赖 Editor 的 AssetDatabase：直接把 Resources/Decorations
+        // 中实际打包的预制件纳入画笔目录。
+        GameObject[] prefabs = Resources.LoadAll<GameObject>(ResourcesPrefabRoot);
+        for (int i = 0; i < prefabs.Length; i++)
+        {
+            GameObject prefab = prefabs[i];
+            if (prefab == null) continue;
+            string id = IdFromPrefabName(prefab.name);
             Add(new WorldDecorationEntry
             {
-                Id = item.id,
-                Category = item.category ?? "",
-                Label = string.IsNullOrEmpty(item.label) ? item.id : item.label,
-                Glyph = string.IsNullOrEmpty(item.glyph) ? GlyphForCategory(item.category) : item.glyph,
-                Prefab = item.prefab
+                Id = id,
+                Category = "Decorations",
+                Label = prefab.name.Replace("P_HS_LP_", string.Empty).Replace('_', ' '),
+                Glyph = "饰",
+                Prefab = prefab
             });
         }
     }

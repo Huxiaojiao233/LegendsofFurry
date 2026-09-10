@@ -123,8 +123,15 @@ public class BoardCell : MonoBehaviour
         if (terrainRenderers == null) return;
         for (int i = 0; i < terrainRenderers.Length; i++)
         {
-            if (terrainRenderers[i] != null)
-                terrainRenderers[i].enabled = visible;
+            Renderer renderer = terrainRenderers[i];
+            if (renderer == null) continue;
+            if (TerrainBatchSource.IsInstancedRenderer(renderer))
+            {
+                renderer.enabled = false;
+                continue;
+            }
+
+            renderer.enabled = visible;
         }
     }
 

@@ -39,6 +39,9 @@ public static class WorldCatalog
         }
     }
 
+    public static IChunkProvider CreateProvider(WorldDefinition world) =>
+        WorldMapIO.CreateProvider(world);
+
     public static bool TryGet(string worldId, out WorldDefinition world)
     {
         EnsureLoaded();

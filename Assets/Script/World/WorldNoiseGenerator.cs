@@ -18,7 +18,7 @@ public static class WorldNoiseGenerator
         foreach (StageDefinition stage in world.Stages)
         {
             if (stage == null) continue;
-            FillStageTerrain(world, stage, tw, th, settings);
+            FillStageTerrain(stage, tw, th, settings, seamSample: false);
             stage.Decorations.Clear();
             stage.UnitPlacements.Clear();
             stage.RewardPoolId = string.Empty;
@@ -33,16 +33,135 @@ public static class WorldNoiseGenerator
         ChooseStartTile(world);
     }
 
-    private static void FillStageTerrain(WorldDefinition world, StageDefinition stage, int tw, int th,
+    /// <summary>按单个块坐标确定性生成。相邻块独立生成时，接缝高度与整图 SyncSeamHeights 一致。</summary>
+    public static StageDefinition GenerateChunk(WorldDefinition world, ChunkPosition position,
+        WorldNoiseSettings settings = null)
+    {
+        if (world == null) throw new System.ArgumentNullException(nameof(world));
+        settings ??= NoiseSettingsFromWorld(world);
+        if (string.Equals(world.GeneratorId, WorldIntegerHash.GeneratorId, System.StringComparison.Ordinal))
+            return GenerateHashChunk(world, position, settings);
+
+        return GeneratePerlinChunk(world, position, settings);
+    }
+
+    public static WorldNoiseSettings NoiseSettingsFromWorld(WorldDefinition world)
+    {
+        WorldNoiseSettings settings = new WorldNoiseSettings();
+        if (world != null) settings.Seed = world.Seed;
+        return settings;
+    }
+
+    private static StageDefinition GeneratePerlinChunk(WorldDefinition world, ChunkPosition position,
         WorldNoiseSettings settings)
+    {
+        int tw = Mathf.Max(1, world.TerrainWidth);
+        int th = Mathf.Max(1, world.TerrainHeight);
+        StageDefinition stage = CreateGeneratedStage(world, position);
+        FillStageTerrain(stage, tw, th, settings, seamSample: true);
+        AssignGeneratedRole(world, stage, settings);
+        PlaceDecorationsOnStage(stage, tw, th, settings);
+        PlaceEnemiesOnStage(stage, tw, th, settings);
+        if (IsStartChunk(world, position)) ChooseStartTile(world, stage);
+        return stage;
+    }
+
+    private static StageDefinition GenerateHashChunk(WorldDefinition world, ChunkPosition position,
+        WorldNoiseSettings settings)
+    {
+        int tw = Mathf.Max(1, world.TerrainWidth);
+        int th = Mathf.Max(1, world.TerrainHeight);
+        StageDefinition stage = CreateGeneratedStage(world, position);
+        stage.EnsureGrids(tw, th);
+        for (int y = 0; y < th; y++)
+        {
+            for (int x = 0; x < tw; x++)
+            {
+                SampleWorldTile(position.X, position.Y, x, y, tw, th, out int wx, out int wy);
+                int height = WorldIntegerHash.HeightAt(wx, wy, settings.Seed);
+                int moist = WorldIntegerHash.MoisturePermille(wx, wy, settings.Seed);
+                stage.SetHeight(x, y, tw, th, height);
+                stage.SetTerrain(x, y, tw, th, WorldIntegerHash.ChooseTerrain(height, moist));
+            }
+        }
+
+        AssignGeneratedRole(world, stage, settings);
+        PlaceDecorationsOnStage(stage, tw, th, settings);
+        PlaceEnemiesOnStage(stage, tw, th, settings);
+        if (IsStartChunk(world, position)) ChooseStartTile(world, stage);
+        return stage;
+    }
+
+    private static StageDefinition CreateGeneratedStage(WorldDefinition world, ChunkPosition position)
+    {
+        bool start = IsStartChunk(world, position);
+        StageDefinition stage = new StageDefinition
+        {
+            StageId = start && ContentId.IsValid(world.StartStageId)
+                ? world.StartStageId
+                : WorldStageIds.FromChunk(position),
+            DisplayName = start ? "营地" : $"区域 {position.X},{position.Y}",
+            StageType = start ? ContentStageTypeKeys.Start : ContentStageTypeKeys.Battle,
+            GridX = position.X,
+            GridY = position.Y,
+            Enabled = true
+        };
+        return stage;
+    }
+
+    private static bool IsStartChunk(WorldDefinition world, ChunkPosition position) =>
+        position.X == world.StartChunkX && position.Y == world.StartChunkY;
+
+    /// <summary>
+    /// 与整图 SyncSeamHeights 对齐：南边覆盖西边。独立生成相邻块时共享边高度相同。
+    /// </summary>
+    public static void SampleWorldTile(int gridX, int gridY, int localX, int localY, int tw, int th,
+        out int worldX, out int worldY)
+    {
+        // 与整图 SyncSeamHeights 一致：先东西后南北，西南角取南邻北缘（该格本身已按西邻东缘对齐）。
+        if (localY == 0 && localX == 0)
+        {
+            worldX = gridX * tw - 1;
+            worldY = gridY * th - 1;
+            return;
+        }
+
+        if (localY == 0)
+        {
+            worldX = gridX * tw + localX;
+            worldY = gridY * th - 1;
+            return;
+        }
+
+        if (localX == 0)
+        {
+            worldX = gridX * tw - 1;
+            worldY = gridY * th + localY;
+            return;
+        }
+
+        worldX = gridX * tw + localX;
+        worldY = gridY * th + localY;
+    }
+
+    private static void FillStageTerrain(StageDefinition stage, int tw, int th,
+        WorldNoiseSettings settings, bool seamSample)
     {
         stage.EnsureGrids(tw, th);
         for (int y = 0; y < th; y++)
         {
             for (int x = 0; x < tw; x++)
             {
-                int wx = stage.GridX * tw + x;
-                int wy = stage.GridY * th + y;
+                int wx;
+                int wy;
+                if (seamSample)
+                    SampleWorldTile(stage.GridX, stage.GridY, x, y, tw, th, out wx, out wy);
+                else
+                {
+                    wx = stage.GridX * tw + x;
+                    wy = stage.GridY * th + y;
+                }
+
                 float heightNoise = Fractal(wx, wy, settings.HeightFrequency, settings.Seed, 4);
                 float moist = Fractal(wx, wy, settings.MoistureFrequency, settings.Seed + 91, 3);
                 int height = Mathf.RoundToInt(Mathf.Lerp(WorldTerrain.MinHeight, WorldTerrain.MaxHeight, heightNoise));
@@ -194,35 +313,75 @@ public static class WorldNoiseGenerator
         drop.DisplayName = "钥匙遭遇";
     }
 
+    private static void AssignGeneratedRole(WorldDefinition world, StageDefinition stage,
+        WorldNoiseSettings settings)
+    {
+        if (IsStartChunk(world, new ChunkPosition(stage.GridX, stage.GridY)))
+        {
+            stage.StageId = ContentId.IsValid(world.StartStageId) ? world.StartStageId : WorldStageIds.FromChunk(
+                new ChunkPosition(stage.GridX, stage.GridY));
+            stage.DisplayName = "营地";
+            stage.StageType = ContentStageTypeKeys.Start;
+            return;
+        }
+
+        float roll = Hash01(stage.GridX, stage.GridY, settings.Seed + 3);
+        stage.StageId = WorldStageIds.FromChunk(new ChunkPosition(stage.GridX, stage.GridY));
+        if (roll < 0.08f)
+        {
+            stage.DisplayName = "商队营地";
+            stage.StageType = ContentStageTypeKeys.Shop;
+        }
+        else if (roll < 0.16f)
+        {
+            stage.DisplayName = "藏宝处";
+            stage.StageType = ContentStageTypeKeys.Reward;
+        }
+        else if (roll < 0.3f)
+        {
+            stage.DisplayName = "歇脚处";
+            stage.StageType = ContentStageTypeKeys.Rest;
+        }
+        else
+        {
+            stage.DisplayName = "遭遇地";
+            stage.StageType = ContentStageTypeKeys.Battle;
+        }
+    }
+
     private static void PlaceDecorations(WorldDefinition world, WorldNoiseSettings settings)
     {
         int tw = Mathf.Max(1, world.TerrainWidth);
         int th = Mathf.Max(1, world.TerrainHeight);
         foreach (StageDefinition stage in EnabledStages(world))
-        {
-            for (int y = 0; y < th; y++)
-            {
-                for (int x = 0; x < tw; x++)
-                {
-                    int wx = stage.GridX * tw + x;
-                    int wy = stage.GridY * th + y;
-                    string terrain = stage.TerrainAt(x, y, tw, th);
-                    if (terrain == WorldTerrainCatalog.Void || terrain == WorldTerrainCatalog.Water) continue;
-                    float chance = Hash01(wx, wy, settings.Seed + 21);
-                    float field = Fractal(wx, wy, settings.DecorFrequency, settings.Seed + 27, 2);
-                    if (stage.StageType == ContentStageTypeKeys.Start && x == tw / 2 && y == th / 2)
-                    {
-                        stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Camp));
-                        continue;
-                    }
+            PlaceDecorationsOnStage(stage, tw, th, settings);
+    }
 
-                    if (terrain == WorldTerrainCatalog.Forest && chance < settings.DecorDensity + field * 0.12f)
-                        stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Tree));
-                    else if (terrain == WorldTerrainCatalog.Stone && chance < settings.DecorDensity * 0.55f)
-                        stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Rock));
-                    else if (terrain == WorldTerrainCatalog.Grass && chance < settings.DecorDensity * 0.25f)
-                        stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Tree));
+    private static void PlaceDecorationsOnStage(StageDefinition stage, int tw, int th,
+        WorldNoiseSettings settings)
+    {
+        for (int y = 0; y < th; y++)
+        {
+            for (int x = 0; x < tw; x++)
+            {
+                int wx = stage.GridX * tw + x;
+                int wy = stage.GridY * th + y;
+                string terrain = stage.TerrainAt(x, y, tw, th);
+                if (terrain == WorldTerrainCatalog.Void || terrain == WorldTerrainCatalog.Water) continue;
+                float chance = Hash01(wx, wy, settings.Seed + 21);
+                float field = Fractal(wx, wy, settings.DecorFrequency, settings.Seed + 27, 2);
+                if (stage.StageType == ContentStageTypeKeys.Start && x == tw / 2 && y == th / 2)
+                {
+                    stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Camp));
+                    continue;
                 }
+
+                if (terrain == WorldTerrainCatalog.Forest && chance < settings.DecorDensity + field * 0.12f)
+                    stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Tree));
+                else if (terrain == WorldTerrainCatalog.Stone && chance < settings.DecorDensity * 0.55f)
+                    stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Rock));
+                else if (terrain == WorldTerrainCatalog.Grass && chance < settings.DecorDensity * 0.25f)
+                    stage.Decorations.Add(MakeDecor(stage, x, y, WorldTerrainCatalog.Tree));
             }
         }
     }
@@ -232,29 +391,36 @@ public static class WorldNoiseGenerator
         int tw = Mathf.Max(1, world.TerrainWidth);
         int th = Mathf.Max(1, world.TerrainHeight);
         foreach (StageDefinition stage in EnabledStages(world))
+            PlaceEnemiesOnStage(stage, tw, th, settings);
+    }
+
+    private static void PlaceEnemiesOnStage(StageDefinition stage, int tw, int th, WorldNoiseSettings settings)
+    {
+        bool boss = stage.StageType == ContentStageTypeKeys.Boss;
+        bool battle = stage.StageType == ContentStageTypeKeys.Battle;
+        if (!boss && !battle) return;
+        if (!TryFindOpenCell(stage, tw, th, settings, out int x, out int y)) return;
+        string unitId = boss ? settings.BossUnitId : settings.EnemyUnitId;
+        stage.UnitPlacements.Add(new WorldUnitPlacementDefinition
         {
-            bool boss = stage.StageType == ContentStageTypeKeys.Boss;
-            bool battle = stage.StageType == ContentStageTypeKeys.Battle;
-            if (!boss && !battle) continue;
-            // 每个战斗/Boss 关卡固定部署一只敌人；密度只影响后续扩展，不跳过整关。
-            if (!TryFindOpenCell(stage, tw, th, settings, out int x, out int y)) continue;
-            string unitId = boss ? settings.BossUnitId : settings.EnemyUnitId;
-            stage.UnitPlacements.Add(new WorldUnitPlacementDefinition
-            {
-                InstanceId = $"{stage.StageId}-{unitId}-1",
-                UnitId = unitId,
-                LocalX = x,
-                LocalY = y,
-                FactionOverride = "enemy",
-                ControllerOverride = "ai",
-                Enabled = true
-            });
-        }
+            InstanceId = $"{stage.StageId}-{unitId}-1",
+            UnitId = unitId,
+            LocalX = x,
+            LocalY = y,
+            FactionOverride = "enemy",
+            ControllerOverride = "ai",
+            Enabled = true
+        });
     }
 
     private static void ChooseStartTile(WorldDefinition world)
     {
         if (!TryGetStart(world, out StageDefinition start)) return;
+        ChooseStartTile(world, start);
+    }
+
+    private static void ChooseStartTile(WorldDefinition world, StageDefinition start)
+    {
         int tw = Mathf.Max(1, world.TerrainWidth);
         int th = Mathf.Max(1, world.TerrainHeight);
         int cx = tw / 2;
@@ -378,14 +544,5 @@ public static class WorldNoiseGenerator
         return norm <= 0f ? 0f : Mathf.Clamp01(sum / norm);
     }
 
-    private static float Hash01(int x, int y, int seed)
-    {
-        unchecked
-        {
-            int hash = x * 374761393 + y * 668265263 + seed * 1274126177;
-            hash = (hash ^ (hash >> 13)) * 1274126177;
-            hash ^= hash >> 16;
-            return (hash & 0x7fffffff) / (float)int.MaxValue;
-        }
-    }
+    private static float Hash01(int x, int y, int seed) => WorldIntegerHash.UnitFloat(x, y, seed);
 }
