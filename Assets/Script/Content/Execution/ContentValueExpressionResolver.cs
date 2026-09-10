@@ -1,8 +1,7 @@
 using System;
 using System.Linq;
-using UnityEngine;
 
-#pragma warning disable 0649 // Unity JsonUtility 会通过反射填充表达式 DTO 字段。
+#pragma warning disable 0649 // 表达式字段由安全 JSON 映射填充。
 
 namespace LegendsOfFurry.Content.Runtime
 {
@@ -29,7 +28,6 @@ public interface IContentRandomSource
 /// <summary>
 /// 描述一个受控整数表达式树；只允许注册表中的 kind，不接受任意代码或公式字符串。
 /// </summary>
-[Serializable]
 public sealed class ContentValueExpression
 {
     public string kind;
@@ -87,6 +85,7 @@ public sealed class ContentValueExpressionResolver
         Register("source_armor", ResolveSourceArmor);
         Register("target_armor", ResolveTargetArmor);
         Register("status_stacks", ResolveStatusStacks);
+        Register("owner_status_stacks", ResolveOwnerStatusStacks);
         Register("card_runtime_value", ResolveCardRuntimeValue);
         Register("spent_action_points", ResolveSpentActionPoints);
         Register("spent_mana", ResolveSpentMana);
@@ -125,6 +124,14 @@ public sealed class ContentValueExpressionResolver
         value = 0;
         return TryMapExpression(parsed, 0, out ContentValueExpression expression) &&
                TryResolve(expression, context, target, out value);
+    }
+
+    /// <summary>
+    /// 把安全 JSON 解析器已经生成的对象映射为表达式树，供条件参数读取嵌套 left/right/value。
+    /// </summary>
+    internal static bool TryMapFromParsed(object parsed, out ContentValueExpression expression)
+    {
+        return TryMapExpression(parsed, 0, out expression);
     }
 
     /// <summary>
@@ -361,6 +368,13 @@ public sealed class ContentValueExpressionResolver
         value = 0;
         return owner != null && !string.IsNullOrWhiteSpace(expression.statusId) &&
                AssignValue(owner.State.Get(expression.statusId), out value);
+    }
+
+    /// <summary>读取当前正在执行修正图的状态实例层数。</summary>
+    private bool ResolveOwnerStatusStacks(ContentValueExpression expression, ContentCardExecutionContext context, Unit target, int depth, out int value)
+    {
+        value = context.Owner?.RuntimeInstance is RuntimeStatusInstance instance ? instance.Stacks : 0;
+        return context.Owner?.RuntimeInstance is RuntimeStatusInstance;
     }
 
     /// <summary>读取当前卡牌实例的持久运行时整数，供蓄力类卡跨次打出累积数值。</summary>

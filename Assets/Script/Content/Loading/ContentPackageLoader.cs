@@ -12,7 +12,7 @@ namespace LegendsOfFurry.Content.Runtime
 /// </summary>
 public static class ContentPackageLoader
 {
-    public const int SupportedSchemaVersion = 1;
+    public const int SupportedSchemaVersion = 3;
 
     /// <summary>
     /// 从当前 Unity 应用的 StreamingAssets/Content 目录加载已发布内容包。
@@ -52,24 +52,69 @@ public static class ContentPackageLoader
             throw new InvalidDataException("current.json 与 manifest.json 的内容版本不一致。");
         }
 
-        string manifestDirectory = Path.GetDirectoryName(manifestPath);
-        string catalogPath = ResolveContainedPath(manifestDirectory, manifest.catalogFile, "catalog");
+        return LoadCatalog(Path.GetDirectoryName(manifestPath), manifest.catalogFile,
+            manifest.catalogSha256, manifest.schemaVersion, manifest.contentVersion);
+    }
+
+    /// <summary>相对所属清单目录加载一份带哈希保护的 catalog。</summary>
+    internal static ContentPackage LoadCatalog(
+        string ownerDirectory,
+        string catalogFile,
+        string expectedSha256,
+        int schemaVersion,
+        string contentVersion)
+    {
+        if (schemaVersion != SupportedSchemaVersion)
+            throw new InvalidDataException($"内容 schema {schemaVersion} 与运行时支持版本 {SupportedSchemaVersion} 不一致。");
+        string catalogPath = ResolveContainedPath(ownerDirectory, catalogFile, "catalog");
         string catalogJson = ReadRequiredText(catalogPath);
         string actualSha256 = ComputeSha256(catalogJson);
-        if (!string.Equals(actualSha256, manifest.catalogSha256, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException($"内容目录校验失败：期望 {manifest.catalogSha256}，实际 {actualSha256}。");
-        }
-
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"内容目录校验失败：期望 {expectedSha256}，实际 {actualSha256}。");
         ContentPackageDto dto = ParseJson<ContentPackageDto>(catalogJson, catalogPath);
+        if (dto.parts != null && dto.parts.Length > 0)
+            dto = MergeSplitCatalog(ownerDirectory, dto);
         ContentPackage package = dto.ToContract();
-        if (package.SchemaVersion != manifest.schemaVersion ||
-            !string.Equals(package.ContentVersion, manifest.contentVersion, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("catalog.json 的 schema 或内容版本与 manifest 不一致。");
-        }
-
+        if (package.SchemaVersion != schemaVersion ||
+            !string.Equals(package.ContentVersion, contentVersion, StringComparison.Ordinal))
+            throw new InvalidDataException("内容目录的 schema 或内容版本与 manifest 不一致。");
         return package;
+    }
+
+    /// <summary>按索引加载分文件切片并合并为完整 DTO；切片哈希必须与索引声明一致。</summary>
+    private static ContentPackageDto MergeSplitCatalog(string ownerDirectory, ContentPackageDto index)
+    {
+        ContentPackageDto merged = new ContentPackageDto
+        {
+            schemaVersion = index.schemaVersion,
+            contentVersion = index.contentVersion
+        };
+        foreach (ContentCatalogPartRefDto part in index.parts)
+        {
+            if (part == null || string.IsNullOrWhiteSpace(part.file)) continue;
+            string partPath = ResolveContainedPath(ownerDirectory, part.file, part.kind ?? "part");
+            string partJson = ReadRequiredText(partPath);
+            if (!string.IsNullOrWhiteSpace(part.sha256))
+            {
+                string actual = ComputeSha256(partJson);
+                if (!string.Equals(actual, part.sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"内容切片校验失败：{part.file} 期望 {part.sha256}，实际 {actual}。");
+            }
+            ContentPackageDto slice = ParseJson<ContentPackageDto>(partJson, partPath);
+            if (slice.cards != null) merged.cards = slice.cards;
+            if (slice.cardPools != null) merged.cardPools = slice.cardPools;
+            if (slice.statuses != null) merged.statuses = slice.statuses;
+            if (slice.decks != null) merged.decks = slice.decks;
+            if (slice.rarities != null) merged.rarities = slice.rarities;
+            if (slice.assets != null) merged.assets = slice.assets;
+            if (slice.classProfiles != null) merged.classProfiles = slice.classProfiles;
+            if (slice.units != null) merged.units = slice.units;
+            if (slice.aiProfiles != null) merged.aiProfiles = slice.aiProfiles;
+            if (slice.equipment != null) merged.equipment = slice.equipment;
+            if (slice.worlds != null) merged.worlds = slice.worlds;
+            if (slice.gameSettings != null) merged.gameSettings = slice.gameSettings;
+        }
+        return merged;
     }
 
     /// <summary>
@@ -77,7 +122,7 @@ public static class ContentPackageLoader
     /// </summary>
     /// <param name="path">需要读取的文件绝对路径。</param>
     /// <returns>文件完整文本。</returns>
-    private static string ReadRequiredText(string path)
+    internal static string ReadRequiredText(string path)
     {
         if (!File.Exists(path))
         {
@@ -94,7 +139,7 @@ public static class ContentPackageLoader
     /// <param name="json">需要解析的 JSON 文本。</param>
     /// <param name="sourcePath">用于错误信息的来源文件路径。</param>
     /// <returns>解析后的 DTO。</returns>
-    private static T ParseJson<T>(string json, string sourcePath) where T : class
+    internal static T ParseJson<T>(string json, string sourcePath) where T : class
     {
         try
         {
@@ -118,7 +163,7 @@ public static class ContentPackageLoader
     /// <param name="relativePath">内容文件提供的相对路径。</param>
     /// <param name="label">用于错误消息的文件类别。</param>
     /// <returns>确认位于根目录内的绝对文件路径。</returns>
-    private static string ResolveContainedPath(string root, string relativePath, string label)
+    internal static string ResolveContainedPath(string root, string relativePath, string label)
     {
         if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
         {
@@ -140,7 +185,7 @@ public static class ContentPackageLoader
     /// </summary>
     /// <param name="text">需要计算摘要的目录 JSON。</param>
     /// <returns>64 位小写十六进制摘要。</returns>
-    private static string ComputeSha256(string text)
+    internal static string ComputeSha256(string text)
     {
         using (SHA256 algorithm = SHA256.Create())
         {

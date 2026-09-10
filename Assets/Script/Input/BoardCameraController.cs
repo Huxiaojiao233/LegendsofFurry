@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -24,8 +25,10 @@ public sealed class BoardCameraController : MonoBehaviour
     [SerializeField, Range(10f, 89f)] private float maximumPitch = 80f;
     [SerializeField, Min(0.001f)] private float zoomSensitivity = 0.012f;
     [SerializeField, Min(0.1f)] private float minimumDistance = 5f;
-    [SerializeField, Min(0.1f)] private float maximumDistance = 18f;
+    [SerializeField, Min(0.1f)] private float maximumDistance = 8f;
+    [SerializeField, Min(1f)] private float orthographicRigDistance = 36f;
     [SerializeField, Min(0f)] private float movementDamping = 14f;
+    [SerializeField] private float yawStep = 90f;
 
     private Vector3 initialFocus;
     private float initialDistance;
@@ -43,6 +46,14 @@ public sealed class BoardCameraController : MonoBehaviour
     private Vector2 focusZLimits;
     private bool rightMousePanning;
     private bool middleMousePitching;
+    private bool inputRecoveryPending = true;
+
+#if UNITY_EDITOR
+    private InputSettings.EditorInputBehaviorInPlayMode previousEditorInputBehavior;
+    private bool editorInputBehaviorOverridden;
+#endif
+
+    private bool IsOrthographic => targetCamera != null && targetCamera.orthographic;
 
     /// <summary>解析摄像机和棋盘引用，记录场景设计视角并计算允许移动的棋盘边界。</summary>
     private void Awake()
@@ -53,10 +64,34 @@ public sealed class BoardCameraController : MonoBehaviour
         CalculateFocusLimits();
     }
 
+    /// <summary>
+    /// 编辑器切换场景时 Game View 偶尔会短暂失去焦点。S_Battle 运行期间把输入持续路由给 Game View，
+    /// 并监听设备重新连接；退出场景后恢复用户原有的编辑器输入设置。
+    /// </summary>
+    private void OnEnable()
+    {
+        inputRecoveryPending = true;
+        InputSystem.onDeviceChange += HandleInputDeviceChange;
+#if UNITY_EDITOR
+        ApplyEditorInputRoutingOverride();
+#endif
+    }
+
+    private void OnDisable()
+    {
+        InputSystem.onDeviceChange -= HandleInputDeviceChange;
+        CancelMouseGestures();
+#if UNITY_EDITOR
+        RestoreEditorInputRoutingOverride();
+#endif
+    }
+
     /// <summary>读取键盘、鼠标拖拽、滚轮和回正按键，并更新受限制的目标视角。</summary>
     private void Update()
     {
+        RecoverInputDevicesIfNeeded();
         HandleResetInput();
+        HandleYawSnap();
         HandleKeyboardPan();
         HandleMouseGestures();
         HandleZoom();
@@ -74,6 +109,70 @@ public sealed class BoardCameraController : MonoBehaviour
         ApplyCameraTransform();
     }
 
+    /// <summary>Q / E 按 90° 转动等距视角，换到另一组斜向邻关。</summary>
+    private void HandleYawSnap()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null) return;
+        if (keyboard.qKey.wasPressedThisFrame) targetYaw -= yawStep;
+        if (keyboard.eKey.wasPressedThisFrame) targetYaw += yawStep;
+    }
+
+    /// <summary>冒险大地图需要更远的镜头，战斗时再收近。</summary>
+    public void ConfigureDistanceRange(float minimum, float maximum)
+    {
+        minimumDistance = Mathf.Max(0.1f, minimum);
+        // maximumDistance = Mathf.Max(minimumDistance, maximum);
+    }
+
+    /// <summary>把焦点和缩放拉过去；instant 时当帧到位，避免走路时镜头乱跳。</summary>
+    public void FocusOn(Vector3 focus, float distance, float? pitch = null, float? yaw = null, bool instant = false)
+    {
+        targetFocus = focus;
+        targetDistance = distance;
+        if (pitch.HasValue) targetPitch = pitch.Value;
+        if (yaw.HasValue) targetYaw = yaw.Value;
+        ClampTargetView();
+        if (!instant) return;
+        currentFocus = targetFocus;
+        currentDistance = targetDistance;
+        currentPitch = targetPitch;
+        currentYaw = targetYaw;
+        ApplyCameraTransform();
+    }
+
+    /// <summary>只根据给定格子计算平移范围，战斗时收成当前 10x10。</summary>
+    public void FitFocusLimits(IList<BoardCell> cells, float margin)
+    {
+        if (cells == null || cells.Count == 0)
+        {
+            CalculateFocusLimits();
+            return;
+        }
+
+        float minimumX = cells[0].transform.position.x;
+        float maximumX = minimumX;
+        float minimumZ = cells[0].transform.position.z;
+        float maximumZ = minimumZ;
+        for (int i = 1; i < cells.Count; i++)
+        {
+            if (cells[i] == null) continue;
+            Vector3 position = cells[i].transform.position;
+            minimumX = Mathf.Min(minimumX, position.x);
+            maximumX = Mathf.Max(maximumX, position.x);
+            minimumZ = Mathf.Min(minimumZ, position.z);
+            maximumZ = Mathf.Max(maximumZ, position.z);
+        }
+
+        focusXLimits = new Vector2(minimumX - margin, maximumX + margin);
+        focusZLimits = new Vector2(minimumZ - margin, maximumZ + margin);
+    }
+
+    public void RecalculateFocusLimits()
+    {
+        CalculateFocusLimits();
+    }
+
     /// <summary>把视角平滑恢复到 S_Battle 中保存的初始位置、俯仰、方向和缩放。</summary>
     public void ResetView()
     {
@@ -81,9 +180,108 @@ public sealed class BoardCameraController : MonoBehaviour
         targetDistance = initialDistance;
         targetPitch = initialPitch;
         targetYaw = initialYaw;
+        CancelMouseGestures();
+    }
+
+    /// <summary>失焦时终止拖拽，重新获得焦点后检查被 Input System 临时禁用的设备。</summary>
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        CancelMouseGestures();
+        if (hasFocus) inputRecoveryPending = true;
+    }
+
+    /// <summary>移动端从系统暂停恢复时执行与重新获得焦点相同的输入恢复。</summary>
+    private void OnApplicationPause(bool paused)
+    {
+        CancelMouseGestures();
+        if (!paused) inputRecoveryPending = true;
+    }
+
+    private void HandleInputDeviceChange(InputDevice device, InputDeviceChange change)
+    {
+        if (device is not Keyboard && device is not Mouse) return;
+        if (change == InputDeviceChange.Added ||
+            change == InputDeviceChange.Reconnected ||
+            change == InputDeviceChange.Enabled)
+            inputRecoveryPending = true;
+    }
+
+    /// <summary>
+    /// Input System 正常情况下会在重新获得焦点时自行启用设备；这里补上自愈，处理设备仍停留在
+    /// disabled 状态或 current 引用尚未恢复的边界情况。没有键鼠的移动设备会直接跳过。
+    /// </summary>
+    private void RecoverInputDevicesIfNeeded()
+    {
+        if (!inputRecoveryPending || !Application.isFocused) return;
+        inputRecoveryPending = false;
+        RecoverKeyboard();
+        RecoverMouse();
+    }
+
+    private static void RecoverKeyboard()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+        {
+            foreach (InputDevice device in InputSystem.devices)
+            {
+                if (device is not Keyboard candidate) continue;
+                keyboard = candidate;
+                break;
+            }
+        }
+
+        if (keyboard == null) return;
+        if (!keyboard.enabled) InputSystem.EnableDevice(keyboard);
+        if (Keyboard.current == null) keyboard.MakeCurrent();
+    }
+
+    private static void RecoverMouse()
+    {
+        Mouse mouse = Mouse.current;
+        if (mouse == null)
+        {
+            foreach (InputDevice device in InputSystem.devices)
+            {
+                if (device is not Mouse candidate) continue;
+                mouse = candidate;
+                break;
+            }
+        }
+
+        if (mouse == null) return;
+        if (!mouse.enabled) InputSystem.EnableDevice(mouse);
+        if (Mouse.current == null) mouse.MakeCurrent();
+    }
+
+    private void CancelMouseGestures()
+    {
         rightMousePanning = false;
         middleMousePitching = false;
     }
+
+#if UNITY_EDITOR
+    private void ApplyEditorInputRoutingOverride()
+    {
+        if (!Application.isPlaying || InputSystem.settings == null) return;
+        previousEditorInputBehavior = InputSystem.settings.editorInputBehaviorInPlayMode;
+        if (previousEditorInputBehavior ==
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
+            return;
+        InputSystem.settings.editorInputBehaviorInPlayMode =
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+        editorInputBehaviorOverridden = true;
+    }
+
+    private void RestoreEditorInputRoutingOverride()
+    {
+        if (!editorInputBehaviorOverridden || InputSystem.settings == null) return;
+        if (InputSystem.settings.editorInputBehaviorInPlayMode ==
+            InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
+            InputSystem.settings.editorInputBehaviorInPlayMode = previousEditorInputBehavior;
+        editorInputBehaviorOverridden = false;
+    }
+#endif
 
     /// <summary>从场景摄像机朝向与棋盘平面交点推导焦点，保证回正精确还原设计视角。</summary>
     private void CaptureInitialView()
@@ -94,7 +292,9 @@ public sealed class BoardCameraController : MonoBehaviour
         initialFocus = plane.Raycast(viewRay, out float enter)
             ? viewRay.GetPoint(enter)
             : (board != null ? board.transform.position : transform.position + transform.forward * 10f);
-        initialDistance = Vector3.Distance(transform.position, initialFocus);
+        initialDistance = IsOrthographic
+            ? Mathf.Max(0.1f, targetCamera.orthographicSize)
+            : Vector3.Distance(transform.position, initialFocus);
         initialPitch = NormalizeAngle(transform.eulerAngles.x);
         initialYaw = NormalizeAngle(transform.eulerAngles.y);
         targetFocus = currentFocus = initialFocus;
@@ -142,7 +342,7 @@ public sealed class BoardCameraController : MonoBehaviour
         GetPlanarDirections(out Vector3 right, out Vector3 forward);
         Vector3 movement = right * horizontal + forward * vertical;
         if (movement.sqrMagnitude > 1f) movement.Normalize();
-        targetFocus += movement * (keyboardPanSpeed * Time.unscaledDeltaTime);
+        targetFocus += movement * (keyboardPanSpeed * ZoomPanScale * Time.unscaledDeltaTime);
     }
 
     /// <summary>读取右键拖拽平移和中键上下拖拽俯仰；从 UI 上按下时不启动视角操作。</summary>
@@ -160,21 +360,24 @@ public sealed class BoardCameraController : MonoBehaviour
         if (rightMousePanning && mouse.rightButton.isPressed)
         {
             GetPlanarDirections(out Vector3 right, out Vector3 forward);
-            float distanceScale = Mathf.Max(0.5f, targetDistance / Mathf.Max(0.1f, initialDistance));
-            targetFocus += (-right * delta.x - forward * delta.y) * (mousePanSensitivity * distanceScale);
+            targetFocus += (-right * delta.x - forward * delta.y) * (mousePanSensitivity * ZoomPanScale);
         }
         if (middleMousePitching && mouse.middleButton.isPressed)
             targetPitch -= delta.y * pitchSensitivity;
     }
 
-    /// <summary>读取鼠标滚轮并改变摄像机到棋盘焦点的距离；指针位于 UI 上时忽略滚轮。</summary>
+    /// <summary>读取鼠标滚轮。透视改机位距离，正交改 orthographicSize。</summary>
     private void HandleZoom()
     {
         Mouse mouse = Mouse.current;
         if (mouse == null || EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
         float scroll = mouse.scroll.ReadValue().y;
-        if (!Mathf.Approximately(scroll, 0f)) targetDistance -= scroll * zoomSensitivity;
+        if (Mathf.Approximately(scroll, 0f)) return;
+        targetDistance -= scroll * zoomSensitivity;
     }
+
+    private float ZoomPanScale =>
+        Mathf.Max(0.5f, targetDistance / Mathf.Max(0.1f, initialDistance));
 
     /// <summary>按 R 或 Home 时触发一键回正。</summary>
     private void HandleResetInput()
@@ -193,11 +396,18 @@ public sealed class BoardCameraController : MonoBehaviour
         targetDistance = Mathf.Clamp(targetDistance, minimumDistance, maximumDistance);
     }
 
-    /// <summary>根据当前焦点、俯仰、方向与距离计算透视摄像机最终变换。</summary>
+    /// <summary>透视按距离摆机位；正交机位距离固定，用 size 缩放画面。</summary>
     private void ApplyCameraTransform()
     {
         Quaternion rotation = Quaternion.Euler(currentPitch, currentYaw, 0f);
-        transform.SetPositionAndRotation(currentFocus - rotation * Vector3.forward * currentDistance, rotation);
+        float placement = currentDistance;
+        if (IsOrthographic)
+        {
+            targetCamera.orthographicSize = currentDistance;
+            placement = orthographicRigDistance;
+        }
+
+        transform.SetPositionAndRotation(currentFocus - rotation * Vector3.forward * placement, rotation);
     }
 
     /// <summary>返回摄像机在棋盘平面上的右向与前向单位向量。</summary>
@@ -228,6 +438,7 @@ public sealed class BoardCameraController : MonoBehaviour
         maximumPitch = Mathf.Clamp(maximumPitch, minimumPitch, 89f);
         minimumDistance = Mathf.Max(0.1f, minimumDistance);
         maximumDistance = Mathf.Max(minimumDistance, maximumDistance);
+        orthographicRigDistance = Mathf.Max(1f, orthographicRigDistance);
         boardBoundaryMargin = Mathf.Max(0f, boardBoundaryMargin);
     }
 }

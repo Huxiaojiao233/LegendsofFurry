@@ -1,12 +1,11 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
 
-public enum CardRarity { Gray, Blue, Purple, Gold, Red }
 public enum CardTargetMode { Self, Unit, Direction, AreaCell }
-public enum CardFamily { None, Sword, Shield, Bow, Staff, Scepter, Dagger, Equipment }
-public enum DamageType { Normal, Fire, Ice, Grass, Lightning, Rock, Wind, Water, Light, Dark, Poison, True }
+public enum DamageType { Normal, Fire, Ice, Grass, Lightning, Rock, Wind, Water, Light, Dark, Poison, Direct }
 
 /// <summary>
 /// 供 Unity 卡面与输入系统读取的纯运行时投影；权威内容始终来自数据库 CardDefinition。
@@ -18,9 +17,9 @@ public sealed class CardData
     public string cardName;
     [TextArea(2, 6)] public string description;
     public Sprite artwork;
-    public CardRarity rarity;
+    public string rarityId;
     public string sourcePool;
-    public CardFamily family;
+    public string familyId;
 
     [Header("费用与类型")]
     public string costText = "1";
@@ -59,8 +58,8 @@ public sealed class CardData
     /// <param name="cannotPlay">是否禁止主动打出。</param>
     /// <returns>不参与 Unity 资产序列化的卡面数据。</returns>
     public static CardData Runtime(
-        string id, string displayName, string pool, CardFamily cardFamily,
-        CardRarity cardRarity, string cost, int cardRange, CardTargetMode mode,
+        string id, string displayName, string pool, string cardFamilyId,
+        string cardRarityId, string cost, int cardRange, CardTargetMode mode,
         bool attack, string rulesText, bool isExhaust = false,
         bool isTemporary = false, bool isCurse = false, bool cannotPlay = false)
     {
@@ -68,8 +67,8 @@ public sealed class CardData
         card.cardId = id;
         card.cardName = displayName;
         card.sourcePool = pool;
-        card.family = cardFamily;
-        card.rarity = cardRarity;
+        card.familyId = cardFamilyId ?? string.Empty;
+        card.rarityId = cardRarityId ?? string.Empty;
         card.costText = string.IsNullOrWhiteSpace(cost) ? "/" : cost;
         card.range = Mathf.Max(0, cardRange);
         card.targetMode = mode;
@@ -112,10 +111,11 @@ public sealed class CardData
     }
 }
 
-public sealed class CardInstance
+public sealed class CardInstance : IContentInstance<CardDefinition>
 {
     private readonly Dictionary<string, int> runtimeValues = new Dictionary<string, int>();
 
+    public string InstanceId { get; }
     public CardData Data { get; }
     public CardDefinition Definition { get; }
     public bool FreePlay { get; set; }
@@ -127,8 +127,22 @@ public sealed class CardInstance
     /// <param name="definition">运行时加载的共享卡牌定义。</param>
     public CardInstance(CardDefinition definition)
     {
+        if (definition == null)
+        {
+            throw new ArgumentNullException(nameof(definition));
+        }
+
+        ContentId.Require(definition.CardId, nameof(definition));
+        InstanceId = Guid.NewGuid().ToString("N");
         Definition = definition;
         Data = RuntimeCardAdapter.CreateView(definition);
+    }
+
+    /// <summary>鉴定抽出的装备牌：打出后消耗，未打出则进弃牌堆并随弃牌回流。</summary>
+    public void ApplyAppraisalRewardFlags()
+    {
+        Data.temporary = true;
+        Data.exhaust = true;
     }
 
     /// <summary>

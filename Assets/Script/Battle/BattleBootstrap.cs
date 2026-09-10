@@ -14,65 +14,134 @@ public static class RuntimeSceneBootstrap
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
-    /// <summary>每次场景加载完成后补齐该场景需要的运行时入口组件。</summary>
-    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-    {
-        EnsureScene(scene.name);
-    }
-
     /// <summary>兼容直接从当前场景进入播放时的首次初始化。</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureInitialScene()
     {
+        EnsureBootLoader();
         EnsureScene(SceneManager.GetActiveScene().name);
+    }
+
+    /// <summary>S_Loading 场景里若没有 BootLoader，运行时补一个。</summary>
+    private static void EnsureBootLoader()
+    {
+        if (SceneManager.GetActiveScene().name != ContentBootLoader.LoadingSceneName) return;
+        if (Object.FindAnyObjectByType<ContentBootLoader>() != null) return;
+        new GameObject("ContentBootLoader").AddComponent<ContentBootLoader>();
+    }
+
+    /// <summary>每次场景加载完成后补齐该场景需要的运行时入口组件。</summary>
+    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name == ContentBootLoader.LoadingSceneName)
+        {
+            EnsureBootLoader();
+            return;
+        }
+
+        EnsureScene(scene.name);
     }
 
     /// <summary>按场景名称创建且只创建一个职业选择或战斗初始化器。</summary>
     private static void EnsureScene(string sceneName)
     {
+        if (sceneName == ContentBootLoader.LoadingSceneName) return;
+
+        // 从非加载场景直接 Play 时，补一次同步加载，避免编辑器跳过 S_Loading。
+        if (!ContentRuntime.IsLoaded && !ContentRuntime.IsLoading)
+            ContentRuntime.EnsureLoaded();
+
+        if (!ContentRuntime.IsLoaded)
+        {
+            ContentLoadFailureNotice.Ensure();
+            return;
+        }
+
         if (sceneName == "S_ClassSelect" && Object.FindAnyObjectByType<ClassSelectionController>() == null)
             new GameObject("ClassSelectionController").AddComponent<ClassSelectionController>();
+        if (sceneName == "S_World" && Object.FindAnyObjectByType<WorldMapController>() == null)
+            new GameObject("WorldMapController").AddComponent<WorldMapController>();
+        if (sceneName == "S_WorldEditor" && Object.FindAnyObjectByType<RuntimeWorldEditorController>() == null)
+            new GameObject("RuntimeWorldEditorController").AddComponent<RuntimeWorldEditorController>();
         if (sceneName == "S_Battle" && Object.FindAnyObjectByType<BattleBootstrap>() == null)
             new GameObject("BattleBootstrap").AddComponent<BattleBootstrap>();
     }
 }
 
-[DefaultExecutionOrder(-900)]
+[DefaultExecutionOrder(-50)]
 public class BattleBootstrap : MonoBehaviour
 {
-    /// <summary>初始化双方战斗数据、BattleInterface、卡牌解析器和棋盘摄像机控制。</summary>
+    /// <summary>生成编制棋子、绑定职业与卡牌解析器，并补齐战斗 HUD / 摄像机。</summary>
     private void Awake()
     {
-        Unit player = GameObject.Find("Player")?.GetComponent<Unit>();
-        Unit enemy = GameObject.Find("Monster")?.GetComponent<Unit>();
-        if (player == null || enemy == null)
+        if (!ContentRuntime.IsLoaded)
         {
-            Debug.LogError("战斗场景缺少 Player 或 Monster 单位。", this);
+            Debug.LogError($"战斗内容未加载：{ContentRuntime.LoadError}", this);
             return;
         }
 
-        player.ConfigureCombatant("鸿叶", 30, 3, 2);
-        enemy.ConfigureCombatant("太糕", 100, 3, 2);
+        BattleRoster roster = GetComponent<BattleRoster>() ?? gameObject.AddComponent<BattleRoster>();
+        WorldPlaySession worldSession = null;
+        if (RunSession.HasActive)
+        {
+            BoardGenerator board = FindAnyObjectByType<BoardGenerator>();
+            worldSession = GetComponent<WorldPlaySession>() ?? gameObject.AddComponent<WorldPlaySession>();
+            worldSession.Bind(board);
+            roster.SpawnRunParty(worldSession.AllySpawnCell, worldSession.ShouldStartCombat);
+        }
+        else
+        {
+            roster.SpawnEncounter();
+        }
+
+        Unit player = roster.PrimaryAlly;
+        Unit enemy = roster.PrimaryEnemy;
+        if (player == null)
+        {
+            Debug.LogError("战斗编制未能生成己方角色。", this);
+            return;
+        }
+
+        if (worldSession == null && enemy == null)
+        {
+            Debug.LogError("战斗编制未能生成至少一名己方和一名敌人。", this);
+            return;
+        }
+
+        if (worldSession != null && worldSession.ShouldStartCombat && enemy == null)
+        {
+            Debug.LogError("当前关卡需要战斗，但没有生成敌人。", this);
+            return;
+        }
+
         player.State.ClearAll();
-        enemy.State.ClearAll();
+        for (int i = 0; i < roster.Enemies.Count; i++)
+        {
+            roster.Enemies[i]?.State.ClearAll();
+        }
+
         if (ContentClassPassiveRuntime.TryGetSelectedProfile(out ClassProfileDefinition profile))
         {
             player.ConfigureMaximumHealth(profile.InitialHealth);
-            player.State.NormalDamageAvoidChance = profile.GetTraitFloat("normal_damage_avoid_chance");
-            player.State.ReviveAvailable = profile.GetTraitBool("revive_available");
             player.State.ConfigureMana(profile.InitialMana, profile.MaximumMana);
+            (player.GetComponent<RuntimeEquipmentLoadout>() ?? player.gameObject.AddComponent<RuntimeEquipmentLoadout>())
+                .Configure(profile);
         }
 
-        BattleFlow flow = FindAnyObjectByType<BattleFlow>();
-        flow?.ConfigureCardsPerTurn(5);
+        if (RunSession.HasActive)
+            player.Revive(Mathf.Max(1, RunSession.Current.health));
 
-        SetText("T_Self_Name", "鸿叶");
-        SetText("T_Enemy_Name", "太糕");
+        BattleFlow flow = FindAnyObjectByType<BattleFlow>();
+        flow?.ConfigureCardsPerTurn(ContentRuntime.Registry.GameSettings.DrawPerTurn);
+        flow?.BindCombatants(player, enemy);
+
+        SetText("T_Self_Name", player.DisplayName);
+        SetText("T_Enemy_Name", enemy != null ? FormatEnemyNames(roster) : (worldSession != null ? "探索" : string.Empty));
 
         Canvas canvas = null;
         foreach (Canvas candidate in FindObjectsByType<Canvas>())
             if (candidate.renderMode != RenderMode.WorldSpace) { canvas = candidate; break; }
-        if (canvas != null && canvas.GetComponent<BattleRuntimeHud>() == null)
+        if (canvas != null && FindAnyObjectByType<BattleRuntimeHud>() == null)
             canvas.gameObject.AddComponent<BattleRuntimeHud>();
 
         Camera mainCamera = Camera.main;
@@ -93,5 +162,18 @@ public class BattleBootstrap : MonoBehaviour
     {
         TMP_Text text = GameObject.Find(name)?.GetComponent<TMP_Text>();
         if (text != null) text.text = value;
+    }
+
+    private static string FormatEnemyNames(BattleRoster roster)
+    {
+        if (roster.Enemies.Count == 1) return roster.PrimaryEnemy.DisplayName;
+        var names = new System.Text.StringBuilder();
+        for (int i = 0; i < roster.Enemies.Count; i++)
+        {
+            if (roster.Enemies[i] == null) continue;
+            if (names.Length > 0) names.Append(" / ");
+            names.Append(roster.Enemies[i].DisplayName);
+        }
+        return names.ToString();
     }
 }

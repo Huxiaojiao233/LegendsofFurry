@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace LegendsOfFurry.Content.Runtime
 {
@@ -58,5 +59,31 @@ public interface IContentCardZoneService : ICardDrawService
     /// </summary>
     /// <param name="count">处理牌顶数量。</param>
     void PlayTopCardsForFree(int count, Action onComplete);
+
+    /// <summary>
+    /// 把一张已生成的卡加入手牌；手牌已满时该张进入弃牌堆。
+    /// </summary>
+    bool AddCardToHandOrDiscard(CardInstance instance);
+}
+
+
+/// <summary>让通用卡牌效果可以把生成牌交给目标单位，而不依赖玩家或 AI 的具体牌区实现。</summary>
+public static class CombatCardZoneRegistry
+{
+    private static readonly Dictionary<Unit, IContentCardZoneService> Services = new Dictionary<Unit, IContentCardZoneService>();
+    public static void Register(Unit owner, IContentCardZoneService service)
+    {
+        if (owner != null && service != null) Services[owner] = service;
+    }
+    public static void Unregister(Unit owner, IContentCardZoneService service)
+    {
+        if (owner != null && Services.TryGetValue(owner, out IContentCardZoneService current) && current == service)
+            Services.Remove(owner);
+    }
+    public static bool TryGet(Unit owner, out IContentCardZoneService service)
+    {
+        service = null;
+        return owner != null && Services.TryGetValue(owner, out service);
+    }
 }
 }

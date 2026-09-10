@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// 单个棋盘格的数据与视觉控制组件。
 /// 保存逻辑坐标，并负责创建、显示和隐藏移动范围覆盖层。
+/// 地形外观由各自 Prefab 的模型决定，不再染色。
 /// </summary>
 public class BoardCell : MonoBehaviour
 {
@@ -10,151 +11,262 @@ public class BoardCell : MonoBehaviour
 
     private GameObject moveHighlight;
     private Renderer moveHighlightRenderer;
-    private Renderer cellRenderer;
-    private MaterialPropertyBlock propertyBlock;
+    private GameObject hoverHighlight;
+    private Renderer hoverHighlightRenderer;
+    private GameObject intentHighlight;
+    private Renderer intentHighlightRenderer;
+    private Renderer[] terrainRenderers;
+    private BoardGenerator board;
+    private bool hovered;
+    private float hoverPulse;
 
     public Vector2Int Coordinate { get; private set; }
+    public string StageId { get; private set; }
+    public int Height { get; private set; }
+    public string TerrainId { get; private set; }
+    public bool TerrainVisible { get; private set; } = true;
 
-    public void Initialize(int x, int y)
+    public void Initialize(int x, int y, string stageId = null, int height = 0, string terrainId = null)
     {
         Coordinate = new Vector2Int(x, y);
-        name = $"Cell_{x}_{y}";
+        StageId = stageId ?? string.Empty;
+        Height = height;
+        TerrainId = terrainId ?? string.Empty;
+        name = string.IsNullOrEmpty(StageId) ? $"Cell_{x}_{y}" : $"Cell_{StageId}_{x}_{y}";
+        terrainRenderers = null;
+        TerrainVisible = true;
+        EnsureBoard();
+        RestLocalPosition = transform.localPosition;
+        RestLocalScale = transform.localScale;
     }
 
-    /// <summary>设置格子的移动范围高亮以及本次高亮颜色。</summary>
+    public Vector3 RestLocalPosition { get; private set; }
+    public Vector3 RestLocalScale { get; private set; }
+
+    /// <summary>开关地形网格显示（迷雾/战外关卡隐藏），不改材质颜色。</summary>
+    public void SetTerrainVisible(bool visible)
+    {
+        bool changed = TerrainVisible != visible;
+        TerrainVisible = visible;
+        EnsureTerrainRenderers();
+        ApplyTerrainRendererVisible(visible);
+        if (changed) NotifyTilesChanged();
+    }
+
+    private void OnEnable()
+    {
+        NotifyTilesChanged();
+    }
+
+    private void OnDisable()
+    {
+        NotifyTilesChanged();
+    }
+
+    /// <summary>设置格子的移动/攻击范围高亮。草地格本身有渲染器，必须用独立覆盖层。</summary>
     public void SetMoveHighlight(bool visible, Color color)
     {
-        if (cellRenderer == null)
-        {
-            cellRenderer = FindCellRenderer();
-        }
+        EnsureOverlay(ref moveHighlight, ref moveHighlightRenderer, HighlightName, color, 0.03f, 0.02f);
+        if (moveHighlightRenderer != null) ApplyColor(moveHighlightRenderer.material, color);
+        if (moveHighlight != null) moveHighlight.SetActive(visible);
+    }
 
-        if (cellRenderer != null)
+    /// <summary>鼠标悬浮高亮；Update 里做轻微起伏与呼吸。</summary>
+    public void SetHovered(bool value)
+    {
+        hovered = value;
+        if (!value)
         {
-            SetRendererHighlight(visible, color);
+            hoverPulse = 0f;
+            transform.localPosition = RestLocalPosition;
+            if (hoverHighlight != null) hoverHighlight.SetActive(false);
             return;
         }
 
-        if (moveHighlight == null)
-        {
-            CreateMoveHighlight(color);
-        }
-
-        ApplyColor(moveHighlightRenderer.material, color);
-        moveHighlight.SetActive(visible);
+        Color color = new Color(1f, 0.92f, 0.45f, 0.72f);
+        EnsureOverlay(ref hoverHighlight, ref hoverHighlightRenderer, "HoverHighlight", color, 0.04f, 0.035f);
+        if (hoverHighlightRenderer != null) ApplyColor(hoverHighlightRenderer.material, color);
+        if (hoverHighlight != null) hoverHighlight.SetActive(true);
     }
 
-    private Renderer FindCellRenderer()
+    /// <summary>敌方攻击意图落点高亮，与移动范围覆盖层分开。</summary>
+    public void SetIntentHighlight(bool visible, Color color)
     {
-        Renderer renderer = GetComponent<Renderer>();
-        if (renderer != null)
+        EnsureOverlay(ref intentHighlight, ref intentHighlightRenderer, "IntentHighlight", color, 0.035f, 0.05f);
+        if (intentHighlightRenderer != null) ApplyColor(intentHighlightRenderer.material, color);
+        if (intentHighlight != null) intentHighlight.SetActive(visible);
+    }
+
+    private void Update()
+    {
+        if (!hovered) return;
+        hoverPulse += Time.unscaledDeltaTime * 6.5f;
+        float wave = (Mathf.Sin(hoverPulse) + 1f) * 0.5f;
+        transform.localPosition = RestLocalPosition + Vector3.up * (0.04f + wave * 0.05f);
+        if (hoverHighlight != null)
         {
-            return renderer;
+            float thickness = 0.035f + wave * 0.02f;
+            hoverHighlight.transform.localScale = new Vector3(0.92f + wave * 0.08f, thickness, 0.92f + wave * 0.08f);
+            if (hoverHighlightRenderer != null)
+            {
+                Color color = Color.Lerp(
+                    new Color(1f, 0.85f, 0.35f, 0.55f),
+                    new Color(1f, 0.98f, 0.7f, 0.9f),
+                    wave);
+                ApplyColor(hoverHighlightRenderer.material, color);
+            }
+        }
+    }
+
+    private void ApplyTerrainRendererVisible(bool visible)
+    {
+        if (terrainRenderers == null) return;
+        for (int i = 0; i < terrainRenderers.Length; i++)
+        {
+            Renderer renderer = terrainRenderers[i];
+            if (renderer == null) continue;
+            if (TerrainBatchSource.IsInstancedRenderer(renderer))
+            {
+                renderer.enabled = false;
+                continue;
+            }
+
+            renderer.enabled = visible;
+        }
+    }
+
+    private void EnsureBoard()
+    {
+        if (board == null)
+            board = GetComponentInParent<BoardGenerator>();
+    }
+
+    private void NotifyTilesChanged()
+    {
+        if (!Application.isPlaying) return;
+        EnsureBoard();
+        board?.NotifyTilesChanged();
+    }
+
+    private void EnsureTerrainRenderers()
+    {
+        if (terrainRenderers != null) return;
+        Renderer[] all = GetComponentsInChildren<Renderer>(true);
+        int count = 0;
+        for (int i = 0; i < all.Length; i++)
+        {
+            if (IsTerrainRenderer(all[i])) count++;
         }
 
-        Renderer[] renderers = GetComponentsInChildren<Renderer>();
-        for (int i = 0; i < renderers.Length; i++)
+        terrainRenderers = new Renderer[count];
+        int index = 0;
+        for (int i = 0; i < all.Length; i++)
         {
-            if (renderers[i] != moveHighlightRenderer)
+            Renderer renderer = all[i];
+            if (!IsTerrainRenderer(renderer)) continue;
+            terrainRenderers[index++] = renderer;
+        }
+    }
+
+    private static bool IsTerrainRenderer(Renderer renderer)
+    {
+        if (renderer == null || renderer is LineRenderer) return false;
+        string objectName = renderer.gameObject.name;
+        return objectName != HighlightName &&
+               objectName != "HoverHighlight" &&
+               objectName != "IntentHighlight";
+    }
+
+    private void EnsureOverlay(ref GameObject overlay, ref Renderer overlayRenderer, string objectName, Color color,
+        float thickness, float lift)
+    {
+        if (overlay != null) return;
+        overlay = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        overlay.name = objectName;
+        overlay.transform.SetParent(transform, false);
+        overlay.transform.localRotation = Quaternion.identity;
+        PlaceOverlay(overlay, thickness, lift);
+        Collider overlayCollider = overlay.GetComponent<Collider>();
+        if (overlayCollider != null) Destroy(overlayCollider);
+        overlayRenderer = overlay.GetComponent<Renderer>();
+        overlayRenderer.material = CreateHighlightMaterial(color);
+        overlayRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        overlayRenderer.receiveShadows = false;
+        overlay.SetActive(false);
+    }
+
+    private void PlaceOverlay(GameObject overlay, float thickness, float lift)
+    {
+        if (overlay == null) return;
+        overlay.transform.localPosition = new Vector3(0f, ResolveTerrainTopLocalY() + thickness * 0.5f + lift, 0f);
+        overlay.transform.localScale = new Vector3(1f, thickness, 1f);
+    }
+
+    private float ResolveTerrainTopLocalY()
+    {
+        EnsureTerrainRenderers();
+        float topY = 0.5f;
+        bool found = false;
+        if (terrainRenderers == null) return topY;
+        for (int i = 0; i < terrainRenderers.Length; i++)
+        {
+            Renderer renderer = terrainRenderers[i];
+            if (renderer == null) continue;
+            float candidate = renderer.transform.localPosition.y;
+            MeshFilter meshFilter = renderer.GetComponent<MeshFilter>();
+            Mesh mesh = meshFilter != null ? meshFilter.sharedMesh : null;
+            if (mesh != null)
             {
-                return renderers[i];
+                Vector3 worldTop = renderer.transform.TransformPoint(new Vector3(
+                    mesh.bounds.center.x,
+                    mesh.bounds.max.y,
+                    mesh.bounds.center.z));
+                candidate = transform.InverseTransformPoint(worldTop).y;
+            }
+
+            if (!found || candidate > topY)
+            {
+                topY = candidate;
+                found = true;
             }
         }
 
-        return null;
+        return topY;
     }
 
-    private void SetRendererHighlight(bool visible, Color color)
+    private static Material CreateHighlightMaterial(Color color)
     {
-        propertyBlock ??= new MaterialPropertyBlock();
-        if (!visible)
-        {
-            cellRenderer.SetPropertyBlock(null);
-            return;
-        }
-
-        cellRenderer.GetPropertyBlock(propertyBlock);
-        propertyBlock.SetColor("_BaseColor", color);
-        propertyBlock.SetColor("_Color", color);
-        cellRenderer.SetPropertyBlock(propertyBlock);
-    }
-
-    private void CreateMoveHighlight(Color color)
-    {
-        Renderer cellRenderer = GetComponent<Renderer>();
-        if (cellRenderer == null)
-        {
-            cellRenderer = GetComponentInChildren<Renderer>();
-        }
-
-        moveHighlight = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        moveHighlight.name = HighlightName;
-        moveHighlight.transform.SetParent(transform, false);
-        moveHighlight.transform.localPosition = new Vector3(0f, 0.02f, 0f);
-        moveHighlight.transform.localRotation = Quaternion.identity;
-        moveHighlight.transform.localScale = new Vector3(0.9f, 0.025f, 0.9f);
-
-        Collider highlightCollider = moveHighlight.GetComponent<Collider>();
-        if (highlightCollider != null)
-        {
-            Destroy(highlightCollider);
-        }
-
-        moveHighlightRenderer = moveHighlight.GetComponent<Renderer>();
-        Material material = CreateHighlightMaterial(cellRenderer, moveHighlightRenderer, color);
-        moveHighlightRenderer.material = material;
-        moveHighlight.SetActive(false);
-    }
-
-    private static Material CreateHighlightMaterial(Renderer sourceRenderer, Renderer fallbackRenderer, Color color)
-    {
-        Material source = null;
-        if (sourceRenderer != null && sourceRenderer.sharedMaterial != null)
-        {
-            source = sourceRenderer.sharedMaterial;
-        }
-        else if (fallbackRenderer != null && fallbackRenderer.sharedMaterial != null)
-        {
-            source = fallbackRenderer.sharedMaterial;
-        }
-
-        Material material = source != null ? new Material(source) : null;
-        if (material == null)
-        {
-            Shader shader = Shader.Find("Sprites/Default");
-            material = shader != null
-                ? new Material(shader)
-                : new Material(Resources.GetBuiltinResource<Material>("Default-Material.mat"));
-        }
-
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ??
+                        Shader.Find("Sprites/Default");
+        Material material = shader != null
+            ? new Material(shader)
+            : new Material(Resources.GetBuiltinResource<Material>("Default-Material.mat"));
+        material.renderQueue = 3100;
         ApplyColor(material, color);
         return material;
     }
 
     private static void ApplyColor(Material material, Color color)
     {
-        if (material == null)
-        {
-            return;
-        }
-
+        if (material == null) return;
         if (material.HasProperty("_BaseColor"))
-        {
             material.SetColor("_BaseColor", color);
-        }
-
         material.color = color;
     }
 
     private void OnDestroy()
     {
-        if (moveHighlight != null)
-        {
-            Renderer highlightRenderer = moveHighlight.GetComponent<Renderer>();
-            if (highlightRenderer != null)
-            {
-                Destroy(highlightRenderer.material);
-            }
-        }
+        DestroyOverlayMaterial(moveHighlight);
+        DestroyOverlayMaterial(hoverHighlight);
+        DestroyOverlayMaterial(intentHighlight);
+        if (BoardTileHover.Current == this) BoardTileHover.Clear();
+    }
+
+    private static void DestroyOverlayMaterial(GameObject overlay)
+    {
+        if (overlay == null) return;
+        Renderer highlightRenderer = overlay.GetComponent<Renderer>();
+        if (highlightRenderer != null && highlightRenderer.material != null)
+            Destroy(highlightRenderer.material);
     }
 }

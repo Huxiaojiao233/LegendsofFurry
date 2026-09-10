@@ -4,12 +4,13 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using LegendsOfFurry.Content.Runtime;
 
 /// <summary>
 /// 棋盘交互总控制器。
 /// 负责己方单位选中、四方向可达范围、行动点消耗、格子点击与悬浮消耗提示。
 /// </summary>
-public class BoardClickController : MonoBehaviour
+public class BoardClickController : MonoBehaviour, IActionPointPool
 {
     private static readonly Vector2Int[] FourDirections =
     {
@@ -54,6 +55,9 @@ public class BoardClickController : MonoBehaviour
     private bool isFreeMoveMode;
     private int freeMoveSteps;
     private System.Action freeMoveCompleted;
+    private int suspendedFreeMoveSteps;
+    private Unit suspendedFreeMoveUnit;
+    private System.Action suspendedFreeMoveCompleted;
 
     private TMP_Text moveCostTooltip;
     private RectTransform tooltipRect;
@@ -62,6 +66,7 @@ public class BoardClickController : MonoBehaviour
     public int CurrentActionPoints => currentActionPoints;
     public int NextMoveDiscount => nextMoveDiscount;
     public bool IsResolvingFreeMove => isFreeMoveMode;
+    public Unit SelectedUnit => selectedUnit;
     public event Action<int, int> ActionPointsChanged;
 
     private void Awake()
@@ -81,9 +86,27 @@ public class BoardClickController : MonoBehaviour
 
     private void Update()
     {
-        if (!BattleFlow.CanPlayerAct || Mouse.current == null || mainCamera == null)
+        if (Mouse.current == null || mainCamera == null)
+        {
+            BoardTileHover.Clear();
+            HideMoveCostTooltip();
+            return;
+        }
+
+        UpdateTileHover();
+
+        // 选牌指向目标必须先于免费移动：刺客回合开始的 1 格免费移动不能把确认目标、右键取消吞掉。
+        if (IsTargeting)
         {
             HideMoveCostTooltip();
+            if (Mouse.current.rightButton.wasPressedThisFrame)
+            {
+                handCardSystem.CancelTargeting();
+                return;
+            }
+
+            if (Mouse.current.leftButton.wasPressedThisFrame)
+                HandleTargetingClick();
             return;
         }
 
@@ -100,20 +123,22 @@ public class BoardClickController : MonoBehaviour
             return;
         }
 
-        if (IsTargeting)
+        if (Mouse.current.leftButton.wasPressedThisFrame &&
+            (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()) &&
+            TryRaycastPointer(out RaycastHit inspectHit))
         {
-            HideMoveCostTooltip();
-            if (Mouse.current.rightButton.wasPressedThisFrame)
+            Unit inspectUnit = inspectHit.collider.GetComponentInParent<Unit>();
+            if (inspectUnit != null && !inspectUnit.IsPlayer && !inspectUnit.IsMoving &&
+                BattleFlow.Instance != null && BattleFlow.Instance.Phase != BattlePhase.Exploration)
             {
-                handCardSystem.CancelTargeting();
+                EnemyCardInspectUI.Ensure().Show(inspectUnit);
                 return;
             }
+        }
 
-            if (Mouse.current.leftButton.wasPressedThisFrame)
-            {
-                HandleTargetingClick();
-            }
-
+        if (!BattleFlow.CanPlayerAct)
+        {
+            HideMoveCostTooltip();
             return;
         }
 
@@ -125,10 +150,28 @@ public class BoardClickController : MonoBehaviour
         }
     }
 
+    private void UpdateTileHover()
+    {
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        {
+            BoardTileHover.Clear();
+            return;
+        }
+
+        if (!TryRaycastPointer(out RaycastHit hit))
+        {
+            BoardTileHover.Clear();
+            return;
+        }
+
+        BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
+        BoardTileHover.Set(cell);
+    }
+
     public void ResetActionPoints()
     {
         nextMoveDiscount = 0;
-        Unit player = GameObject.Find("Player")?.GetComponent<Unit>();
+        Unit player = BattleUnits.PrimaryAlly;
         effectiveMaximumActionPoints = player == null
             ? maxActionPoints
             : player.State.EffectiveActionPointMaximum(maxActionPoints);
@@ -181,6 +224,7 @@ public class BoardClickController : MonoBehaviour
             return;
         }
 
+        ClearSuspendedFreeMove();
         ClearSelection();
         isFreeMoveMode = true;
         freeMoveSteps = steps;
@@ -189,6 +233,45 @@ public class BoardClickController : MonoBehaviour
         selectedUnit.SetSelected(true);
         ShowFreeMoveRange(unit, steps);
         Debug.Log($"请选择{steps}格内的免费移动位置；右键可以跳过。", this);
+    }
+
+    /// <summary>选牌指向目标时暂停免费移动，避免清掉高亮后仍拦截棋盘点击。</summary>
+    public void SuspendFreeMove()
+    {
+        if (!isFreeMoveMode) return;
+        if (suspendedFreeMoveSteps <= 0)
+        {
+            suspendedFreeMoveSteps = freeMoveSteps;
+            suspendedFreeMoveUnit = selectedUnit;
+            suspendedFreeMoveCompleted = freeMoveCompleted;
+        }
+        isFreeMoveMode = false;
+        freeMoveSteps = 0;
+        freeMoveCompleted = null;
+        if (selectedUnit != null)
+        {
+            selectedUnit.SetSelected(false);
+            selectedUnit = null;
+        }
+        ClearMoveRange();
+    }
+
+    /// <summary>目标选择结束且没有新的免费移动时，把暂停的步数加回来。</summary>
+    public void ResumeSuspendedFreeMove()
+    {
+        if (suspendedFreeMoveSteps <= 0) return;
+        Unit unit = suspendedFreeMoveUnit;
+        int steps = suspendedFreeMoveSteps;
+        System.Action callback = suspendedFreeMoveCompleted;
+        ClearSuspendedFreeMove();
+        BeginFreeMove(unit, steps, callback);
+    }
+
+    private void ClearSuspendedFreeMove()
+    {
+        suspendedFreeMoveSteps = 0;
+        suspendedFreeMoveUnit = null;
+        suspendedFreeMoveCompleted = null;
     }
 
     public void GrantNextMoveDiscount(int amount)
@@ -226,12 +309,21 @@ public class BoardClickController : MonoBehaviour
         ClearAttackRange();
         HideMoveCostTooltip();
 
-        if (caster == null || caster.Board == null || radius < 0)
+        if (caster == null || radius < 0)
         {
             return;
         }
 
-        BoardGenerator board = caster.Board;
+        BoardGenerator board = caster.Board ?? FindAnyObjectByType<BoardGenerator>();
+        if (board == null)
+        {
+            return;
+        }
+
+        if (caster.Board == null)
+        {
+            caster.SetBoard(board);
+        }
         Vector2Int origin = caster.Position;
 
         for (int x = origin.x - radius; x <= origin.x + radius; x++)
@@ -325,11 +417,14 @@ public class BoardClickController : MonoBehaviour
         Unit clickedUnit = hit.collider.GetComponentInParent<Unit>();
         if (clickedUnit != null)
         {
-            if (!clickedUnit.IsMoving && clickedUnit.IsPlayer)
+            if (clickedUnit.IsMoving) return;
+            if (clickedUnit.IsPlayer)
             {
                 SelectUnit(clickedUnit);
+                return;
             }
 
+            EnemyCardInspectUI.Ensure().Show(clickedUnit);
             return;
         }
 
@@ -374,7 +469,7 @@ public class BoardClickController : MonoBehaviour
         }
 
         Vector2Int coordinate = cell.Coordinate;
-        if (!selectedUnit.MoveToAnimated(coordinate.x, coordinate.y))
+        if (!selectedUnit.MoveToAnimated(coordinate.x, coordinate.y, this))
         {
             return;
         }
@@ -392,14 +487,19 @@ public class BoardClickController : MonoBehaviour
     private void ShowMoveRange(Unit unit)
     {
         ClearAttackRange();
-        int coldSurcharge = unit.State.Get(CombatStatus.Cold);
-        int searchBudget = currentActionPoints + nextMoveDiscount - coldSurcharge;
+        int baseBudget = currentActionPoints + nextMoveDiscount;
+        ContentRuleQuery moveQuery = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.MoveSteps, unit, null, baseBudget));
+        int searchBudget = moveQuery.Value;
+        int movementPenalty = baseBudget - searchBudget;
         if (searchBudget <= 0)
         {
             return;
         }
 
-        BoardGenerator board = unit.Board;
+        BoardGenerator board = unit.Board ?? FindAnyObjectByType<BoardGenerator>();
+        if (board == null) return;
+        if (unit.Board == null) unit.SetBoard(board);
         Vector2Int start = unit.Position;
         Queue<Vector2Int> frontier = new Queue<Vector2Int>();
         Dictionary<Vector2Int, int> costs = new Dictionary<Vector2Int, int>();
@@ -421,16 +521,20 @@ public class BoardClickController : MonoBehaviour
             {
                 Vector2Int next = current + direction;
                 if (costs.ContainsKey(next) ||
-                    !board.TryGetCell(next.x, next.y, out BoardCell cell) ||
-                    board.IsOccupied(next.x, next.y, unit))
+                    !board.CanStep(current, next, unit) ||
+                    !board.TryGetCell(next.x, next.y, out BoardCell cell))
                 {
                     continue;
                 }
 
+                string nextTerrain = board.GetTerrain(next.x, next.y);
                 int nextStepDistance = currentCost + 1;
                 costs[next] = nextStepDistance;
-                frontier.Enqueue(next);
-                int payableCost = Mathf.Max(0, nextStepDistance + coldSurcharge - nextMoveDiscount);
+                if (!WorldTerrainCatalog.EndsActionOnEnter(nextTerrain)) frontier.Enqueue(next);
+                int payableCost = WorldTerrainCatalog.EndsActionOnEnter(nextTerrain)
+                    ? currentActionPoints
+                    : Mathf.Max(0, nextStepDistance + movementPenalty - nextMoveDiscount);
+                if (payableCost > currentActionPoints) continue;
                 movableCells[cell] = payableCost;
 
                 float fade = maxActionPoints <= 1
@@ -445,7 +549,10 @@ public class BoardClickController : MonoBehaviour
     private void ShowFreeMoveRange(Unit unit, int steps)
     {
         ClearMoveRange();
-        BoardGenerator board = unit.Board;
+        if (unit == null) return;
+        BoardGenerator board = unit.Board ?? FindAnyObjectByType<BoardGenerator>();
+        if (board == null) return;
+        if (unit.Board == null) unit.SetBoard(board);
         Queue<Vector2Int> frontier = new Queue<Vector2Int>();
         Dictionary<Vector2Int, int> costs = new Dictionary<Vector2Int, int>();
         frontier.Enqueue(unit.Position);
@@ -458,7 +565,8 @@ public class BoardClickController : MonoBehaviour
             foreach (Vector2Int direction in FourDirections)
             {
                 Vector2Int next = current + direction;
-                if (costs.ContainsKey(next) || !board.TryGetCell(next.x, next.y, out BoardCell cell) || board.IsOccupied(next.x, next.y, unit)) continue;
+                if (costs.ContainsKey(next) || !board.CanStep(current, next, unit) ||
+                    !board.TryGetCell(next.x, next.y, out BoardCell cell)) continue;
                 costs[next] = distance + 1;
                 frontier.Enqueue(next);
                 movableCells[cell] = 0;
@@ -473,7 +581,7 @@ public class BoardClickController : MonoBehaviour
         if (!TryRaycastPointer(out RaycastHit hit)) return;
         BoardCell cell = hit.collider.GetComponentInParent<BoardCell>();
         if (cell == null || !movableCells.ContainsKey(cell) || selectedUnit == null) return;
-        if (!selectedUnit.MoveToAnimated(cell.Coordinate.x, cell.Coordinate.y)) return;
+        if (!selectedUnit.MoveToAnimated(cell.Coordinate.x, cell.Coordinate.y, this)) return;
         CompleteFreeMove();
     }
 
@@ -580,7 +688,14 @@ public class BoardClickController : MonoBehaviour
     {
         if (tooltipCanvas == null)
         {
-            tooltipCanvas = FindAnyObjectByType<Canvas>();
+            foreach (Canvas canvas in FindObjectsByType<Canvas>())
+            {
+                if (canvas.renderMode != RenderMode.WorldSpace)
+                {
+                    tooltipCanvas = canvas;
+                    break;
+                }
+            }
         }
 
         if (tooltipCanvas == null)

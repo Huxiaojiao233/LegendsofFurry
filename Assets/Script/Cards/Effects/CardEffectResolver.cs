@@ -42,7 +42,9 @@ public class CardEffectResolver : MonoBehaviour
         if (instance?.Definition == null || instance.Data == null || actionPointController == null || player == null) return false;
         CardData card = instance.Data;
         if (card.unplayable) return false;
-        if (card.isAttack && player.State.Has(CombatStatus.CannotAttack)) return false;
+        ContentRuleQuery permission = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.CanPlayCard, player, null, 1, instance.Definition));
+        if (permission.Cancelled) return false;
         return ContentCardPlayRules.TryCalculateCost(
             instance.Definition,
             actionPointController.CurrentActionPoints,
@@ -104,6 +106,8 @@ public class CardEffectResolver : MonoBehaviour
             targetQueryService: handCardSystem);
         result.ExecutionContext = context;
         result.Success = ContentCardEffectExecutor.TryExecuteOnPlay(context);
+        if (result.Success)
+            CombatEventBus.Shared.Publish(new CardPlayedEvent(player, instance, target));
         return result;
     }
     /// <summary>
@@ -123,8 +127,9 @@ public class CardEffectResolver : MonoBehaviour
             return false;
         }
         Vector2Int targetPosition = target != null ? target.Position : cell != null ? cell.Coordinate : default;
-        int effectiveRange = rule.Range + (card.FamilyId == "bow"
-            ? ContentClassPassiveRuntime.GetSelectedTraitInt("bow_range_bonus") : 0);
+        ContentRuleQuery rangeQuery = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.TargetRange, player, target, rule.Range, card));
+        int effectiveRange = Mathf.Max(0, rangeQuery.Value);
         bool hasBoardTarget = target != null || cell != null;
         ContentCardTargetSelection selection = new ContentCardTargetSelection
         {
@@ -201,7 +206,7 @@ public class CardEffectResolver : MonoBehaviour
     {
         actionPointController ??= FindAnyObjectByType<BoardClickController>();
         handCardSystem ??= FindAnyObjectByType<HandCardSystem>();
-        if (player == null) player = GameObject.Find("Player")?.GetComponent<Unit>();
-        if (enemy == null) enemy = GameObject.Find("Monster")?.GetComponent<Unit>();
+        if (player == null) player = BattleUnits.PrimaryAlly;
+        if (enemy == null) enemy = BattleUnits.PrimaryEnemy;
     }
 }

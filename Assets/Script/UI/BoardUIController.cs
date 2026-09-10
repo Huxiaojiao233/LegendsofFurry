@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 /// <summary>
@@ -26,11 +27,6 @@ public class BoardUIController : MonoBehaviour
         }
     }
 
-    public void MovePlayer()
-    {
-        EndRound();
-    }
-
     public void EndRound()
     {
         if (battleFlow == null)
@@ -39,5 +35,12 @@ public class BoardUIController : MonoBehaviour
         }
 
         battleFlow?.RequestEndPlayerTurn();
-    }   
+    }
+
+    public void Update()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
+            EndRound();
+    }
 }

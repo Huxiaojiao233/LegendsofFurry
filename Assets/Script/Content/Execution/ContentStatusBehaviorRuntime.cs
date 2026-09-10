@@ -18,28 +18,26 @@ public static class ContentStatusBehaviorRuntime
                 .Where(item => item.Enabled && item.TriggerKey == triggerKey).OrderBy(item => item.Priority).ToArray();
             if (sourceBehaviors.Length == 0) continue;
             executed = true;
-            CardDefinition definition = new CardDefinition
-            {
-                CardId = "status." + status.StatusId, DisplayName = status.DisplayName,
-                RarityId = "gray", FamilyId = "status",
-                Target = new CardTargetRule { SelectionMode = "self", AllowSelf = true }
-            };
-            foreach (BehaviorDefinition source in sourceBehaviors)
-            {
-                BehaviorDefinition behavior = new BehaviorDefinition
-                {
-                    BehaviorId = source.BehaviorId, OwnerKind = "card", OwnerId = definition.CardId,
-                    TriggerKey = "on_play", Priority = source.Priority, Enabled = source.Enabled
-                };
-                behavior.Nodes.AddRange(source.Nodes);
-                definition.Behaviors.Add(behavior);
-            }
             CardPlayResult result = new CardPlayResult();
             ContentCardExecutionContext context = new ContentCardExecutionContext(
-                new CardInstance(definition), owner, owner, null, null, null, null, result, true);
-            ContentCardEffectExecutor.TryExecuteOnPlay(context);
+                ContentBehaviorOwner.FromStatus(status, instance),
+                owner, owner, null, null, null, null, result, true);
+            ContentCardEffectExecutor.TryExecuteOwnedTrigger(context, status.Behaviors, triggerKey);
         }
         return executed;
+    }
+
+    public static bool ExecuteStatus(Unit owner, RuntimeStatusInstance instance, string triggerKey)
+    {
+        if (owner == null || instance?.Definition == null) return false;
+        BehaviorDefinition[] sourceBehaviors = instance.Definition.Behaviors
+            .Where(item => item.Enabled && item.TriggerKey == triggerKey).OrderBy(item => item.Priority).ToArray();
+        if (sourceBehaviors.Length == 0) return false;
+        CardPlayResult result = new CardPlayResult();
+        ContentCardExecutionContext context = new ContentCardExecutionContext(
+            ContentBehaviorOwner.FromStatus(instance.Definition, instance),
+            owner, owner, null, null, null, null, result, true);
+        return ContentCardEffectExecutor.TryExecuteOwnedTrigger(context, sourceBehaviors, triggerKey);
     }
 }
 }

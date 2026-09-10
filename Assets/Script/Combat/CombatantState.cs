@@ -5,33 +5,21 @@ using LegendsOfFurry.Content.Contracts;
 using LegendsOfFurry.Content.Runtime;
 using UnityEngine;
 
-public enum CombatStatus
-{
-    Sharp,
-    Quick,
-    BlockRetention,
-    NormalImmunity,
-    DodgeNextNormal,
-    Cold,
-    Frozen,
-    Warming,
-    Haze,
-    Broken,
-    Poison,
-    Exhaustion,
-    ManaExhaustion,
-    HeartFire,
-    Regeneration,
-    Corruption,
-    Vulnerable,
-    CannotAttack,
-    RaiseShieldPending,
-    SwordCharge
-}
-
 /// <summary>保存一个字符串状态 ID 的层数、剩余回合、来源和实例扩展数据。</summary>
-public sealed class RuntimeStatusInstance
+public sealed class RuntimeStatusInstance : IContentInstance<StatusDefinition>
 {
+    /// <summary>Creates a runtime status bound to its optional published definition.</summary>
+    /// <param name="statusId">The normalized stable status ID.</param>
+    /// <param name="definition">The enabled definition resolved by the registry, or null in legacy fallback mode.</param>
+    internal RuntimeStatusInstance(string statusId, StatusDefinition definition)
+    {
+        InstanceId = Guid.NewGuid().ToString("N");
+        StatusId = statusId;
+        Definition = definition;
+    }
+
+    public string InstanceId { get; }
+    public StatusDefinition Definition { get; internal set; }
     public string StatusId { get; internal set; }
     public int Stacks { get; internal set; }
     public int RemainingTurns { get; internal set; }
@@ -44,27 +32,21 @@ public class CombatantState : MonoBehaviour
 {
     private readonly Dictionary<string, RuntimeStatusInstance> statuses =
         new Dictionary<string, RuntimeStatusInstance>(StringComparer.Ordinal);
-    private int pendingManaExhaustion;
+    private readonly HashSet<string> usedRuleKeys = new HashSet<string>(StringComparer.Ordinal);
 
     public int Mana { get; private set; }
     public int MaxMana { get; private set; } = 10;
-    public bool PriestHealUsedThisTurn { get; set; }
-    public bool ReviveAvailable { get; set; }
-    public float NormalDamageAvoidChance { get; set; }
+    public bool ActivatedAbilityUsedThisTurn { get; set; }
 
     public event Action Changed;
+
+    public bool TryMarkRuleUsed(string ruleKey) => !string.IsNullOrWhiteSpace(ruleKey) && usedRuleKeys.Add(ruleKey);
 
     /// <summary>取得字符串状态 ID 的当前层数。</summary>
     public int Get(string statusId) => statuses.TryGetValue(NormalizeStatusId(statusId), out RuntimeStatusInstance value) ? value.Stacks : 0;
 
     /// <summary>判断字符串状态 ID 是否存在有效层数。</summary>
     public bool Has(string statusId) => Get(statusId) > 0;
-
-    /// <summary>取得兼容枚举状态的当前层数。</summary>
-    public int Get(CombatStatus status) => Get(ToStatusId(status));
-
-    /// <summary>判断兼容枚举状态是否存在。</summary>
-    public bool Has(CombatStatus status) => Has(ToStatusId(status));
 
     /// <summary>返回状态实例的独立快照，供 UI、条件和存档读取。</summary>
     public IReadOnlyList<RuntimeStatusInstance> GetStatusSnapshot() => statuses.Values
@@ -79,7 +61,11 @@ public class CombatantState : MonoBehaviour
 
     public bool TryGainMana(int amount)
     {
-        if (amount <= 0 || Has(CombatStatus.ManaExhaustion)) return false;
+        Unit owner = GetComponent<Unit>();
+        ContentRuleQuery query = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.ManaGain, owner, null, amount));
+        if (query.Touched) amount = query.Value;
+        if (amount <= 0 || query.Cancelled) return false;
         int before = Mana;
         Mana = Mathf.Min(MaxMana, Mana + amount);
         if (Mana != before) Changed?.Invoke();
@@ -107,27 +93,36 @@ public class CombatantState : MonoBehaviour
         if (amount <= 0) return;
         statusId = NormalizeStatusId(statusId);
         if (string.IsNullOrEmpty(statusId)) return;
+        StatusDefinition definition = null;
+        if (ContentRuntime.IsLoaded)
+        {
+            ContentRuntime.Registry.TryGetStatus(statusId, out definition);
+        }
         if (!statuses.TryGetValue(statusId, out RuntimeStatusInstance instance))
         {
-            instance = new RuntimeStatusInstance { StatusId = statusId };
+            instance = new RuntimeStatusInstance(statusId, definition);
             statuses.Add(statusId, instance);
         }
-        int value = ApplyStackingPolicy(statusId, instance.Stacks, amount);
-        instance.Stacks = ApplyStackLimit(statusId, value);
+        else if (instance.Definition == null && definition != null)
+        {
+            instance.Definition = definition;
+        }
+        int previousStacks = instance.Stacks;
+        int value = ApplyStackingPolicy(instance, previousStacks, amount);
+        instance.Stacks = ApplyStackLimit(instance, value);
         if (durationTurns > 0) instance.RemainingTurns = Mathf.Max(instance.RemainingTurns, durationTurns);
         if (!string.IsNullOrWhiteSpace(sourceId)) instance.SourceId = sourceId;
 
-        if (statusId == ToStatusId(CombatStatus.Cold) && instance.Stacks >= 3 && !Has(CombatStatus.Warming))
-        {
-            Remove(statusId);
-            Add(CombatStatus.Frozen);
-        }
         Changed?.Invoke();
+        PublishStatusChanged(statusId, previousStacks, Get(statusId));
+        ContentStatusBehaviorRuntime.ExecuteStatus(GetComponent<Unit>(), instance, ContentTriggerKeys.OnStatusChanged);
+        if (previousStacks == 0 && instance.Stacks > 0)
+        {
+            CombatEventBus.Shared.Publish(new StatusGainedEvent(GetComponent<Unit>(), statusId, instance.Stacks));
+            ContentStatusBehaviorRuntime.ExecuteStatus(GetComponent<Unit>(), instance, ContentTriggerKeys.OnStatusGained);
+            ContentActorBehaviorRuntime.Execute(GetComponent<Unit>(), ContentTriggerKeys.OnStatusGained, null);
+        }
     }
-
-    /// <summary>以兼容枚举添加状态。</summary>
-    public void Add(CombatStatus status, int amount = 1, int durationTurns = 0) =>
-        Add(ToStatusId(status), amount, durationTurns);
 
     /// <summary>把字符串状态设置为精确层数，并更新持续时间和来源。</summary>
     public void Set(string statusId, int amount, int durationTurns = 0, string sourceId = null)
@@ -136,18 +131,18 @@ public class CombatantState : MonoBehaviour
         Add(statusId, amount, durationTurns, sourceId);
     }
 
-    /// <summary>以兼容枚举设置状态。</summary>
-    public void Set(CombatStatus status, int amount, int durationTurns = 0) => Set(ToStatusId(status), amount, durationTurns);
-
     /// <summary>移除字符串状态及其实例数据。</summary>
     public void Remove(string statusId)
     {
-        bool changed = statuses.Remove(NormalizeStatusId(statusId));
-        if (changed) Changed?.Invoke();
+        statusId = NormalizeStatusId(statusId);
+        int previousStacks = Get(statusId);
+        bool changed = statuses.Remove(statusId);
+        if (changed)
+        {
+            Changed?.Invoke();
+            PublishStatusChanged(statusId, previousStacks, 0);
+        }
     }
-
-    /// <summary>移除兼容枚举状态。</summary>
-    public void Remove(CombatStatus status) => Remove(ToStatusId(status));
 
     /// <summary>减少字符串状态层数，耗尽时移除实例。</summary>
     public void Reduce(string statusId, int amount = 1)
@@ -157,112 +152,73 @@ public class CombatantState : MonoBehaviour
         if (value <= 0) Remove(statusId);
         else
         {
+            int previousStacks = statuses[statusId].Stacks;
             statuses[statusId].Stacks = value;
             Changed?.Invoke();
+            PublishStatusChanged(statusId, previousStacks, value);
         }
     }
 
-    /// <summary>减少兼容枚举状态层数。</summary>
-    public void Reduce(CombatStatus status, int amount = 1) => Reduce(ToStatusId(status), amount);
-
     public void ClearAll()
     {
+        KeyValuePair<string, int>[] removed = statuses.ToDictionary(item => item.Key, item => item.Value.Stacks,
+            StringComparer.Ordinal).ToArray();
         statuses.Clear();
+        usedRuleKeys.Clear();
         Changed?.Invoke();
+        foreach (KeyValuePair<string, int> item in removed) PublishStatusChanged(item.Key, item.Value, 0);
     }
 
     public void ClearNegative()
     {
         foreach (string statusId in statuses.Keys.ToArray())
         {
-            if (GetCategory(statusId) == "negative") statuses.Remove(statusId);
+            if (GetCategory(statuses[statusId]) == "negative") statuses.Remove(statusId);
         }
         Changed?.Invoke();
     }
 
-    public void ScheduleManaExhaustion(int turnCount)
+    public bool CanTakeTurn(Unit owner)
     {
-        pendingManaExhaustion = Mathf.Max(pendingManaExhaustion, turnCount);
-    }
-
-    public bool ConsumeFrozenForTurn()
-    {
-        if (!Has(CombatStatus.Frozen)) return false;
-        Remove(CombatStatus.Frozen);
-        Add(CombatStatus.Warming, 1, 1);
-        return true;
+        ContentRuleQuery query = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.CanTakeTurn, owner, null, 1));
+        return !query.Cancelled && query.Value > 0;
     }
 
     public int EffectiveActionPointMaximum(int baseMaximum)
     {
-        return Mathf.Max(0, baseMaximum - Get(CombatStatus.Exhaustion));
+        ContentRuleQuery query = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.MaximumActionPoints, GetComponent<Unit>(), null, baseMaximum));
+        return Mathf.Max(0, query.Value);
     }
 
     public void BeginTurn(Unit owner)
     {
-        PriestHealUsedThisTurn = false;
-        if (Has(CombatStatus.HeartFire)) owner.AddArmor(5);
-        if (Has(CombatStatus.BlockRetention)) Reduce(CombatStatus.BlockRetention);
-        else owner.ClearArmor();
-        if (Has(CombatStatus.NormalImmunity)) Remove(CombatStatus.NormalImmunity);
-        ContentStatusBehaviorRuntime.Execute(owner, "on_unit_turn_start");
+        CombatEventBus.Shared.Publish(new UnitTriggerEvent(owner, ContentTriggerKeys.OnUnitTurnStart));
+        ActivatedAbilityUsedThisTurn = false;
+        ContentStatusBehaviorRuntime.Execute(owner, ContentTriggerKeys.OnUnitTurnStart);
+        ContentRuleQuery retention = ContentRuleQueryRuntime.Evaluate(new ContentRuleQuery(
+            ContentRuleQueryKeys.ArmorRetention, owner, null, 0));
+        if (retention.Value <= 0) owner.ClearArmor();
     }
 
     public void EndTurn(Unit owner)
     {
-        bool resolveRaisedShield = Has(CombatStatus.RaiseShieldPending);
-        if (resolveRaisedShield) Remove(CombatStatus.RaiseShieldPending);
+        CombatEventBus.Shared.Publish(new UnitTriggerEvent(owner, ContentTriggerKeys.OnUnitTurnEnd));
+        ContentStatusBehaviorRuntime.Execute(owner, ContentTriggerKeys.OnUnitTurnEnd);
 
-        bool usedContentBehaviors = ContentStatusBehaviorRuntime.Execute(owner, "on_unit_turn_end");
-        int poison = Get(CombatStatus.Poison);
-        if (!usedContentBehaviors && poison > 0)
-        {
-            owner.TakeTypedDamage(poison, DamageType.Poison);
-            Reduce(CombatStatus.Poison, 2);
-        }
+        foreach (RuntimeStatusInstance instance in GetStatusSnapshot())
+            if (instance.Definition?.DurationPolicy == "turns") TickDuration(instance.StatusId);
 
-        int regeneration = Get(CombatStatus.Regeneration);
-        if (!usedContentBehaviors && regeneration > 0)
-        {
-            owner.Heal(regeneration);
-            Reduce(CombatStatus.Regeneration);
-        }
-
-        int corruption = Get(CombatStatus.Corruption);
-        if (!usedContentBehaviors && corruption > 0) owner.TakeTypedDamage(corruption, DamageType.Dark);
-        if (Has(CombatStatus.Cold)) Reduce(CombatStatus.Cold);
-        if (Has(CombatStatus.Broken)) Reduce(CombatStatus.Broken);
-
-        TickDuration(CombatStatus.Haze);
-        TickDuration(CombatStatus.HeartFire);
-        TickDuration(CombatStatus.Vulnerable);
-        TickDuration(CombatStatus.CannotAttack);
-        TickDuration(CombatStatus.Warming);
-        TickDuration(CombatStatus.Exhaustion);
-        TickDuration(CombatStatus.ManaExhaustion);
-
-        if (resolveRaisedShield)
-        {
-            owner.AddArmor(owner.Armor / 2);
-            Add(CombatStatus.CannotAttack, 1, 1);
-        }
-
-        if (pendingManaExhaustion > 0)
-        {
-            Set(CombatStatus.ManaExhaustion, 1, pendingManaExhaustion);
-            pendingManaExhaustion = 0;
-        }
     }
 
     public string GetSummary()
     {
         List<string> parts = new List<string>();
         foreach (RuntimeStatusInstance instance in statuses.Values.OrderBy(item => item.StatusId, StringComparer.Ordinal))
-            if (instance.Stacks > 0) parts.Add($"{StatusName(instance.StatusId)}×{instance.Stacks}");
+            if (instance.Stacks > 0) parts.Add($"{StatusName(instance)}×{instance.Stacks}");
         return parts.Count == 0 ? "暂无" : string.Join("  ", parts);
     }
-
-    private void TickDuration(CombatStatus status) => TickDuration(ToStatusId(status));
 
     /// <summary>推进一个字符串状态的持续时间并在到期时移除。</summary>
     private void TickDuration(string statusId)
@@ -273,33 +229,27 @@ public class CombatantState : MonoBehaviour
         if (instance.RemainingTurns <= 0) Remove(statusId);
     }
 
-    /// <summary>读取内容定义显示名，并为迁移期内置状态提供兼容名称。</summary>
-    private static string StatusName(string statusId)
+    /// <summary>Reads the authored display name and falls back to the stable ID.</summary>
+    /// <param name="instance">The runtime status whose definition supplies presentation data.</param>
+    /// <returns>The authored display name, legacy localized name, or stable ID.</returns>
+    private static string StatusName(RuntimeStatusInstance instance)
     {
-        if (ContentRuntime.IsLoaded && ContentRuntime.Registry.TryGetStatus(statusId, out StatusDefinition definition))
-            return definition.DisplayName;
-        if (!TryParseLegacyStatus(statusId, out CombatStatus status)) return statusId;
-        return status switch
-        {
-            CombatStatus.Sharp => "锋利", CombatStatus.Quick => "速攻",
-            CombatStatus.BlockRetention => "格挡", CombatStatus.NormalImmunity => "普通免疫",
-            CombatStatus.DodgeNextNormal => "闪避", CombatStatus.Cold => "寒冷",
-            CombatStatus.Frozen => "冻结", CombatStatus.Warming => "回暖",
-            CombatStatus.Haze => "恍惚", CombatStatus.Broken => "破损",
-            CombatStatus.Poison => "中毒", CombatStatus.Exhaustion => "力竭",
-            CombatStatus.ManaExhaustion => "魔力枯竭", CombatStatus.HeartFire => "心火",
-            CombatStatus.Regeneration => "再生", CombatStatus.Corruption => "腐化",
-            CombatStatus.Vulnerable => "易损", CombatStatus.CannotAttack => "禁攻",
-            CombatStatus.SwordCharge => "蓄力", _ => status.ToString()
-        };
+        string statusId = instance?.StatusId ?? string.Empty;
+        if (instance?.Definition != null)
+            return instance.Definition.DisplayName;
+        return statusId;
     }
 
-    /// <summary>根据状态定义的叠层策略计算新层数。</summary>
-    private static int ApplyStackingPolicy(string statusId, int current, int added)
+    /// <summary>Calculates new stacks from the definition bound to the runtime status.</summary>
+    /// <param name="instance">The runtime status being modified.</param>
+    /// <param name="current">The current stack count.</param>
+    /// <param name="added">The incoming stack count.</param>
+    /// <returns>The stack count before applying the maximum.</returns>
+    private static int ApplyStackingPolicy(RuntimeStatusInstance instance, int current, int added)
     {
-        if (ContentRuntime.IsLoaded && ContentRuntime.Registry.TryGetStatus(statusId, out StatusDefinition definition))
+        if (instance?.Definition != null)
         {
-            return definition.StackingPolicy switch
+            return instance.Definition.StackingPolicy switch
             {
                 "replace" => added,
                 "maximum" => Mathf.Max(current, added),
@@ -309,54 +259,35 @@ public class CombatantState : MonoBehaviour
         return current + added;
     }
 
-    /// <summary>根据数据库上限或旧规则限制状态层数。</summary>
-    private static int ApplyStackLimit(string statusId, int value)
+    /// <summary>Applies the bound definition's maximum or the legacy fallback cap.</summary>
+    /// <param name="instance">The runtime status being modified.</param>
+    /// <param name="value">The uncapped stack count.</param>
+    /// <returns>The capped stack count.</returns>
+    private static int ApplyStackLimit(RuntimeStatusInstance instance, int value)
     {
-        int maximum = 0;
-        if (ContentRuntime.IsLoaded && ContentRuntime.Registry.TryGetStatus(statusId, out StatusDefinition definition))
-            maximum = definition.MaximumStacks;
-        else if (TryParseLegacyStatus(statusId, out CombatStatus legacy))
-            maximum = legacy == CombatStatus.Cold ? 3 : legacy == CombatStatus.Broken ? 10 : legacy == CombatStatus.Exhaustion ? 3 : 0;
+        int maximum = instance?.Definition?.MaximumStacks ?? 0;
         return maximum > 0 ? Mathf.Min(maximum, value) : value;
     }
 
-    /// <summary>读取数据库正负面分类，并为尚未发布定义的旧状态提供兼容分类。</summary>
-    private static string GetCategory(string statusId)
+    /// <summary>Reads the bound positive/negative category with a legacy fallback.</summary>
+    /// <param name="instance">The runtime status to classify.</param>
+    /// <returns>The authored category, or a legacy positive/negative category.</returns>
+    private static string GetCategory(RuntimeStatusInstance instance)
     {
-        if (ContentRuntime.IsLoaded && ContentRuntime.Registry.TryGetStatus(statusId, out StatusDefinition definition))
-            return definition.Category;
-        return TryParseLegacyStatus(statusId, out CombatStatus legacy) && new[] {
-            CombatStatus.Cold, CombatStatus.Frozen, CombatStatus.Haze, CombatStatus.Broken,
-            CombatStatus.Poison, CombatStatus.Exhaustion, CombatStatus.ManaExhaustion,
-            CombatStatus.Corruption, CombatStatus.Vulnerable, CombatStatus.CannotAttack }.Contains(legacy)
-            ? "negative" : "positive";
-    }
-
-    /// <summary>把兼容枚举稳定转换为数据库 snake_case ID。</summary>
-    public static string ToStatusId(CombatStatus status)
-    {
-        string name = status.ToString();
-        return string.Concat(name.Select((character, index) =>
-            char.IsUpper(character) && index > 0 ? "_" + char.ToLowerInvariant(character) : char.ToLowerInvariant(character).ToString()));
+        return instance?.Definition?.Category ?? "neutral";
     }
 
     /// <summary>规范化外部状态 ID，使旧 PascalCase 和新 snake_case 指向同一实例。</summary>
     private static string NormalizeStatusId(string statusId)
     {
         if (string.IsNullOrWhiteSpace(statusId)) return string.Empty;
-        return Enum.TryParse(statusId, true, out CombatStatus legacy) ? ToStatusId(legacy) : statusId.Trim().ToLowerInvariant();
+        return statusId.Trim().ToLowerInvariant();
     }
 
-    /// <summary>尝试把 snake_case 或旧枚举名还原为迁移期状态枚举。</summary>
-    private static bool TryParseLegacyStatus(string statusId, out CombatStatus status)
+    /// <summary>Publishes a stable-ID status mutation for content triggers and diagnostics.</summary>
+    private void PublishStatusChanged(string statusId, int previousStacks, int currentStacks)
     {
-        string compact = (statusId ?? string.Empty).Replace("_", string.Empty);
-        foreach (CombatStatus candidate in Enum.GetValues(typeof(CombatStatus)))
-        {
-            if (!candidate.ToString().Equals(compact, StringComparison.OrdinalIgnoreCase)) continue;
-            status = candidate;
-            return true;
-        }
-        return Enum.TryParse(statusId, true, out status);
+        if (previousStacks == currentStacks) return;
+        CombatEventBus.Shared.Publish(new StatusChangedEvent(GetComponent<Unit>(), statusId, previousStacks, currentStacks));
     }
 }

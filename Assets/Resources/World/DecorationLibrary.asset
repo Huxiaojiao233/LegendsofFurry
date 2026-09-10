@@ -1,0 +1,670 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5c35b15b1553f141a5d12af4a90261b, type: 3}
+  m_Name: DecorationLibrary
+  m_EditorClassIdentifier: Assembly-CSharp::WorldDecorationLibrary
+  entries:
+  - id: hs.bush.01
+    category: Bushes
+    label: Bush 01
+    glyph: "\u4E1B"
+    prefab: {fileID: 7489611036903347627, guid: 47842e5154fd3a347bbe886db1953704, type: 3}
+  - id: hs.bush.02
+    category: Bushes
+    label: Bush 02
+    glyph: "\u4E1B"
+    prefab: {fileID: 3242415721819869355, guid: c31d850d00d52f04dbfbfb72a3943eab, type: 3}
+  - id: hs.bush.03
+    category: Bushes
+    label: Bush 03
+    glyph: "\u4E1B"
+    prefab: {fileID: 7718555897154034030, guid: 401172ffca1fd3a40add2c6b766732f8, type: 3}
+  - id: hs.bush.berry.blue.01
+    category: Bushes
+    label: Bush Berry Blue 01
+    glyph: "\u4E1B"
+    prefab: {fileID: 8437312953608837691, guid: 6f4ab8f074ae6a2449d3ff5ccc4d494b, type: 3}
+  - id: hs.bush.berry.red.01
+    category: Bushes
+    label: Bush Berry Red 01
+    glyph: "\u4E1B"
+    prefab: {fileID: 4613338662633581269, guid: 10d1809d372400748848a28618bffbeb, type: 3}
+  - id: hs.bush.small.01
+    category: Bushes
+    label: Bush Small 01
+    glyph: "\u4E1B"
+    prefab: {fileID: 269520269164439509, guid: 9644bcaa37888484e916d62e45113fa0, type: 3}
+  - id: hs.bush.wide.01
+    category: Bushes
+    label: Bush Wide 01
+    glyph: "\u4E1B"
+    prefab: {fileID: 1777484890831793824, guid: f4be383771aad37429d6a56e97d5d8a7, type: 3}
+  - id: hs.fern.01
+    category: Ferns
+    label: Fern 01
+    glyph: "\u8568"
+    prefab: {fileID: 7022189171076436322, guid: 04f1de202f0cbd640b4c3b26e90c3952, type: 3}
+  - id: hs.fern.02
+    category: Ferns
+    label: Fern 02
+    glyph: "\u8568"
+    prefab: {fileID: 9081562168684431516, guid: 5cd43b87fbcea054da6a152237f682b4, type: 3}
+  - id: hs.fern.03
+    category: Ferns
+    label: Fern 03
+    glyph: "\u8568"
+    prefab: {fileID: 8543006852307744980, guid: 730ef5770180616439fff51e3463d696, type: 3}
+  - id: hs.flower.blue.01
+    category: Flowers
+    label: Flower Blue 01
+    glyph: "\u82B1"
+    prefab: {fileID: 8554715729638167926, guid: d27e5f65b2d78f34f92b1f287c4c35ab, type: 3}
+  - id: hs.flower.cluster.01
+    category: Flowers
+    label: Flower Cluster 01
+    glyph: "\u82B1"
+    prefab: {fileID: 5916223554265000541, guid: 83486b2602524c04e851eeb4a8557ece, type: 3}
+  - id: hs.flower.cluster.02
+    category: Flowers
+    label: Flower Cluster 02
+    glyph: "\u82B1"
+    prefab: {fileID: 2046908362373743775, guid: 51d69b2e23e3f62409ef2d230ece8a5c, type: 3}
+  - id: hs.flower.purple.01
+    category: Flowers
+    label: Flower Purple 01
+    glyph: "\u82B1"
+    prefab: {fileID: 3411192361710799038, guid: a67c18acb75e2e845b0c9f63651df50a, type: 3}
+  - id: hs.flower.red.01
+    category: Flowers
+    label: Flower Red 01
+    glyph: "\u82B1"
+    prefab: {fileID: 1152348758596218985, guid: 63784e3b613827d4d9b959c2b9bf20dc, type: 3}
+  - id: hs.flower.white.01
+    category: Flowers
+    label: Flower White 01
+    glyph: "\u82B1"
+    prefab: {fileID: 618731945410607054, guid: 459951dc1946a3945aa97fce9054f028, type: 3}
+  - id: hs.flower.yellow.01
+    category: Flowers
+    label: Flower Yellow 01
+    glyph: "\u82B1"
+    prefab: {fileID: 6375633406141269798, guid: 6f817d4cee7ff0948b0eec7cbd71a3c2, type: 3}
+  - id: hs.grass.01
+    category: Grass
+    label: Grass 01
+    glyph: "\u8349"
+    prefab: {fileID: 7195356752596896942, guid: 8ad36d605d4db7340a16f982ebf9ee98, type: 3}
+  - id: hs.grass.02
+    category: Grass
+    label: Grass 02
+    glyph: "\u8349"
+    prefab: {fileID: 4665366301834750140, guid: c21e24ad170fad54faff0395324d3189, type: 3}
+  - id: hs.grass.03
+    category: Grass
+    label: Grass 03
+    glyph: "\u8349"
+    prefab: {fileID: 4178240832585797461, guid: 97bb65f6a9e593d43bd36812d8c1e89b, type: 3}
+  - id: hs.grass.04
+    category: Grass
+    label: Grass 04
+    glyph: "\u8349"
+    prefab: {fileID: 7677432464985328061, guid: f3c4e9bd6cb2f2d4eb90f172133e0023, type: 3}
+  - id: hs.grass.dry.01
+    category: Grass
+    label: Grass Dry 01
+    glyph: "\u8349"
+    prefab: {fileID: 2533305077919852111, guid: fea744ad5b9b01640b1184869c4bdd51, type: 3}
+  - id: hs.grass.dry.02
+    category: Grass
+    label: Grass Dry 02
+    glyph: "\u8349"
+    prefab: {fileID: 1062658256210900931, guid: 230b494ea6f78d5429cfdf9d78e0d051, type: 3}
+  - id: hs.grass.tall.01
+    category: Grass
+    label: Grass Tall 01
+    glyph: "\u8349"
+    prefab: {fileID: 179364513609657595, guid: 6309449d7d0ebb54e9ebae08b905e764, type: 3}
+  - id: hs.ground.acorn.01
+    category: GroundDetails
+    label: Ground Acorn 01
+    glyph: "\u5730"
+    prefab: {fileID: 6474010702242923970, guid: b86cdb95f686caa489dcd8184fa25b24, type: 3}
+  - id: hs.ground.leaves.01
+    category: GroundDetails
+    label: Ground Leaves 01
+    glyph: "\u5730"
+    prefab: {fileID: 4546125825469571392, guid: f2e531b81b6208740b26248a63372f7c, type: 3}
+  - id: hs.ground.leaves.02
+    category: GroundDetails
+    label: Ground Leaves 02
+    glyph: "\u5730"
+    prefab: {fileID: 1580829595572402864, guid: ee86676094eb3264c84a07d91c521e11, type: 3}
+  - id: hs.ground.mound.01
+    category: GroundDetails
+    label: Ground Mound 01
+    glyph: "\u5730"
+    prefab: {fileID: 4001607651549867278, guid: 54df1ae820a091e46aad3c01dcfcf784, type: 3}
+  - id: hs.ground.mound.02
+    category: GroundDetails
+    label: Ground Mound 02
+    glyph: "\u5730"
+    prefab: {fileID: 7355043337983877337, guid: bb5ff75941c592f418769d6f1fbe96c2, type: 3}
+  - id: hs.ground.pebbles.01
+    category: GroundDetails
+    label: Ground Pebbles 01
+    glyph: "\u5730"
+    prefab: {fileID: 8601761614849433803, guid: 8984862e26442474eb2c7ef381de6fbb, type: 3}
+  - id: hs.ground.pebbles.02
+    category: GroundDetails
+    label: Ground Pebbles 02
+    glyph: "\u5730"
+    prefab: {fileID: 277274880584547244, guid: 92725f35f4c9d884cbff39c502162773, type: 3}
+  - id: hs.ground.pebbles.03
+    category: GroundDetails
+    label: Ground Pebbles 03
+    glyph: "\u5730"
+    prefab: {fileID: 2289629352805652113, guid: 2bf9e84e0bd903e41ac666a6e63cbbd1, type: 3}
+  - id: hs.ground.pinecone.01
+    category: GroundDetails
+    label: Ground Pinecone 01
+    glyph: "\u5730"
+    prefab: {fileID: 17009126765344970, guid: 22c9a006cab3b8f478ad55f69d44cd21, type: 3}
+  - id: hs.ground.pinecone.02
+    category: GroundDetails
+    label: Ground Pinecone 02
+    glyph: "\u5730"
+    prefab: {fileID: 7828568342097336455, guid: 9d625a362ca4a10449ca98f0473ad3b8, type: 3}
+  - id: hs.ground.twigs.01
+    category: GroundDetails
+    label: Ground Twigs 01
+    glyph: "\u5730"
+    prefab: {fileID: 6667450484887444796, guid: 3ab0fa2b7eb933a47802233c055fcc07, type: 3}
+  - id: hs.ground.twigs.02
+    category: GroundDetails
+    label: Ground Twigs 02
+    glyph: "\u5730"
+    prefab: {fileID: 737566720525909680, guid: cecd02314799cd2448a42346680233fa, type: 3}
+  - id: hs.branch.01
+    category: Logs
+    label: Branch 01
+    glyph: "\u6869"
+    prefab: {fileID: 7876133581739461060, guid: 9e6c2fe096446c0479ffb852e7f3ab72, type: 3}
+  - id: hs.branch.02
+    category: Logs
+    label: Branch 02
+    glyph: "\u6869"
+    prefab: {fileID: 2764570389334411774, guid: 6b55eba8fbc0db642af69933f45d99c8, type: 3}
+  - id: hs.branch.03
+    category: Logs
+    label: Branch 03
+    glyph: "\u6869"
+    prefab: {fileID: 741084613715936875, guid: 9255ad31ca2129e4aa1173e98154146b, type: 3}
+  - id: hs.log.01
+    category: Logs
+    label: Log 01
+    glyph: "\u6869"
+    prefab: {fileID: 3820684043848271622, guid: f64c0348d5b86cd4c86f09606851a4ce, type: 3}
+  - id: hs.log.02
+    category: Logs
+    label: Log 02
+    glyph: "\u6869"
+    prefab: {fileID: 7902740749925610387, guid: 9f62079cbb0d98e4082aa04ffe78f810, type: 3}
+  - id: hs.log.half.01
+    category: Logs
+    label: Log Half 01
+    glyph: "\u6869"
+    prefab: {fileID: 3207729556713931072, guid: dca16f4cb7f33654da894ae86ce32d6d, type: 3}
+  - id: hs.log.moss.01
+    category: Logs
+    label: Log Moss 01
+    glyph: "\u6869"
+    prefab: {fileID: 6060610457552505246, guid: 5eaba635f9546184b8f932beb5b10708, type: 3}
+  - id: hs.log.moss.02
+    category: Logs
+    label: Log Moss 02
+    glyph: "\u6869"
+    prefab: {fileID: 6236398496541775341, guid: a3259f0da427681419142cd89b0ff7d8, type: 3}
+  - id: hs.roots.01
+    category: Logs
+    label: Roots 01
+    glyph: "\u6869"
+    prefab: {fileID: 8826462671502143671, guid: 8b887135b5cad20409d9302ec106c969, type: 3}
+  - id: hs.roots.02
+    category: Logs
+    label: Roots 02
+    glyph: "\u6869"
+    prefab: {fileID: 2183107864140230330, guid: 52832e7b7bc1880459ce0e942e607456, type: 3}
+  - id: hs.stump.01
+    category: Logs
+    label: Stump 01
+    glyph: "\u6869"
+    prefab: {fileID: 2673839916355919352, guid: fbfa8ca2f7cfa6d4cb073dd2d34e45d8, type: 3}
+  - id: hs.stump.02
+    category: Logs
+    label: Stump 02
+    glyph: "\u6869"
+    prefab: {fileID: 6817248608358720766, guid: f4a9e2da85b906a48bdbba488c09afb2, type: 3}
+  - id: hs.stump.moss.01
+    category: Logs
+    label: Stump Moss 01
+    glyph: "\u6869"
+    prefab: {fileID: 6851095058648406600, guid: b11329dff4942a041b2a74e92bb3b336, type: 3}
+  - id: hs.stump.tall.01
+    category: Logs
+    label: Stump Tall 01
+    glyph: "\u6869"
+    prefab: {fileID: 1346134114337716108, guid: 6abc1f742e2e29c47b7cb0cecaa7cc44, type: 3}
+  - id: hs.mushroom.brown.01
+    category: Mushrooms
+    label: Mushroom Brown 01
+    glyph: "\u83C7"
+    prefab: {fileID: 7397012398343719750, guid: 71694bb59927d8541bd393c6bbbae884, type: 3}
+  - id: hs.mushroom.brown.02
+    category: Mushrooms
+    label: Mushroom Brown 02
+    glyph: "\u83C7"
+    prefab: {fileID: 4695259221320620834, guid: c3301a254160999439a27677a9c7a5d3, type: 3}
+  - id: hs.mushroom.cluster.brown.01
+    category: Mushrooms
+    label: Mushroom Cluster Brown 01
+    glyph: "\u83C7"
+    prefab: {fileID: 7398273107191121904, guid: 843b37bba9f4399428bfbf3e021a3922, type: 3}
+  - id: hs.mushroom.cluster.red.01
+    category: Mushrooms
+    label: Mushroom Cluster Red 01
+    glyph: "\u83C7"
+    prefab: {fileID: 7116219467017204054, guid: bf4eb642a1e617f42bfac4a1c60bd7eb, type: 3}
+  - id: hs.mushroom.red.01
+    category: Mushrooms
+    label: Mushroom Red 01
+    glyph: "\u83C7"
+    prefab: {fileID: 281236679892780754, guid: 9ffbcdff593f52d42aadc5737390536d, type: 3}
+  - id: hs.mushroom.red.02
+    category: Mushrooms
+    label: Mushroom Red 02
+    glyph: "\u83C7"
+    prefab: {fileID: 6315887495504434475, guid: 621b8523fa91f8a44862811efb50a38c, type: 3}
+  - id: hs.rock.cliff.01
+    category: Rocks
+    label: Rock Cliff 01
+    glyph: "\u77F3"
+    prefab: {fileID: 4004378090064863350, guid: 0fedd3fd6834f2a47adbf829d756ae0b, type: 3}
+  - id: hs.rock.cliff.02
+    category: Rocks
+    label: Rock Cliff 02
+    glyph: "\u77F3"
+    prefab: {fileID: 3328454484692597076, guid: 9db956ffd45b44a439f0a1fdb55f9470, type: 3}
+  - id: hs.rock.flat.01
+    category: Rocks
+    label: Rock Flat 01
+    glyph: "\u77F3"
+    prefab: {fileID: 680089683330469579, guid: 19c51406a5c3ea546abdc598b4cde311, type: 3}
+  - id: hs.rock.flat.02
+    category: Rocks
+    label: Rock Flat 02
+    glyph: "\u77F3"
+    prefab: {fileID: 550056999307698158, guid: 2e522af22eba03e419f2140065ab63c5, type: 3}
+  - id: hs.rock.large.01
+    category: Rocks
+    label: Rock Large 01
+    glyph: "\u77F3"
+    prefab: {fileID: 1813112672171341890, guid: 056d2a0b302e74a46852abc8dce15281, type: 3}
+  - id: hs.rock.large.02
+    category: Rocks
+    label: Rock Large 02
+    glyph: "\u77F3"
+    prefab: {fileID: 4007997205448754394, guid: c9282abeee81fbf48ad5edee506b81a4, type: 3}
+  - id: hs.rock.large.03
+    category: Rocks
+    label: Rock Large 03
+    glyph: "\u77F3"
+    prefab: {fileID: 548750852300735645, guid: 1ecd035f4c42953448723272289b6339, type: 3}
+  - id: hs.rock.large.moss.01
+    category: Rocks
+    label: Rock Large Moss 01
+    glyph: "\u77F3"
+    prefab: {fileID: 2271111629609873378, guid: d11b2466a3d3ca44883a1e3093899891, type: 3}
+  - id: hs.rock.medium.01
+    category: Rocks
+    label: Rock Medium 01
+    glyph: "\u77F3"
+    prefab: {fileID: 1802868476678770482, guid: cc0e0bb95ee2e9e48948c5e8207dfa01, type: 3}
+  - id: hs.rock.medium.02
+    category: Rocks
+    label: Rock Medium 02
+    glyph: "\u77F3"
+    prefab: {fileID: 441076657397698415, guid: bbe9ede91edf24c4c8e202a94a1ba069, type: 3}
+  - id: hs.rock.medium.03
+    category: Rocks
+    label: Rock Medium 03
+    glyph: "\u77F3"
+    prefab: {fileID: 8250355575980501597, guid: fa067ad78a5629b44980b05224c97dfc, type: 3}
+  - id: hs.rock.medium.04
+    category: Rocks
+    label: Rock Medium 04
+    glyph: "\u77F3"
+    prefab: {fileID: 8699582435782869447, guid: 6e09f5c68dedb434ca5c2c0e447b8543, type: 3}
+  - id: hs.rock.medium.moss.01
+    category: Rocks
+    label: Rock Medium Moss 01
+    glyph: "\u77F3"
+    prefab: {fileID: 606606546965951492, guid: 600cd05bd932a414db1786df44e291fb, type: 3}
+  - id: hs.rock.medium.moss.02
+    category: Rocks
+    label: Rock Medium Moss 02
+    glyph: "\u77F3"
+    prefab: {fileID: 4772914282724956717, guid: 8f958b37b1782884fb772a3a5b61ce99, type: 3}
+  - id: hs.rock.small.01
+    category: Rocks
+    label: Rock Small 01
+    glyph: "\u77F3"
+    prefab: {fileID: 2457199969845541429, guid: 2277b98ba73227e4dbd79c2bc1e4b697, type: 3}
+  - id: hs.rock.small.02
+    category: Rocks
+    label: Rock Small 02
+    glyph: "\u77F3"
+    prefab: {fileID: 6744871132078914574, guid: dcb6abe09dbfca0408ecfe674b3fb1f4, type: 3}
+  - id: hs.rock.small.03
+    category: Rocks
+    label: Rock Small 03
+    glyph: "\u77F3"
+    prefab: {fileID: 7521245831277735930, guid: 4ed994686f0e9da4cbc933b70eaf473d, type: 3}
+  - id: hs.rock.small.04
+    category: Rocks
+    label: Rock Small 04
+    glyph: "\u77F3"
+    prefab: {fileID: 3957877280037701282, guid: 401ade2ee4b7ced4c8e5c4c02c2042f0, type: 3}
+  - id: hs.rock.small.moss.01
+    category: Rocks
+    label: Rock Small Moss 01
+    glyph: "\u77F3"
+    prefab: {fileID: 4731420487796522822, guid: ecb25ecc3021a4b4dba4579fa8f0b3ca, type: 3}
+  - id: hs.rock.small.moss.02
+    category: Rocks
+    label: Rock Small Moss 02
+    glyph: "\u77F3"
+    prefab: {fileID: 8472950945067758860, guid: 6fbe40d961f4d694ba0410456a96824f, type: 3}
+  - id: hs.tree.broken.01
+    category: Trees_Character
+    label: Tree Broken 01
+    glyph: "\u67AF"
+    prefab: {fileID: 3206930729659817756, guid: 9437d5b7e5ef2024a84966a18b2bf453, type: 3}
+  - id: hs.tree.burnt.01
+    category: Trees_Character
+    label: Tree Burnt 01
+    glyph: "\u67AF"
+    prefab: {fileID: 4497139917098411194, guid: 252ccada18a3c4a408e5e3755a296082, type: 3}
+  - id: hs.tree.deadoak.01
+    category: Trees_Character
+    label: Tree DeadOak 01
+    glyph: "\u67AF"
+    prefab: {fileID: 5713158759816990852, guid: 6d637faee175c0a498f19f6d3276c092, type: 3}
+  - id: hs.tree.deadpine.01
+    category: Trees_Character
+    label: Tree DeadPine 01
+    glyph: "\u67AF"
+    prefab: {fileID: 6717820012256547932, guid: 01f211baea4aa4e489e900f4de571c25, type: 3}
+  - id: hs.tree.fallen.01
+    category: Trees_Character
+    label: Tree Fallen 01
+    glyph: "\u67AF"
+    prefab: {fileID: 3045791897073766914, guid: a02771bedfceba844a45628e60ae2abf, type: 3}
+  - id: hs.tree.hollow.01
+    category: Trees_Character
+    label: Tree Hollow 01
+    glyph: "\u67AF"
+    prefab: {fileID: 2392577057250353452, guid: 170809723fb75e045a15c1aa9f37f266, type: 3}
+  - id: hs.tree.leaning.01
+    category: Trees_Character
+    label: Tree Leaning 01
+    glyph: "\u67AF"
+    prefab: {fileID: 8592133250910544701, guid: 7a669da697533de4c8b89a972fa31ba0, type: 3}
+  - id: hs.tree.multitrunk.01
+    category: Trees_Character
+    label: Tree MultiTrunk 01
+    glyph: "\u67AF"
+    prefab: {fileID: 932259088921106242, guid: 6da344c0586f00c44b6295b1bfcbafe6, type: 3}
+  - id: hs.tree.twisted.01
+    category: Trees_Character
+    label: Tree Twisted 01
+    glyph: "\u67AF"
+    prefab: {fileID: 5095874968909996484, guid: 620525f534d38fb4abe54933da085dcf, type: 3}
+  - id: hs.sapling.pine.01
+    category: Trees_Conifers
+    label: Sapling Pine 01
+    glyph: "\u9488"
+    prefab: {fileID: 8381857785550124178, guid: c9506ccada1d1a047bf4a6976f12c088, type: 3}
+  - id: hs.tree.bluespruce.01
+    category: Trees_Conifers
+    label: Tree BlueSpruce 01
+    glyph: "\u9488"
+    prefab: {fileID: 6781530148178682677, guid: db41475b191cbfa4595704af1463d5f2, type: 3}
+  - id: hs.tree.cedar.01
+    category: Trees_Conifers
+    label: Tree Cedar 01
+    glyph: "\u9488"
+    prefab: {fileID: 6298641512504000323, guid: 85c5633a8fc2e254fb4c4253cfbf965f, type: 3}
+  - id: hs.tree.cypress.01
+    category: Trees_Conifers
+    label: Tree Cypress 01
+    glyph: "\u9488"
+    prefab: {fileID: 6491174448384328464, guid: 9d5967ecfaa25ae4f94e25691814f1ac, type: 3}
+  - id: hs.tree.douglasfir.01
+    category: Trees_Conifers
+    label: Tree DouglasFir 01
+    glyph: "\u9488"
+    prefab: {fileID: 1965401451784769555, guid: c94c7a2646282ca468210fb4d41d538b, type: 3}
+  - id: hs.tree.fir.01
+    category: Trees_Conifers
+    label: Tree Fir 01
+    glyph: "\u9488"
+    prefab: {fileID: 1651888816652711116, guid: 4decf5d82fd9f004b87f67a0c5c67c58, type: 3}
+  - id: hs.tree.hemlock.01
+    category: Trees_Conifers
+    label: Tree Hemlock 01
+    glyph: "\u9488"
+    prefab: {fileID: 8360071186649223743, guid: 3470117f474fcd04384ac61800438632, type: 3}
+  - id: hs.tree.juniper.01
+    category: Trees_Conifers
+    label: Tree Juniper 01
+    glyph: "\u9488"
+    prefab: {fileID: 258168829400776185, guid: 8a7160a2b4772044689e6dad390277ad, type: 3}
+  - id: hs.tree.larch.01
+    category: Trees_Conifers
+    label: Tree Larch 01
+    glyph: "\u9488"
+    prefab: {fileID: 2796113155637402947, guid: f28eaf74df66cbb418ac6b0a6e27c464, type: 3}
+  - id: hs.tree.norwayspruce.01
+    category: Trees_Conifers
+    label: Tree NorwaySpruce 01
+    glyph: "\u9488"
+    prefab: {fileID: 5991141444058923431, guid: 62c7dbb95f08e8e48b950746b9f579a6, type: 3}
+  - id: hs.tree.redpine.01
+    category: Trees_Conifers
+    label: Tree RedPine 01
+    glyph: "\u9488"
+    prefab: {fileID: 7530302678342615284, guid: 558647de3c69ca941b906a50be5ab0b2, type: 3}
+  - id: hs.tree.scotspine.01
+    category: Trees_Conifers
+    label: Tree ScotsPine 01
+    glyph: "\u9488"
+    prefab: {fileID: 1030283110053945812, guid: f230439699c0f2241bc0ca9c48912a01, type: 3}
+  - id: hs.tree.whitepine.01
+    category: Trees_Conifers
+    label: Tree WhitePine 01
+    glyph: "\u9488"
+    prefab: {fileID: 4668312313962313515, guid: ac59abdd3ad57f74daeb291c3cf28b60, type: 3}
+  - id: hs.tree.yew.01
+    category: Trees_Conifers
+    label: Tree Yew 01
+    glyph: "\u9488"
+    prefab: {fileID: 6407092845972163800, guid: a5b20b56a6a1df84897e052f4b76afd0, type: 3}
+  - id: hs.sapling.birch.01
+    category: Trees_Deciduous
+    label: Sapling Birch 01
+    glyph: "\u9614"
+    prefab: {fileID: 3441429548586179239, guid: 51554dafd5d60e0469326d10cd5b1cd5, type: 3}
+  - id: hs.sapling.oak.01
+    category: Trees_Deciduous
+    label: Sapling Oak 01
+    glyph: "\u9614"
+    prefab: {fileID: 1411962030666175992, guid: 5223533fea20dbf4ba961a2804d33799, type: 3}
+  - id: hs.sapling.oak.02
+    category: Trees_Deciduous
+    label: Sapling Oak 02
+    glyph: "\u9614"
+    prefab: {fileID: 9070669459650848013, guid: 25b3820a179f1734f86c7ae35c7935e0, type: 3}
+  - id: hs.tree.alder.01
+    category: Trees_Deciduous
+    label: Tree Alder 01
+    glyph: "\u9614"
+    prefab: {fileID: 64351000077607764, guid: 6ac384a002fd4fd4caa194f620ab90ab, type: 3}
+  - id: hs.tree.ancientoak.01
+    category: Trees_Deciduous
+    label: Tree AncientOak 01
+    glyph: "\u9614"
+    prefab: {fileID: 3298936296991989654, guid: efb4ccc0a536dc849979da24a23614c9, type: 3}
+  - id: hs.tree.ash.01
+    category: Trees_Deciduous
+    label: Tree Ash 01
+    glyph: "\u9614"
+    prefab: {fileID: 7439518148094627430, guid: badb35e222962c64ba15a80358c83edd, type: 3}
+  - id: hs.tree.aspen.01
+    category: Trees_Deciduous
+    label: Tree Aspen 01
+    glyph: "\u9614"
+    prefab: {fileID: 5281891129858290466, guid: dbd14efb9071c7440b3be91b39e5c301, type: 3}
+  - id: hs.tree.beech.01
+    category: Trees_Deciduous
+    label: Tree Beech 01
+    glyph: "\u9614"
+    prefab: {fileID: 3399259423582784125, guid: 3af91e7f073b377419ed39b1583ba673, type: 3}
+  - id: hs.tree.chestnut.01
+    category: Trees_Deciduous
+    label: Tree Chestnut 01
+    glyph: "\u9614"
+    prefab: {fileID: 8790565338611242339, guid: 6c945d6bcecb1454cab0d9a0485bb4a2, type: 3}
+  - id: hs.tree.elm.01
+    category: Trees_Deciduous
+    label: Tree Elm 01
+    glyph: "\u9614"
+    prefab: {fileID: 408690831887352090, guid: aba451615d42adc45bab3cdc14eb7a4a, type: 3}
+  - id: hs.tree.hornbeam.01
+    category: Trees_Deciduous
+    label: Tree Hornbeam 01
+    glyph: "\u9614"
+    prefab: {fileID: 8556938117376508349, guid: b377787f5d6f1f249ba044856b7265c8, type: 3}
+  - id: hs.tree.linden.01
+    category: Trees_Deciduous
+    label: Tree Linden 01
+    glyph: "\u9614"
+    prefab: {fileID: 7498846287674441023, guid: 778adab70e5b55f46b57d872c33648eb, type: 3}
+  - id: hs.tree.maple.01
+    category: Trees_Deciduous
+    label: Tree Maple 01
+    glyph: "\u9614"
+    prefab: {fileID: 8492859656932813361, guid: 365ca12679c6bae4c86966ce3c34d876, type: 3}
+  - id: hs.tree.oak.01
+    category: Trees_Deciduous
+    label: Tree Oak 01
+    glyph: "\u9614"
+    prefab: {fileID: 5259285450977025238, guid: d9fa08ec4b70e9449a84edc7367e9597, type: 3}
+  - id: hs.tree.paperbirch.01
+    category: Trees_Deciduous
+    label: Tree PaperBirch 01
+    glyph: "\u9614"
+    prefab: {fileID: 7768397750987709062, guid: fc61efc21721ae646a621d0a7e517fd3, type: 3}
+  - id: hs.tree.poplar.01
+    category: Trees_Deciduous
+    label: Tree Poplar 01
+    glyph: "\u9614"
+    prefab: {fileID: 9072793884047116144, guid: 96c41ac27fb51644db8c96bdfe753b2b, type: 3}
+  - id: hs.tree.redmaple.01
+    category: Trees_Deciduous
+    label: Tree RedMaple 01
+    glyph: "\u9614"
+    prefab: {fileID: 6791651002682524690, guid: 2a00bb4b9f101fd46b505347e8389ff2, type: 3}
+  - id: hs.tree.redoak.01
+    category: Trees_Deciduous
+    label: Tree RedOak 01
+    glyph: "\u9614"
+    prefab: {fileID: 6128886629300507695, guid: 0d39822ad59dfff4196c128792a093be, type: 3}
+  - id: hs.tree.silverbirch.01
+    category: Trees_Deciduous
+    label: Tree SilverBirch 01
+    glyph: "\u9614"
+    prefab: {fileID: 3351043124538130972, guid: 106f7e1faa3c7b347b02da24373ac93b, type: 3}
+  - id: hs.tree.sugarmaple.01
+    category: Trees_Deciduous
+    label: Tree SugarMaple 01
+    glyph: "\u9614"
+    prefab: {fileID: 5446425816800117654, guid: 250abc73b7415584db1bcbe139384652, type: 3}
+  - id: hs.tree.whiteoak.01
+    category: Trees_Deciduous
+    label: Tree WhiteOak 01
+    glyph: "\u9614"
+    prefab: {fileID: 3514808502026364014, guid: ef98744db51004f44950b3e7b56ba6ff, type: 3}
+  - id: hs.tree.willow.01
+    category: Trees_Deciduous
+    label: Tree Willow 01
+    glyph: "\u9614"
+    prefab: {fileID: 832933361184208327, guid: 4da92338d86ca5f438f3874f5ec8e05f, type: 3}
+  - id: hs.tree.apple.01
+    category: Trees_Fruit
+    label: Tree Apple 01
+    glyph: "\u679C"
+    prefab: {fileID: 9121375505994822857, guid: 3c7d930edf0065a4b824cb597969818a, type: 3}
+  - id: hs.tree.banana.01
+    category: Trees_Fruit
+    label: Tree Banana 01
+    glyph: "\u679C"
+    prefab: {fileID: 675695827968390481, guid: 748369baaee385a42b89bf3a1145828c, type: 3}
+  - id: hs.tree.coconut.01
+    category: Trees_Fruit
+    label: Tree Coconut 01
+    glyph: "\u679C"
+    prefab: {fileID: 1815539785056872524, guid: 9b700889393b45a40a599172aa434f8a, type: 3}
+  - id: hs.water.lilypads.01
+    category: Water
+    label: Water LilyPads 01
+    glyph: "\u6C34"
+    prefab: {fileID: 2353706826363865153, guid: 521085d70e7b32e4992ec0bf8d580722, type: 3}
+  - id: hs.water.plants.01
+    category: Water
+    label: Water Plants 01
+    glyph: "\u6C34"
+    prefab: {fileID: 618065749685278767, guid: fd64b38de3229f145a75b18d568fb598, type: 3}
+  - id: hs.water.pond.01
+    category: Water
+    label: Water Pond 01
+    glyph: "\u6C34"
+    prefab: {fileID: 9013582290294966189, guid: 51c60cb7fa78c7741a40efe5dbfc3eac, type: 3}
+  - id: hs.water.reeds.01
+    category: Water
+    label: Water Reeds 01
+    glyph: "\u6C34"
+    prefab: {fileID: 2010669326754641029, guid: 97e72e23a4850d541a16a54b728d1d5a, type: 3}
+  - id: hs.water.riverrock.01
+    category: Water
+    label: Water RiverRock 01
+    glyph: "\u6C34"
+    prefab: {fileID: 1815441828751663194, guid: 5def966437daf0242b827556e083f3a5, type: 3}
+  - id: hs.water.stream.01
+    category: Water
+    label: Water Stream 01
+    glyph: "\u6C34"
+    prefab: {fileID: 5985951925461718806, guid: 865081c6a7e08a74982a529ca0b0a19d, type: 3}
+  - id: hs.water.waterfall.01
+    category: Water
+    label: Water Waterfall 01
+    glyph: "\u6C34"
+    prefab: {fileID: 3778292190466475369, guid: b729a9db7b213a549ae5e9b3edb67c88, type: 3}

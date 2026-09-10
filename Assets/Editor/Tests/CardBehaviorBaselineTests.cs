@@ -20,7 +20,7 @@ public sealed class CardBehaviorBaselineTests
     public void CurrentPublishedContentPassesBuildGate()
     {
         ContentPackage package = ContentBuildValidator.ValidatePublishedContent();
-        Assert.That(package.Cards, Has.Count.EqualTo(66));
+        Assert.That(package.Cards, Has.Count.EqualTo(79));
         Assert.That(package.ClassProfiles, Has.Count.EqualTo(5));
     }
 
@@ -58,18 +58,22 @@ public sealed class CardBehaviorBaselineTests
     [Test]
     public void StatusStackCapsAndColdConversionStayStable()
     {
+        if (!ContentRuntime.IsLoaded)
+            ContentRuntime.BindComposedSnapshotForEditorTests();
+
         UnityEngine.GameObject owner = new UnityEngine.GameObject("CombatantStateBaselineOwner");
         try
         {
-            CombatantState state = owner.AddComponent<CombatantState>();
-            state.Add(CombatStatus.Broken, 50);
-            state.Add(CombatStatus.Exhaustion, 50);
-            state.Add(CombatStatus.Cold, 3);
+            Unit unit = owner.AddComponent<Unit>();
+            CombatantState state = unit.State;
+            state.Add("broken", 50);
+            state.Add("exhaustion", 50);
+            state.Add("cold", 3);
 
-            Assert.That(state.Get(CombatStatus.Broken), Is.EqualTo(10));
-            Assert.That(state.Get(CombatStatus.Exhaustion), Is.EqualTo(3));
-            Assert.That(state.Has(CombatStatus.Cold), Is.False);
-            Assert.That(state.Get(CombatStatus.Frozen), Is.EqualTo(1));
+            Assert.That(state.Get("broken"), Is.EqualTo(10));
+            Assert.That(state.Get("exhaustion"), Is.EqualTo(3));
+            Assert.That(state.Has("cold"), Is.False);
+            Assert.That(state.Get("frozen"), Is.EqualTo(1));
         }
         finally
         {
@@ -83,22 +87,39 @@ public sealed class CardBehaviorBaselineTests
     [Test]
     public void PublishedDevelopmentPackageLoadsIntoRuntimeRegistry()
     {
-        string contentRoot = Path.Combine(UnityEngine.Application.dataPath, "StreamingAssets", "Content");
-        ContentPackage package = ContentPackageLoader.LoadFromDirectory(contentRoot);
+        ContentPackage package = ContentRuntime.LoadComposedSnapshot().Package;
         ContentRegistry registry = new ContentRegistry(package);
 
         Assert.That(package.SchemaVersion, Is.EqualTo(ContentPackageLoader.SupportedSchemaVersion));
         Assert.That(package.ContentVersion, Is.Not.Empty);
         Assert.That(registry.GetCard("hit_01").DisplayName, Is.EqualTo("爪击"));
-        Assert.That(registry.Cards, Has.Count.EqualTo(66));
+        Assert.That(registry.Cards, Has.Count.EqualTo(79));
         Assert.That(registry.GetDeck("planner_test").IsTestDeck, Is.True);
-        Assert.That(registry.Statuses, Has.Count.EqualTo(20));
+        Assert.That(registry.Statuses, Has.Count.EqualTo(24));
+        Assert.That(registry.AiProfiles.Select(item => item.AiProfileId), Is.EquivalentTo(
+            new[] { "general", "aggressive", "cautious", "kiting", "desperate" }));
+        UnitDefinition slime = registry.GetUnit("slime");
+        Assert.That(slime.UnitKind, Is.EqualTo("monster"));
+        Assert.That(slime.InitialHealth, Is.EqualTo(20));
+        Assert.That(slime.DeckId, Is.EqualTo("slime_standard"));
+        Assert.That(slime.Capabilities, Does.Contain("wading"));
+        UnitDefinition taigao = registry.GetUnit("taigao");
+        Assert.That(taigao.IsBoss && taigao.Recruitable && taigao.CanJoinParty, Is.True);
+        Assert.That(taigao.BossPhases, Has.Count.EqualTo(2));
+        Assert.That(taigao.BossPhases[1].AiProfileId, Is.EqualTo("desperate"));
+        Assert.That(taigao.BossPhases[1].AiOverrides.KillWeight, Is.EqualTo(2f));
+        Assert.That(float.IsNaN(taigao.BossPhases[1].AiOverrides.AttackWeight), Is.True);
+        Assert.That(registry.Statuses.Single(item => item.StatusId == "wet").DisplayName, Is.EqualTo("潮湿"));
+        Assert.That(registry.Statuses.Single(item => item.StatusId == "wet").ApplyOnTerrainIds,
+            Does.Contain("base.water"));
+        Assert.That(registry.GetDeck("slime_standard").Entries.Sum(item => item.Amount), Is.EqualTo(18));
+        Assert.That(registry.GetCard("slime_charge").Tags, Does.Contain("attack"));
         Assert.That(registry.ClassProfiles, Has.Count.EqualTo(5));
         Assert.That(registry.GameSettings.HandLimit, Is.EqualTo(10));
-        Assert.That(registry.ClassProfiles.Single(item => item.ClassId == "ranger")
-            .GetTraitInt("bow_range_bonus"), Is.EqualTo(1));
-        Assert.That(registry.ClassProfiles.Single(item => item.ClassId == "priest")
-            .GetTraitBool("revive_available"), Is.True);
+        Assert.That(registry.ClassProfiles.Single(item => item.ClassId == "ranger").Behaviors
+            .Any(item => item.TriggerKey == ContentRuleQueryKeys.TargetRange), Is.True);
+        Assert.That(registry.ClassProfiles.Single(item => item.ClassId == "priest").Behaviors
+            .Any(item => item.TriggerKey == ContentRuleQueryKeys.LethalRecovery), Is.True);
     }
 
     /// <summary>
@@ -107,8 +128,7 @@ public sealed class CardBehaviorBaselineTests
     [Test]
     public void PublishedCardCreatesLegacyViewWithoutLosingDefinition()
     {
-        string contentRoot = Path.Combine(UnityEngine.Application.dataPath, "StreamingAssets", "Content");
-        ContentRegistry registry = new ContentRegistry(ContentPackageLoader.LoadFromDirectory(contentRoot));
+        ContentRegistry registry = new ContentRegistry(ContentRuntime.LoadComposedSnapshot().Package);
         CardDefinition definition = registry.GetCard("hit_01");
 
         CardInstance instance = new CardInstance(definition);
@@ -126,25 +146,23 @@ public sealed class CardBehaviorBaselineTests
     [Test]
     public void PublishedPlannerDeckExpandsToRuntimeCardInstances()
     {
-        string contentRoot = Path.Combine(UnityEngine.Application.dataPath, "StreamingAssets", "Content");
-        ContentRegistry registry = new ContentRegistry(ContentPackageLoader.LoadFromDirectory(contentRoot));
+        ContentRegistry registry = new ContentRegistry(ContentRuntime.LoadComposedSnapshot().Package);
 
         IReadOnlyList<CardInstance> instances = ContentDeckFactory.CreateInstances(registry, "planner_test");
 
-        Assert.That(instances, Has.Count.EqualTo(66));
+        Assert.That(instances, Has.Count.EqualTo(65));
         Assert.That(instances.Any(instance => instance.Definition.CardId == "hit_01"), Is.True);
         Assert.That(instances.All(instance => instance.Definition != null), Is.True);
     }
 
-    /// <summary>验证正式发布包全部 66 张卡都能通过运行时能力预检，且所有可打出卡都有可执行入口。</summary>
+    /// <summary>验证正式发布包全部启用卡都能通过运行时能力预检，且所有可打出卡都有可执行入口。</summary>
     [Test]
     public void PublishedFullCardCatalogPassesRuntimeSmokeValidation()
     {
-        string contentRoot = Path.Combine(UnityEngine.Application.dataPath, "StreamingAssets", "Content");
-        ContentPackage package = ContentPackageLoader.LoadFromDirectory(contentRoot);
+        ContentPackage package = ContentRuntime.LoadComposedSnapshot().Package;
 
         Assert.DoesNotThrow(() => ContentRuntimeCapabilityValidator.ValidateOrThrow(package));
-        Assert.That(package.Cards, Has.Count.EqualTo(66));
+        Assert.That(package.Cards, Has.Count.EqualTo(79));
         foreach (CardDefinition card in package.Cards.Where(card => card.Enabled && !card.Unplayable))
         {
             Assert.That(ContentCardEffectExecutor.CanExecuteOnPlay(card), Is.True,
@@ -156,8 +174,7 @@ public sealed class CardBehaviorBaselineTests
     [Test]
     public void PublishedCurseCardsExposeExecutableLifecycleTriggers()
     {
-        string contentRoot = Path.Combine(UnityEngine.Application.dataPath, "StreamingAssets", "Content");
-        ContentRegistry registry = new ContentRegistry(ContentPackageLoader.LoadFromDirectory(contentRoot));
+        ContentRegistry registry = new ContentRegistry(ContentRuntime.LoadComposedSnapshot().Package);
 
         Assert.That(ContentCardEffectExecutor.CanExecuteTrigger(registry.GetCard("crystal_backlash"), "on_draw"), Is.True);
         Assert.That(ContentCardEffectExecutor.CanExecuteTrigger(registry.GetCard("crystal_shatter"), "on_turn_end_in_hand"), Is.True);
@@ -184,8 +201,7 @@ public sealed class CardBehaviorBaselineTests
             source.SetFaction(UnitFaction.Player);
             target.SetFaction(UnitFaction.Enemy);
 
-            string contentRoot = Path.Combine(UnityEngine.Application.dataPath, "StreamingAssets", "Content");
-            CardDefinition definition = ContentPackageLoader.LoadFromDirectory(contentRoot).Cards
+            CardDefinition definition = ContentRuntime.LoadComposedSnapshot().Package.Cards
                 .Single(card => card.CardId == "hit_01");
             CardPlayResult result = new CardPlayResult();
             ContentCardExecutionContext context = new ContentCardExecutionContext(
@@ -208,6 +224,109 @@ public sealed class CardBehaviorBaselineTests
         }
     }
 
+    /// <summary>验证战士开局牌库同时包含基础牌、单手剑从属和盾牌从属，从而能打出一局装备完整的战斗。</summary>
+    [Test]
+    public void WarriorStartingDeckIncludesBaseWeaponAndOffhandCards()
+    {
+        UnityEngine.Random.InitState(7);
+        ContentRegistry registry = LoadPublishedRegistry();
+        ClassProfileDefinition warrior = registry.ClassProfiles.Single(item => item.ClassId == "warrior");
+
+        List<CardInstance> deck = StartingDeckBuilder.Build(warrior, registry);
+
+        Assert.That(CountCard(deck, "hit_01"), Is.EqualTo(3));
+        Assert.That(CountCard(deck, "block_01"), Is.EqualTo(3));
+        Assert.That(CountCard(deck, "run_01"), Is.EqualTo(3));
+        Assert.That(CountCard(deck, "heal_01"), Is.EqualTo(1));
+        Assert.That(deck.Count(card => card.Definition.Pools.Any(pool => pool.PoolId == "sword")), Is.EqualTo(3));
+        Assert.That(deck.Count(card => card.Definition.Pools.Any(pool => pool.PoolId == "shield")), Is.EqualTo(3));
+        Assert.That(deck, Has.Count.EqualTo(16));
+    }
+
+    /// <summary>验证双手武器在没有副手时抽 6 张从属，宝物槽每场放入水晶球自己的鉴定牌。</summary>
+    [Test]
+    public void MageStartingDeckDrawsTwoHandedStaffAndTreasureCards()
+    {
+        UnityEngine.Random.InitState(11);
+        ContentRegistry registry = LoadPublishedRegistry();
+        ClassProfileDefinition mage = registry.ClassProfiles.Single(item => item.ClassId == "mage");
+
+        List<CardInstance> deck = StartingDeckBuilder.Build(mage, registry);
+
+        Assert.That(deck.Count(card => card.Definition.Pools.Any(pool => pool.PoolId == "staff")), Is.EqualTo(6));
+        Assert.That(deck.Count(card => card.Definition.CardId == EquipmentAppraisal.CardIdFor("crystal_ball")), Is.EqualTo(1));
+        Assert.That(deck, Has.Count.EqualTo(17));
+    }
+
+    /// <summary>验证五职业都能从发布包生成非空牌库，且每张可打出卡都有 on_play 入口。</summary>
+    [Test]
+    public void AllClassStartingDecksArePlayableFromPublishedContent()
+    {
+        ContentRegistry registry = LoadPublishedRegistry();
+        foreach (ClassProfileDefinition profile in registry.ClassProfiles.Where(item => item.Enabled))
+        {
+            List<CardInstance> deck = StartingDeckBuilder.Build(profile, registry);
+            Assert.That(deck, Has.Count.GreaterThanOrEqualTo(10), profile.ClassId);
+            foreach (CardInstance instance in deck.Where(card => !card.Definition.Unplayable))
+            {
+                Assert.That(ContentCardEffectExecutor.CanExecuteOnPlay(instance.Definition), Is.True,
+                    $"{profile.ClassId} 的 {instance.Definition.CardId} 缺少 on_play。");
+            }
+        }
+    }
+
+    /// <summary>验证基础、武器、装备里一组不依赖牌区交互的卡可以在单位上结算，保证加载内容包后能实际打出。</summary>
+    [Test]
+    public void BaseWeaponAndEquipmentCardsResolveOnPlayWithoutCardIdBranches()
+    {
+        string[] cardIds =
+        {
+            "hit_01", "block_01", "run_01", "heal_01",
+            "sword_thrust", "shield_protect", "bow_shot",
+            "staff_fireball", "staff_swing", "scepter_heal", "scepter_tap", "dagger_thrust",
+            "cloak_worn"
+        };
+        ContentRegistry registry = LoadPublishedRegistry();
+        UnityEngine.GameObject sourceObject = new UnityEngine.GameObject("PlayableSource");
+        UnityEngine.GameObject targetObject = new UnityEngine.GameObject("PlayableTarget");
+        sourceObject.SetActive(false);
+        targetObject.SetActive(false);
+        try
+        {
+            Unit source = sourceObject.AddComponent<Unit>();
+            Unit target = targetObject.AddComponent<Unit>();
+            source.ConfigureCombatant("来源", 30, 1, 1);
+            target.ConfigureCombatant("目标", 30, 1, 1);
+            source.SetFaction(UnitFaction.Player);
+            target.SetFaction(UnitFaction.Enemy);
+            foreach (string cardId in cardIds)
+            {
+                CardDefinition definition = registry.GetCard(cardId);
+                CardPlayResult result = new CardPlayResult();
+                ContentCardExecutionContext context = new ContentCardExecutionContext(
+                    new CardInstance(definition), source, target, null, null, null, null, result, false);
+                Assert.That(ContentCardEffectExecutor.TryExecuteOnPlay(context), Is.True, cardId);
+            }
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(sourceObject);
+            UnityEngine.Object.DestroyImmediate(targetObject);
+        }
+    }
+
+    /// <summary>加载引擎桩与 Content/Packs 合成后的当前内容。</summary>
+    private static ContentRegistry LoadPublishedRegistry()
+    {
+        return new ContentRegistry(ContentRuntime.LoadComposedSnapshot().Package);
+    }
+
+    /// <summary>统计牌库中指定卡牌 ID 的张数。</summary>
+    private static int CountCard(IEnumerable<CardInstance> deck, string cardId)
+    {
+        return deck.Count(card => card.Definition.CardId == cardId);
+    }
+
     /// <summary>
     /// 验证治疗、护甲、抽牌、免费移动和结束回合均通过同一行为序列执行并写入共享结果。
     /// </summary>
@@ -224,7 +343,7 @@ public sealed class CardBehaviorBaselineTests
             Unit target = targetObject.AddComponent<Unit>();
             source.ConfigureCombatant("来源", 20, 1, 1);
             target.ConfigureCombatant("目标", 20, 1, 1);
-            target.TakeTypedDamage(5, DamageType.True, source, false);
+            target.TakeTypedDamage(5, DamageType.Direct, source, false);
             RecordingCardDrawService drawService = new RecordingCardDrawService();
             CardDefinition definition = CreatePhaseTwoEffectSequenceCard();
             CardPlayResult result = new CardPlayResult();
@@ -414,7 +533,7 @@ public sealed class CardBehaviorBaselineTests
             Unit target = targetObject.AddComponent<Unit>();
             source.ConfigureCombatant("来源", 20, 1, 1);
             target.ConfigureCombatant("目标", 10, 1, 1);
-            target.State.Add(CombatStatus.Poison, 3);
+            target.State.Add("poison", 3);
             ContentCardExecutionContext context = new ContentCardExecutionContext(
                 new CardInstance(new CardDefinition { CardId = "expression_test" }),
                 source,
@@ -544,6 +663,7 @@ public sealed class CardBehaviorBaselineTests
     {
         CardDefinition validCard = CreateConditionalAreaDamageCard();
         ContentPackage package = new ContentPackage();
+        package.Rarities.Add(new RarityDefinition { RarityId = "gray" });
         package.Cards.Add(validCard);
 
         Assert.DoesNotThrow(() => ContentRuntimeCapabilityValidator.ValidateOrThrow(package));
@@ -594,7 +714,7 @@ public sealed class CardBehaviorBaselineTests
             CombatantState state = ownerObject.AddComponent<CombatantState>();
             state.Add("poison", 3, 2, "test.card");
             RuntimeStatusInstance instance = state.GetStatusSnapshot().Single();
-            Assert.That(state.Get(CombatStatus.Poison), Is.EqualTo(3));
+            Assert.That(state.Get("poison"), Is.EqualTo(3));
             Assert.That(instance.RemainingTurns, Is.EqualTo(2));
             Assert.That(instance.SourceId, Is.EqualTo("test.card"));
             state.Reduce("poison", 2);
@@ -917,6 +1037,8 @@ public sealed class CardBehaviorBaselineTests
 
         /// <summary>保存免费打牌交互完成回调。</summary>
         public void PlayTopCardsForFree(int count, System.Action onComplete) => completion = onComplete;
+
+        public bool AddCardToHandOrDiscard(CardInstance instance) => instance != null;
     }
 
     /// <summary>

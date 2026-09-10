@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using LegendsOfFurry.Content.Contracts;
 
@@ -14,6 +15,12 @@ public sealed class ContentRegistry
     private readonly Dictionary<string, StatusDefinition> statuses;
     private readonly Dictionary<string, DeckDefinition> decks;
     private readonly Dictionary<string, ClassProfileDefinition> classProfiles;
+    private readonly Dictionary<string, CardPoolDefinition> cardPools;
+    private readonly Dictionary<string, RarityDefinition> rarities;
+    private readonly Dictionary<string, AssetDefinition> assets;
+    private readonly Dictionary<string, UnitDefinition> units;
+    private readonly Dictionary<string, AiProfileDefinition> aiProfiles;
+    private readonly Dictionary<string, EquipmentDefinition> equipment;
 
     /// <summary>
     /// 从经过校验的内容包构建不可变索引；重复 ID 会立即抛出异常而不是覆盖。
@@ -27,10 +34,16 @@ public sealed class ContentRegistry
         }
 
         Package = package;
-        cards = package.Cards.Where(item => item.Enabled).ToDictionary(item => item.CardId, StringComparer.Ordinal);
-        statuses = package.Statuses.Where(item => item.Enabled).ToDictionary(item => item.StatusId, StringComparer.Ordinal);
-        decks = package.Decks.Where(item => item.Enabled).ToDictionary(item => item.DeckId, StringComparer.Ordinal);
-        classProfiles = package.ClassProfiles.Where(item => item.Enabled).ToDictionary(item => item.ClassId, StringComparer.Ordinal);
+        cards = BuildIndex(package.Cards, item => item.Enabled, ContentDefinitionKinds.Card);
+        statuses = BuildIndex(package.Statuses, item => item.Enabled, ContentDefinitionKinds.Status);
+        decks = BuildIndex(package.Decks, item => item.Enabled, ContentDefinitionKinds.Deck);
+        classProfiles = BuildIndex(package.ClassProfiles, item => item.Enabled, ContentDefinitionKinds.Class);
+        cardPools = BuildIndex(package.CardPools, item => item.Enabled, ContentDefinitionKinds.CardPool);
+        rarities = BuildIndex(package.Rarities, _ => true, ContentDefinitionKinds.Rarity);
+        assets = BuildIndex(package.Assets, _ => true, ContentDefinitionKinds.Asset);
+        units = BuildIndex(package.Units, item => item.Enabled, ContentDefinitionKinds.Unit);
+        aiProfiles = BuildIndex(package.AiProfiles, item => item.Enabled, ContentDefinitionKinds.AiProfile);
+        equipment = BuildIndex(package.Equipment, item => item.Enabled, ContentDefinitionKinds.Equipment);
     }
 
     public ContentPackage Package { get; }
@@ -38,6 +51,12 @@ public sealed class ContentRegistry
     public IReadOnlyCollection<StatusDefinition> Statuses => statuses.Values;
     public IReadOnlyCollection<DeckDefinition> Decks => decks.Values;
     public IReadOnlyCollection<ClassProfileDefinition> ClassProfiles => classProfiles.Values;
+    public IReadOnlyCollection<CardPoolDefinition> CardPools => cardPools.Values;
+    public IReadOnlyCollection<RarityDefinition> Rarities => rarities.Values;
+    public IReadOnlyCollection<AssetDefinition> Assets => assets.Values;
+    public IReadOnlyCollection<UnitDefinition> Units => units.Values;
+    public IReadOnlyCollection<AiProfileDefinition> AiProfiles => aiProfiles.Values;
+    public IReadOnlyCollection<EquipmentDefinition> Equipment => equipment.Values;
     public GameSettingsDefinition GameSettings => Package.GameSettings;
 
     /// <summary>
@@ -123,8 +142,92 @@ public sealed class ContentRegistry
     /// <summary>按稳定 ID 查找启用卡池，供装备栏等内容驱动界面显示策划名称。</summary>
     public bool TryGetCardPool(string poolId, out CardPoolDefinition pool)
     {
-        pool = Package.CardPools.FirstOrDefault(item => item.Enabled && item.PoolId == poolId);
-        return pool != null;
+        return cardPools.TryGetValue(poolId ?? string.Empty, out pool);
+    }
+
+    /// <summary>按稳定 ID 查找已发布稀有度。</summary>
+    /// <param name="rarityId">稳定稀有度 ID。</param>
+    /// <param name="rarity">找到时返回对应定义。</param>
+    /// <returns>内容包包含该稀有度时返回 true。</returns>
+    public bool TryGetRarity(string rarityId, out RarityDefinition rarity)
+    {
+        return rarities.TryGetValue(rarityId ?? string.Empty, out rarity);
+    }
+
+    /// <summary>按稳定 Key 查找受管资源。</summary>
+    /// <param name="assetKey">稳定资源 Key。</param>
+    /// <param name="asset">找到时返回对应定义。</param>
+    /// <returns>内容包包含该资源时返回 true。</returns>
+    public bool TryGetAsset(string assetKey, out AssetDefinition asset)
+    {
+        return assets.TryGetValue(assetKey ?? string.Empty, out asset);
+    }
+
+    /// <summary>按稳定 ID 查找已启用的数据驱动单位。</summary>
+    public bool TryGetUnit(string unitId, out UnitDefinition unit) =>
+        units.TryGetValue(unitId ?? string.Empty, out unit);
+
+    /// <summary>获取已启用单位；运行时引用损坏时抛出可定位错误。</summary>
+    public UnitDefinition GetUnit(string unitId)
+    {
+        if (!TryGetUnit(unitId, out UnitDefinition unit))
+            throw new KeyNotFoundException($"内容包中不存在启用单位：{unitId}");
+        return unit;
+    }
+
+    public bool TryGetAiProfile(string profileId, out AiProfileDefinition profile) =>
+        aiProfiles.TryGetValue(profileId ?? string.Empty, out profile);
+
+    /// <summary>按稳定 ID 查找已启用装备定义。</summary>
+    public bool TryGetEquipment(string equipmentId, out EquipmentDefinition definition) =>
+        equipment.TryGetValue(equipmentId ?? string.Empty, out definition);
+
+    /// <summary>
+    /// 构建一份定义索引，同时校验空值、类型、稳定 ID 格式和重复项。
+    /// 停用定义仍会校验，但不会进入运行时查找表。
+    /// </summary>
+    /// <typeparam name="TDefinition">具体的共享定义类型。</typeparam>
+    /// <param name="definitions">该内容集合的全部定义。</param>
+    /// <param name="isEnabled">决定有效定义是否暴露给运行时的谓词。</param>
+    /// <param name="expectedKind">该集合期望的定义类型。</param>
+    /// <returns>按序号比较的稳定 ID 索引，只含启用定义。</returns>
+    private static Dictionary<string, TDefinition> BuildIndex<TDefinition>(
+        IEnumerable<TDefinition> definitions,
+        Func<TDefinition, bool> isEnabled,
+        string expectedKind)
+        where TDefinition : class, IContentDefinition
+    {
+        if (definitions == null)
+        {
+            throw new InvalidDataException($"内容包缺少 {expectedKind} 定义集合。");
+        }
+
+        Dictionary<string, TDefinition> result =
+            new Dictionary<string, TDefinition>(StringComparer.Ordinal);
+        HashSet<string> allIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (TDefinition definition in definitions)
+        {
+            if (definition == null)
+            {
+                throw new InvalidDataException($"内容包的 {expectedKind} 集合包含空定义。");
+            }
+
+            string id = definition.GetDefinitionId();
+            if (definition.GetDefinitionKind() != expectedKind || !ContentId.IsValid(id))
+            {
+                throw new InvalidDataException($"内容定义类型或稳定 ID 无效：{expectedKind}:{id}。");
+            }
+            if (!allIds.Add(id))
+            {
+                throw new InvalidDataException($"内容包包含重复定义：{expectedKind}:{id}。");
+            }
+            if (isEnabled(definition))
+            {
+                result.Add(id, definition);
+            }
+        }
+
+        return result;
     }
 }
 }
